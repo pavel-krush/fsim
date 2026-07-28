@@ -399,14 +399,16 @@ func (u *UI) Dropdown(dst *ebiten.Image, r Rect, id any, items []string, sel int
 		fillRect(dst, list, colPanel)
 		for i, it := range items {
 			ir := Rect{list.X, list.Y + float64(i)*itemH, list.W, itemH}
+			// The current choice is marked by the colour of its text. A rule
+			// down the edge of the row would sit on the list's own border and
+			// merely make it look thicker for one row.
 			fg := colTextDim
 			if i == hovered {
 				fillRect(dst, ir, colPanelHi)
 				fg = colText
 			}
 			if i == sel {
-				fillRect(dst, Rect{ir.X, ir.Y, 2, ir.H}, colAccent)
-				fg = colText
+				fg = colAccent
 			}
 			drawText(dst, it, fontUI, ir.X+8, ir.Y+(ir.H-fontUI.Size)/2-1, fg, alignLeft)
 		}
