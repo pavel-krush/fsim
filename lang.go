@@ -3,7 +3,6 @@ package main
 import (
 	"embed"
 	"encoding/json"
-	"fmt"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -71,8 +70,9 @@ func loadLocales() {
 
 // T looks up interface text by key in the current language.
 //
-// A missing key renders as the key itself in guillemets rather than as an
-// empty gap, so a typo is loud on screen instead of silently invisible.
+// A missing key renders as the key itself rather than as an empty gap. That is
+// the whole safety net: a typo shows up the moment the screen is opened, so
+// nothing has to go looking for one ahead of time.
 func T(key string) string {
 	if s, ok := locales[lang][key]; ok {
 		return s
@@ -80,7 +80,7 @@ func T(key string) string {
 	if s, ok := locales[defaultLang][key]; ok {
 		return s
 	}
-	return fmt.Sprintf("«%s»", key)
+	return key
 }
 
 // langPickerW is the width the switch occupies in every bar that hosts it.

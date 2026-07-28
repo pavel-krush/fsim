@@ -100,13 +100,13 @@ header and in the bottom bars of the flight and graph screens.
 - **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
   presets an identifier (`earth-falcon`). Labels come from `lang.go`. The physics must not know about
   language.
-- **A string key gives up the compiler's help, so `lang_test.go` takes the job over.** It scans the
-  source for every `T("...")` and checks the key exists, that both languages carry the same key set,
-  that no value is blank, that no key is orphaned, and that a format string takes the same verbs in
-  every language. That last one matters: a translation that loses a `%s` panics at print time, on
-  whichever screen happens to use it.
-- **A missing key renders as `«key»`, not as nothing.** An empty gap reads as a layout bug; the key in
-  guillemets reads as what it is.
+- **A missing key renders as the key itself, not as nothing**, so a typo shows up the moment the screen
+  is opened. The same goes for a format string that lost a verb: `Sprintf` does not panic, it writes
+  `%!(EXTRA string=11.0)` into the text. Both mistakes announce themselves on screen, which is why
+  `lang_test.go` no longer tries to catch them ahead of time — that took a source scanner that could
+  not tell code from comments, and a second pass over every format string, to buy very little.
+- **`lang_test.go` checks the locale files against each other and nothing else**: the same key set in
+  every language, and no blank values. Orphaned keys are left to be noticed in passing.
 - **Text assembled from fragments must be a whole format string.** Word order differs between
   languages, so the max-q readout is `"%s на %s км"` / `"%s at %s km"` rather than a label glued to a
   unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.
@@ -155,8 +155,7 @@ header and in the bottom bars of the flight and graph screens.
   a clipped sub-image, so a tooltip drawn into `dst` would be sliced off at the column edge.
 - **A parameter gets an explanation by setting `NumOpt.Info` to a locale key.** The mark sits in a fixed
   column just before the input box rather than trailing the label: label widths differ per field and
-  per language, and marks at ragged positions read as clutter once many rows carry one. `lang_test.go`
-  scans `Info:` values too, so a mistyped key is caught like any other.
+  per language, and marks at ragged positions read as clutter once many rows carry one.
 - **An open dropdown needs two things that immediate mode does not give for free.** Its list is drawn
   through `UI.deferred`, flushed in `EndFrame`, so it lands on top of widgets that were drawn later.
   And `UI.fenced` blocks hover and clicks over the list rect for every other widget, so whatever sits
