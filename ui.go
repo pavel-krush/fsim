@@ -36,11 +36,16 @@ type UI struct {
 	clip     []Rect
 	consumed bool // a widget has already taken this frame's click
 
-	// An open dropdown list floats above the rest of the interface. Its
-	// drawing is deferred to the end of the frame so it lands on top, and the
-	// area it covers is fenced off from every other widget so that whatever
-	// happens to be underneath cannot steal the click.
-	Bounds     Rect
+	// Overlays — dropdown lists, tooltips — float above the rest of the
+	// interface. Their drawing is deferred to the end of the frame so it lands
+	// on top, and it goes to the whole canvas rather than to whatever clipped
+	// sub-image the widget itself was drawn into.
+	Overlay *ebiten.Image
+	Bounds  Rect
+	// ForcePointer overrides the real cursor. Only the screenshot script sets
+	// it: hover states have no other way of reaching a scripted run.
+	ForcePointer *struct{ X, Y float64 }
+
 	openList   any  // identity of the open dropdown, nil when none
 	listRect   Rect // where that list was drawn, carried over from last frame
 	insideList bool // set while the owning dropdown handles its own area
@@ -50,13 +55,18 @@ type UI struct {
 // NewUI builds the toolkit state.
 func NewUI() *UI { return &UI{} }
 
-// BeginFrame samples the input devices. dt is the frame time in seconds, and
-// bounds is the whole drawing area, which dropdowns need in order to decide
-// whether to open downwards or upwards.
-func (u *UI) BeginFrame(dt float64, bounds Rect) {
-	u.Bounds = bounds
+// BeginFrame samples the input devices. canvas is the whole drawing area:
+// overlays paint onto it directly, and its size decides whether a dropdown
+// opens downwards or upwards.
+func (u *UI) BeginFrame(canvas *ebiten.Image, dt float64) {
+	b := canvas.Bounds()
+	u.Overlay = canvas
+	u.Bounds = Rect{float64(b.Min.X), float64(b.Min.Y), float64(b.Dx()), float64(b.Dy())}
 	mx, my := ebiten.CursorPosition()
 	u.MX, u.MY = float64(mx), float64(my)
+	if u.ForcePointer != nil {
+		u.MX, u.MY = u.ForcePointer.X, u.ForcePointer.Y
+	}
 	u.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	u.Click = inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	_, wy := ebiten.Wheel()
@@ -195,6 +205,9 @@ type NumOpt struct {
 	Max   float64
 	Dec   int // digits after the point, -1 for automatic
 	After func()
+	// Info is a locale key for an explanation of the parameter. When set, a
+	// mark appears next to the label and reveals the text on hover.
+	Info string
 }
 
 // NumField draws a label, an editable box and a unit suffix inside r. It
@@ -216,6 +229,12 @@ func (u *UI) NumField(dst *ebiten.Image, r Rect, label string, val *float64, o N
 	}
 
 	drawText(dst, label, fontUI, r.X, r.Y+(r.H-fontUI.Size)/2-1, colTextDim, alignLeft)
+	if o.Info != "" {
+		// A fixed column just before the input box, not trailing the label:
+		// label widths differ per field and per language, and marks scattered
+		// at ragged positions read as clutter once many rows carry one.
+		u.InfoMark(dst, box.X-18, r.Y+r.H/2, T(o.Info))
+	}
 	if o.Unit != "" {
 		drawText(dst, o.Unit, fontUISm, box.Right()+4, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
 	}
@@ -326,6 +345,82 @@ const (
 	ButtonDanger
 )
 
+// tipWidth is how wide an info tooltip is allowed to get before wrapping.
+const tipWidth = 340
+
+// wrapText breaks a paragraph-separated string into lines that fit within
+// maxW. A blank entry in the result is a paragraph break.
+func wrapText(s string, f *text.GoTextFace, maxW float64) []string {
+	var out []string
+	for _, para := range strings.Split(s, "\n\n") {
+		words := strings.Fields(para)
+		if len(words) == 0 {
+			continue
+		}
+		line := words[0]
+		for _, w := range words[1:] {
+			if textWidth(line+" "+w, f) <= maxW {
+				line += " " + w
+				continue
+			}
+			out = append(out, line)
+			line = w
+		}
+		out = append(out, line, "")
+	}
+	if n := len(out); n > 0 && out[n-1] == "" {
+		out = out[:n-1]
+	}
+	return out
+}
+
+// InfoMark draws a small circled "i" whose left edge sits at x, vertically
+// centred on cy, and shows body in a tooltip while the pointer is over it.
+//
+// The tooltip is deferred like a dropdown list so that it lands on top of
+// everything, and it is drawn onto the canvas rather than the caller's clipped
+// sub-image, which would otherwise cut it off at the edge of a column.
+func (u *UI) InfoMark(dst *ebiten.Image, x, cy float64, body string) {
+	const d = 13
+	mark := Rect{x, cy - d/2, d, d}
+
+	col := colTextFaint
+	if u.hover(mark) {
+		col = colAccent
+	}
+	ring(dst, mark.X+d/2, mark.Y+d/2, d/2-0.5, 1, col)
+	drawText(dst, "i", fontUISm, mark.X+d/2, mark.Y+(d-fontUISm.Size)/2-1, col, alignCenter)
+
+	if !u.hover(mark) || body == "" {
+		return
+	}
+
+	// Body copy, not a label: the normal UI face with a touch more leading
+	// than a form row, since these are whole sentences to be read.
+	const pad = 10
+	lines := wrapText(body, fontUI, tipWidth-2*pad)
+	lh := fontUI.Size + 5
+	box := Rect{mark.Right() + 8, cy - 12, tipWidth, float64(len(lines))*lh + 2*pad}
+
+	// Keep it on screen: flip to the other side of the mark if it overflows to
+	// the right, then slide it up if it overflows at the bottom.
+	if box.Right() > u.Bounds.Right()-8 {
+		box.X = mark.X - 8 - box.W
+	}
+	box.Y = clamp(box.Y, u.Bounds.Y+8, math.Max(u.Bounds.Y+8, u.Bounds.Bottom()-8-box.H))
+
+	over := u.Overlay
+	u.deferred = append(u.deferred, func() {
+		fillRect(over, box, colPanel)
+		strokeRect(over, box, 1, colAccentDim)
+		y := box.Y + pad
+		for _, ln := range lines {
+			drawText(over, ln, fontUI, box.X+pad, y, colText, alignLeft)
+			y += lh
+		}
+	})
+}
+
 // Dropdown draws a selector showing the current choice and, while open, a list
 // of the alternatives. It returns the selected index, which is the one passed
 // in unless the user picked something else this frame.
@@ -395,8 +490,9 @@ func (u *UI) Dropdown(dst *ebiten.Image, r Rect, id any, items []string, sel int
 		u.openList = nil
 	}
 
+	over := u.Overlay
 	u.deferred = append(u.deferred, func() {
-		fillRect(dst, list, colPanel)
+		fillRect(over, list, colPanel)
 		for i, it := range items {
 			ir := Rect{list.X, list.Y + float64(i)*itemH, list.W, itemH}
 			// The current choice is marked by the colour of its text. A rule
@@ -404,15 +500,15 @@ func (u *UI) Dropdown(dst *ebiten.Image, r Rect, id any, items []string, sel int
 			// merely make it look thicker for one row.
 			fg := colTextDim
 			if i == hovered {
-				fillRect(dst, ir, colPanelHi)
+				fillRect(over, ir, colPanelHi)
 				fg = colText
 			}
 			if i == sel {
 				fg = colAccent
 			}
-			drawText(dst, it, fontUI, ir.X+8, ir.Y+(ir.H-fontUI.Size)/2-1, fg, alignLeft)
+			drawText(over, it, fontUI, ir.X+8, ir.Y+(ir.H-fontUI.Size)/2-1, fg, alignLeft)
 		}
-		strokeRect(dst, list, 1, colAccent)
+		strokeRect(over, list, 1, colAccent)
 	})
 	return chosen
 }

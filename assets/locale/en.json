@@ -116,6 +116,7 @@
   "setup.neededDv": "Needed for orbit",
   "setup.orbitAltitude": "Orbit altitude",
   "setup.payload": "Payload",
+  "setup.payload.info": "Payload is the mass of whatever the launch exists for: a satellite, a spacecraft, cargo. It rides all the way to orbit and is never dropped, so it counts towards the mass during every phase of the flight and in every stage of the rocket equation.\n\nAdding to it costs more than it looks: lifting one more tonne needs propellant to accelerate that tonne, and then more propellant to accelerate that propellant. The Δv margin at the bottom of the screen falls noticeably faster than the mass rises.",
   "setup.pitchHintAngles": "90° is straight up, 0° is the horizon.",
   "setup.pitchHintPrograde": "\"prograde\" holds thrust along the velocity.",
   "setup.presetLabel": "preset:",

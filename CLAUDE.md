@@ -151,6 +151,12 @@ header and in the bottom bars of the flight and graph screens.
 - **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a
   local variable — the address changes every frame and focus is lost. That is why the diameter field is
   bound straight to `Body.Radius` with `Scale: 500`.
+- **Overlays paint onto `UI.Overlay`, not onto the `dst` they were handed.** The setup columns draw into
+  a clipped sub-image, so a tooltip drawn into `dst` would be sliced off at the column edge.
+- **A parameter gets an explanation by setting `NumOpt.Info` to a locale key.** The mark sits in a fixed
+  column just before the input box rather than trailing the label: label widths differ per field and
+  per language, and marks at ragged positions read as clutter once many rows carry one. `lang_test.go`
+  scans `Info:` values too, so a mistyped key is caught like any other.
 - **An open dropdown needs two things that immediate mode does not give for free.** Its list is drawn
   through `UI.deferred`, flushed in `EndFrame`, so it lands on top of widgets that were drawn later.
   And `UI.fenced` blocks hover and clicks over the list rect for every other widget, so whatever sits

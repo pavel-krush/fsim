@@ -24,9 +24,11 @@ type shotStep struct {
 	advance float64
 	screen  Screen
 	graphs  bool
-	// openLang forces the language picker open. Its list only exists while the
-	// pointer is on it, so a scripted run has no other way to photograph it.
+	// openLang forces the language picker open, and hover parks the pointer at
+	// a fixed spot. Neither state can be reached by a scripted run otherwise:
+	// there is no mouse.
 	openLang bool
+	hover    *struct{ X, Y float64 }
 }
 
 type shotRunner struct {
@@ -42,6 +44,7 @@ func newShotRunner(dir string) *shotRunner {
 		steps: []shotStep{
 			{name: "1-setup", screen: ScreenSetup},
 			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
+			{name: "1c-setup-info", screen: ScreenSetup, hover: &struct{ X, Y float64 }{904, 105}},
 			{name: "2-pad", screen: ScreenFlight, advance: 2},
 			{name: "3-liftoff", screen: ScreenFlight, advance: 18},
 			{name: "4-maxq", screen: ScreenFlight, advance: 45},
@@ -87,6 +90,7 @@ func (sr *shotRunner) step(a *App) bool {
 	} else {
 		a.ui.openList = nil
 	}
+	a.ui.ForcePointer = st.hover
 
 	sr.i++
 	return true

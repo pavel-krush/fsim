@@ -15,8 +15,14 @@ import (
 // they catch a key used but not defined, a key defined in one language but not
 // another, and a key left behind after the call site went away.
 
-// keyUse matches a T("...") call in the source.
-var keyUse = regexp.MustCompile(`\bT\("([^"]+)"\)`)
+// keyRefs are the ways the source refers to a locale key: a direct lookup, and
+// a key stored in a widget option to be looked up later. Anything else that
+// starts holding keys has to be added here, or its keys will look unused and a
+// typo in one will go unnoticed.
+var keyRefs = []*regexp.Regexp{
+	regexp.MustCompile(`\bT\("([^"]+)"\)`),
+	regexp.MustCompile(`\bInfo:\s*"([^"]+)"`),
+}
 
 func loadLocale(t *testing.T, name string) map[string]string {
 	t.Helper()
@@ -48,12 +54,14 @@ func keysUsedInSource(t *testing.T) map[string][]string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, m := range keyUse.FindAllStringSubmatch(string(src), -1) {
-			used[m[1]] = append(used[m[1]], name)
+		for _, re := range keyRefs {
+			for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+				used[m[1]] = append(used[m[1]], name)
+			}
 		}
 	}
 	if len(used) == 0 {
-		t.Fatal("found no T(...) calls at all — the scanner is broken, not the locales")
+		t.Fatal("found no key references at all — the scanner is broken, not the locales")
 	}
 	return used
 }

@@ -190,7 +190,8 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	rk := &a.cfg.Rocket
 	u := a.ui
 
-	u.NumField(dst, c.next(rowH), T("setup.payload"), &rk.Payload, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9})
+	u.NumField(dst, c.next(rowH), T("setup.payload"), &rk.Payload,
+		NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.payload.info"})
 	u.NumField(dst, c.next(rowH), T("setup.bodyDiameter"), &rk.Diameter, NumOpt{Unit: T("unit.m"), Min: 0.1, Max: 100})
 	u.NumField(dst, c.next(rowH), T("setup.cd"), &rk.Cd, NumOpt{Min: 0, Max: 5})
 	u.ReadOnly(dst, c.next(rowH), T("setup.referenceArea"), fmt.Sprintf("%s %s", formatNum(rk.Area(), 2), T("unit.m2")))
