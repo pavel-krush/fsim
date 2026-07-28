@@ -345,12 +345,26 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	if len(h) < 2 {
 		return
 	}
-	// Older samples fade out, so the recent path reads clearly even after the
-	// trajectory has wrapped a long way around the planet.
+	// Only emit a segment once the path has moved a visible distance. The
+	// history is sampled in simulated time, so at orbital zoom thousands of
+	// points collapse into the same few pixels — and every one of them would
+	// still be a separate antialiased draw.
+	//
+	// That mattered more than it looks. Ebiten queues these cheaply and only
+	// resolves the batch when something else draws to the same target, so the
+	// bill landed on the next text draw: by orbit it was nineteen milliseconds
+	// a frame, and it grew for as long as the flight lasted.
+	const minSeg = 1.5
+
 	n := len(h)
 	px, py := cam.Project(f.s.GroundFrame(h[0].Pos, h[0].T))
 	for i := 1; i < n; i++ {
 		x, y := cam.Project(f.s.GroundFrame(h[i].Pos, h[i].T))
+		if i < n-1 && math.Abs(x-px)+math.Abs(y-py) < minSeg {
+			continue
+		}
+		// Older samples fade out, so the recent path stays legible even after
+		// the trajectory has wrapped a long way around the planet.
 		t := float64(i) / float64(n)
 		c := color.NRGBA{
 			uint8(float64(colTrailOld.R) + (float64(colTrail.R)-float64(colTrailOld.R))*t),
