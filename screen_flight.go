@@ -269,7 +269,7 @@ func (f *FlightScreen) drawPad(dst *ebiten.Image, cam *Camera) (float64, float64
 		mx, my := x0+ux*11, y0+uy*11
 		line(dst, x0, y0, x0+ux*9, y0+uy*9, 1.5, colPad)
 		circle(dst, mx, my, 2.5, colPad)
-		drawText(dst, t("СТАРТ", "PAD"), fontUISm, mx+6, my-6, colPad, alignLeft)
+		drawText(dst, T("flight.pad"), fontUISm, mx+6, my-6, colPad, alignLeft)
 		return mx, my, true
 	}
 
@@ -449,9 +449,9 @@ func (f *FlightScreen) drawScaleBar(dst *ebiten.Image, view Rect, cam *Camera) {
 	line(dst, x, y-4, x, y+4, 1.5, colTextDim)
 	line(dst, x+w, y-4, x+w, y+4, 1.5, colTextDim)
 
-	label := fmt.Sprintf("%s %s", formatNum(pick, 0), t("м", "m"))
+	label := fmt.Sprintf("%s %s", formatNum(pick, 0), T("unit.m"))
 	if pick >= 1000 {
-		label = fmt.Sprintf("%s %s", formatNum(pick/1000, 0), t("км", "km"))
+		label = fmt.Sprintf("%s %s", formatNum(pick/1000, 0), T("unit.km"))
 	}
 	drawText(dst, label, fontUISm, x+w/2, y-16, colTextDim, alignCenter)
 }
@@ -466,7 +466,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	if tm.Burning {
 		c = colFlame
 	}
-	drawText(dst, fmt.Sprintf("%s %d · %s", t("СТУПЕНЬ", "STAGE"), tm.Stage+1, phaseText(tm.Phase)),
+	drawText(dst, fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
 		fontUISm, x, y, c, alignLeft)
 
 	if f.s.St.Done {
@@ -482,7 +482,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 		drawText(dst, verdict, fontHead, x, y, vc, alignLeft)
 	}
 	if f.manualCam || f.zoomBias != 1 {
-		drawText(dst, t("камера вручную · C — сброс", "manual camera · C to reset"), fontUISm, view.Right()-14, view.Y+12, colTextFaint, alignRight)
+		drawText(dst, T("flight.manualCamera"), fontUISm, view.Right()-14, view.Y+12, colTextFaint, alignRight)
 	}
 }
 
@@ -501,37 +501,37 @@ func (f *FlightScreen) drawTelemetry(a *App, dst *ebiten.Image, r Rect) {
 		drawText(dst, value, fontMono, rr.Right(), rr.Y+1, col, alignRight)
 	}
 
-	u.SectionHeader(dst, c.next(20), t("ПОЛОЖЕНИЕ", "POSITION"))
-	row(t("высота", "altitude"), fmtEng(tm.Alt, t("м", "m")), colText)
-	row(t("дальность", "downrange"), fmtEng(tm.Downrange, t("м", "m")), colTextDim)
-	row(t("скорость отн. земли", "surface speed"), speed(tm.SurfSpeed), colText)
-	row(t("вертикальная", "vertical"), speed(tm.VertSpeed), colTextDim)
-	row(t("горизонтальная", "horizontal"), speed(tm.HorizSpeed), colTextDim)
-	row(t("инерциальная", "inertial"), speed(tm.Speed), colText)
-	row(t("число Маха", "Mach"), formatNum(tm.Mach, 2), machColor(tm.Mach))
-	row(t("тангаж", "pitch"), fmt.Sprintf("%s°", formatNum(tm.Pitch, 1)), colText)
+	u.SectionHeader(dst, c.next(20), T("flight.secPosition"))
+	row(T("common.altitude"), fmtEng(tm.Alt, T("unit.m")), colText)
+	row(T("flight.downrange"), fmtEng(tm.Downrange, T("unit.m")), colTextDim)
+	row(T("common.surfaceSpeed"), speed(tm.SurfSpeed), colText)
+	row(T("flight.vertical"), speed(tm.VertSpeed), colTextDim)
+	row(T("flight.horizontal"), speed(tm.HorizSpeed), colTextDim)
+	row(T("flight.inertial"), speed(tm.Speed), colText)
+	row(T("flight.mach"), formatNum(tm.Mach, 2), machColor(tm.Mach))
+	row(T("common.pitch"), fmt.Sprintf("%s°", formatNum(tm.Pitch, 1)), colText)
 
 	c.gap(8)
-	u.SectionHeader(dst, c.next(20), t("ОРБИТА", "ORBIT"))
-	row(t("апогей", "apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, f.s.Cfg.Atmo.Top))
-	row(t("перигей", "periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, f.s.Cfg.Atmo.Top))
-	row(t("эксцентриситет", "eccentricity"), formatNum(tm.Ecc, 4), colTextDim)
+	u.SectionHeader(dst, c.next(20), T("flight.secOrbit"))
+	row(T("common.apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, f.s.Cfg.Atmo.Top))
+	row(T("common.periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, f.s.Cfg.Atmo.Top))
+	row(T("common.eccentricity"), formatNum(tm.Ecc, 4), colTextDim)
 	if tm.Orbit.Bound() {
-		row(t("период", "period"), fmt.Sprintf("%s %s", formatNum(tm.Orbit.Period/60, 1), t("мин", "min")), colTextDim)
+		row(T("common.period"), fmt.Sprintf("%s %s", formatNum(tm.Orbit.Period/60, 1), T("unit.min")), colTextDim)
 	} else {
-		row(t("период", "period"), "—", colTextDim)
+		row(T("common.period"), "—", colTextDim)
 	}
-	row(t("цель", "target"), fmt.Sprintf("%s %s", formatNum(a.cfg.TargetOrbit/1000, 0), t("км", "km")), colTextFaint)
+	row(T("flight.target"), fmt.Sprintf("%s %s", formatNum(a.cfg.TargetOrbit/1000, 0), T("unit.km")), colTextFaint)
 
 	c.gap(8)
-	u.SectionHeader(dst, c.next(20), t("РАКЕТА", "VEHICLE"))
-	row(t("масса", "mass"), fmt.Sprintf("%s %s", formatNum(tm.Mass/1000, 2), t("т", "t")), colText)
-	row(t("тяга", "thrust"), fmtEng(tm.Thrust, t("Н", "N")), colText)
-	row(t("тяговооружённость", "thrust/weight"), formatNum(tm.TWR, 2), colTextDim)
-	row(t("перегрузка", "acceleration"), fmt.Sprintf("%s g", formatNum(tm.AccelG, 2)), gColor(tm.AccelG))
+	u.SectionHeader(dst, c.next(20), T("common.vehicle"))
+	row(T("common.mass"), fmt.Sprintf("%s %s", formatNum(tm.Mass/1000, 2), T("unit.t")), colText)
+	row(T("flight.thrust"), fmtEng(tm.Thrust, T("unit.n")), colText)
+	row(T("flight.twr"), formatNum(tm.TWR, 2), colTextDim)
+	row(T("common.acceleration"), fmt.Sprintf("%s g", formatNum(tm.AccelG, 2)), gColor(tm.AccelG))
 	for i, p := range tm.PropFrac {
 		bar := c.next(19)
-		drawText(dst, fmt.Sprintf("%s %d", t("топливо", "propellant"), i+1), fontUISm, bar.X, bar.Y+2, colTextFaint, alignLeft)
+		drawText(dst, fmt.Sprintf(T("flight.propellantN"), i+1), fontUISm, bar.X, bar.Y+2, colTextFaint, alignLeft)
 		bw := 110.0
 		box := Rect{bar.Right() - bw, bar.Y + 3, bw, 11}
 		fillRect(dst, box, colPanelHi)
@@ -541,27 +541,27 @@ func (f *FlightScreen) drawTelemetry(a *App, dst *ebiten.Image, r Rect) {
 	}
 
 	c.gap(8)
-	u.SectionHeader(dst, c.next(20), t("СРЕДА", "ENVIRONMENT"))
-	row(t("плотность", "density"), fmt.Sprintf("%s %s", formatNum(tm.Density, 5), t("кг/м³", "kg/m³")), colTextDim)
-	row(t("давление", "pressure"), fmtEng(tm.Pressure, t("Па", "Pa")), colTextDim)
-	row(t("температура", "temperature"), fmt.Sprintf("%s K", formatNum(tm.Temp, 1)), colTextDim)
-	row(t("скоростной напор", "dynamic pressure"), fmtEng(tm.Q, t("Па", "Pa")), qColor(tm.Q, f.s))
-	row(t("сопротивление", "drag"), fmtEng(tm.Drag, t("Н", "N")), colTextDim)
+	u.SectionHeader(dst, c.next(20), T("flight.secEnvironment"))
+	row(T("flight.density"), fmt.Sprintf("%s %s", formatNum(tm.Density, 5), T("unit.kgm3")), colTextDim)
+	row(T("flight.pressure"), fmtEng(tm.Pressure, T("unit.pa")), colTextDim)
+	row(T("flight.temperature"), fmt.Sprintf("%s K", formatNum(tm.Temp, 1)), colTextDim)
+	row(T("common.dynamicPressure"), fmtEng(tm.Q, T("unit.pa")), qColor(tm.Q, f.s))
+	row(T("flight.drag"), fmtEng(tm.Drag, T("unit.n")), colTextDim)
 
 	c.gap(8)
-	u.SectionHeader(dst, c.next(20), t("БЮДЖЕТ Δv", "Δv BUDGET"))
-	row(t("выработано", "expended"), speed(tm.DeltaV), colAccent)
-	row(t("потери гравитационные", "gravity losses"), speed(tm.GravLoss), colTextDim)
-	row(t("потери аэродинамические", "drag losses"), speed(tm.DragLoss), colTextDim)
-	row(t("потери на управление", "steering losses"), speed(tm.SteerLoss), colTextDim)
+	u.SectionHeader(dst, c.next(20), T("flight.secBudget"))
+	row(T("flight.expended"), speed(tm.DeltaV), colAccent)
+	row(T("flight.gravityLosses"), speed(tm.GravLoss), colTextDim)
+	row(T("flight.dragLosses"), speed(tm.DragLoss), colTextDim)
+	row(T("flight.steeringLosses"), speed(tm.SteerLoss), colTextDim)
 
 	q, qAlt := f.s.MaxQ()
 	c.gap(8)
-	u.SectionHeader(dst, c.next(20), t("МАКСИМУМЫ", "PEAKS"))
-	row("max q", fmt.Sprintf("%s %s %s %s", fmtEng(q, t("Па", "Pa")), t("на", "at"), formatNum(qAlt/1000, 1), t("км", "km")), colTextDim)
-	row(t("max перегрузка", "max acceleration"), fmt.Sprintf("%s g", formatNum(f.s.MaxG(), 2)), colTextDim)
-	row(t("max высота", "max altitude"), fmtEng(f.s.MaxAlt(), t("м", "m")), colTextDim)
-	row(t("круговая на цели", "circular at target"), speed(b.CircularSpeed(a.cfg.TargetOrbit)), colTextFaint)
+	u.SectionHeader(dst, c.next(20), T("flight.secPeaks"))
+	row("max q", fmt.Sprintf(T("flight.maxQAt"), fmtEng(q, T("unit.pa")), formatNum(qAlt/1000, 1)), colTextDim)
+	row(T("common.maxAcceleration"), fmt.Sprintf("%s g", formatNum(f.s.MaxG(), 2)), colTextDim)
+	row(T("flight.maxAltitude"), fmtEng(f.s.MaxAlt(), T("unit.m")), colTextDim)
+	row(T("flight.circularAtTarget"), speed(b.CircularSpeed(a.cfg.TargetOrbit)), colTextFaint)
 }
 
 // drawControls is the time bar along the bottom.
@@ -573,16 +573,16 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	bh := r.H - 16
 	by := r.Y + 8
 
-	label := t("ПАУЗА", "PAUSE")
+	label := T("flight.pause")
 	if f.paused {
-		label = t("ПРОДОЛЖИТЬ", "RESUME")
+		label = T("flight.resume")
 	}
 	if u.Button(dst, Rect{x, by, 120, bh}, label, ButtonNormal) {
 		f.paused = !f.paused
 	}
 	x += 128
 
-	drawText(dst, t("скорость:", "speed:"), fontUISm, x, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+	drawText(dst, T("flight.speedLabel"), fontUISm, x, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
 	x += 62
 	for i, w := range warpSteps {
 		style := ButtonNormal
@@ -596,14 +596,14 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	}
 
 	x += 16
-	if u.Button(dst, Rect{x, by, 120, bh}, t("ЗАНОВО", "RESTART"), ButtonNormal) {
+	if u.Button(dst, Rect{x, by, 120, bh}, T("flight.restart"), ButtonNormal) {
 		f.s.Reset()
 		f.cam.Scale = 0
 		f.zoomBias = 1
 		f.paused = false
 	}
 	x += 128
-	if u.Button(dst, Rect{x, by, 140, bh}, t("НАСТРОЙКИ", "SETUP"), ButtonNormal) {
+	if u.Button(dst, Rect{x, by, 140, bh}, T("common.setup"), ButtonNormal) {
 		a.screen = ScreenSetup
 	}
 	x += 148
@@ -612,7 +612,7 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	if f.s.St.Done {
 		style = ButtonPrimary
 	}
-	if u.Button(dst, Rect{x, by, 150, bh}, t("ГРАФИКИ", "GRAPHS"), style) {
+	if u.Button(dst, Rect{x, by, 150, bh}, T("flight.graphs"), style) {
 		if !f.s.St.Done {
 			f.paused = true
 		}
@@ -621,8 +621,7 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 
 	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, by, langToggleW, bh})
 
-	hint := t("SPACE — пауза · , / . — скорость · колесо — зум · C — сброс камеры",
-		"SPACE pause · , / . speed · wheel zoom · C reset camera")
+	hint := T("flight.hint")
 	drawText(dst, hint, fontUISm, r.Right()-20-langToggleW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 }
 
@@ -645,14 +644,14 @@ func sampleAt(h []sim.Sample, t float64) int {
 
 // speed formats a velocity for the telemetry column.
 func speed(v float64) string {
-	return fmt.Sprintf("%s %s", formatNum(v, 0), t("м/с", "m/s"))
+	return fmt.Sprintf("%s %s", formatNum(v, 0), T("unit.mps"))
 }
 
 func altText(v float64) string {
 	if math.IsInf(v, 1) {
 		return "∞"
 	}
-	return fmtEng(v, t("м", "m"))
+	return fmtEng(v, T("unit.m"))
 }
 
 func apsisColor(v, top float64) color.NRGBA {

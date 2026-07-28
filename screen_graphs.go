@@ -34,13 +34,13 @@ func NewGraphScreen(s *sim.Sim) *GraphScreen {
 // visit.
 func plotSeries() []series {
 	return []series{
-		{t("высота", "altitude"), t("км", "km"), func(x sim.Sample) float64 { return x.Alt }, 1000, 1},
-		{t("скорость инерциальная", "inertial speed"), t("м/с", "m/s"), func(x sim.Sample) float64 { return x.Speed }, 1, 0},
-		{t("скорость отн. земли", "surface speed"), t("м/с", "m/s"), func(x sim.Sample) float64 { return x.SurfSpeed }, 1, 0},
-		{t("скоростной напор", "dynamic pressure"), t("кПа", "kPa"), func(x sim.Sample) float64 { return x.Q }, 1000, 2},
-		{t("масса", "mass"), t("т", "t"), func(x sim.Sample) float64 { return x.Mass }, 1000, 1},
-		{t("перегрузка", "acceleration"), "g", func(x sim.Sample) float64 { return x.AccelG }, 1, 2},
-		{t("тангаж", "pitch"), "°", func(x sim.Sample) float64 { return x.Pitch }, 1, 1},
+		{T("common.altitude"), T("unit.km"), func(x sim.Sample) float64 { return x.Alt }, 1000, 1},
+		{T("graph.inertialSpeed"), T("unit.mps"), func(x sim.Sample) float64 { return x.Speed }, 1, 0},
+		{T("common.surfaceSpeed"), T("unit.mps"), func(x sim.Sample) float64 { return x.SurfSpeed }, 1, 0},
+		{T("common.dynamicPressure"), T("unit.kpa"), func(x sim.Sample) float64 { return x.Q }, 1000, 2},
+		{T("common.mass"), T("unit.t"), func(x sim.Sample) float64 { return x.Mass }, 1000, 1},
+		{T("common.acceleration"), "g", func(x sim.Sample) float64 { return x.AccelG }, 1, 2},
+		{T("common.pitch"), "°", func(x sim.Sample) float64 { return x.Pitch }, 1, 1},
 	}
 }
 
@@ -83,17 +83,17 @@ func (g *GraphScreen) drawHeader(dst *ebiten.Image, r Rect) {
 
 	q, qAlt := g.s.MaxQ()
 	cells := [][2]string{
-		{t("длительность", "duration"), fmtClock(st.T)},
-		{t("апогей", "apoapsis"), altText(tm.ApoAlt)},
-		{t("перигей", "periapsis"), altText(tm.PeriAlt)},
-		{t("эксцентриситет", "eccentricity"), formatNum(tm.Ecc, 4)},
-		{t("Δv выработано", "Δv expended"), speed(st.DeltaV)},
-		{t("потери гравит.", "gravity loss"), speed(st.GravLoss)},
-		{t("потери аэро", "drag loss"), speed(st.DragLoss)},
-		{t("потери упр.", "steering loss"), speed(st.SteerLoss)},
-		{"max q", fmtEng(q, t("Па", "Pa"))},
-		{t("на высоте", "at altitude"), fmt.Sprintf("%s %s", formatNum(qAlt/1000, 1), t("км", "km"))},
-		{t("max перегрузка", "max acceleration"), fmt.Sprintf("%s g", formatNum(g.s.MaxG(), 2))},
+		{T("graph.duration"), fmtClock(st.T)},
+		{T("common.apoapsis"), altText(tm.ApoAlt)},
+		{T("common.periapsis"), altText(tm.PeriAlt)},
+		{T("common.eccentricity"), formatNum(tm.Ecc, 4)},
+		{T("graph.dvExpended"), speed(st.DeltaV)},
+		{T("graph.gravityLoss"), speed(st.GravLoss)},
+		{T("graph.dragLoss"), speed(st.DragLoss)},
+		{T("graph.steeringLoss"), speed(st.SteerLoss)},
+		{"max q", fmtEng(q, T("unit.pa"))},
+		{T("graph.atAltitude"), fmt.Sprintf("%s %s", formatNum(qAlt/1000, 1), T("unit.km"))},
+		{T("common.maxAcceleration"), fmt.Sprintf("%s g", formatNum(g.s.MaxG(), 2))},
 	}
 	colW := (r.W - 28) / float64(len(cells))
 	for i, c := range cells {
@@ -170,7 +170,7 @@ const rulerRows = 3
 func (g *GraphScreen) drawPlots(a *App, dst *ebiten.Image, r Rect) {
 	h := g.s.Hist
 	if len(h) < 2 {
-		drawText(dst, t("нет данных", "no data"), fontUI, r.X+r.W/2, r.Y+r.H/2, colTextDim, alignCenter)
+		drawText(dst, T("graph.noData"), fontUI, r.X+r.W/2, r.Y+r.H/2, colTextDim, alignCenter)
 		return
 	}
 	tMax := h[len(h)-1].T
@@ -289,7 +289,7 @@ func (g *GraphScreen) drawPlot(dst *ebiten.Image, r Rect, s series, c color.NRGB
 			case 6:
 				a = alignRight
 			}
-			drawText(dst, fmt.Sprintf("%.0f%s", at, t("с", "s")), fontMonoSm,
+			drawText(dst, fmt.Sprintf("%.0f%s", at, T("unit.s")), fontMonoSm,
 				toX(at), r.Bottom()-fontMonoSm.Size-1, colTextFaint, a)
 		}
 	}
@@ -301,13 +301,13 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 
 	bh := r.H - 16
 	by := r.Y + 8
-	if u.Button(dst, Rect{r.X + 10, by, 150, bh}, t("К ПОЛЁТУ", "TO FLIGHT"), ButtonNormal) {
+	if u.Button(dst, Rect{r.X + 10, by, 150, bh}, T("graph.toFlight"), ButtonNormal) {
 		a.screen = ScreenFlight
 	}
-	if u.Button(dst, Rect{r.X + 168, by, 150, bh}, t("НАСТРОЙКИ", "SETUP"), ButtonNormal) {
+	if u.Button(dst, Rect{r.X + 168, by, 150, bh}, T("common.setup"), ButtonNormal) {
 		a.screen = ScreenSetup
 	}
-	if u.Button(dst, Rect{r.X + 326, by, 150, bh}, t("ЗАПУСТИТЬ СНОВА", "LAUNCH AGAIN"), ButtonPrimary) {
+	if u.Button(dst, Rect{r.X + 326, by, 150, bh}, T("graph.launchAgain"), ButtonPrimary) {
 		a.Launch()
 	}
 
@@ -317,13 +317,12 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 	if g.hover >= 0 && g.hover < len(g.s.Hist) {
 		sm := g.s.Hist[g.hover]
 		info := fmt.Sprintf("%s   h %s   v %s   %s %s   %s %s",
-			fmtClock(sm.T), fmtEng(sm.Alt, t("м", "m")), speed(sm.Speed),
-			t("апогей", "apoapsis"), altText(sm.ApoAlt),
-			t("перигей", "periapsis"), altText(sm.PeriAlt))
+			fmtClock(sm.T), fmtEng(sm.Alt, T("unit.m")), speed(sm.Speed),
+			T("common.apoapsis"), altText(sm.ApoAlt),
+			T("common.periapsis"), altText(sm.PeriAlt))
 		drawText(dst, info, fontMono, infoRight, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
 	} else {
-		drawText(dst, t("наведи курсор на график — покажет значения в точке · ESC — назад",
-			"hover a plot for values at that instant · ESC to go back"),
+		drawText(dst, T("graph.hint"),
 			fontUISm, infoRight, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 	}
 }

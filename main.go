@@ -122,6 +122,7 @@ func main() {
 	english := flag.Bool("en", false, "start with the interface in English")
 	flag.Parse()
 
+	loadLocales()
 	if *english {
 		lang = EN
 	}

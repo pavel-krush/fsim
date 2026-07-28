@@ -1,145 +1,165 @@
 # fsim
 
-Симулятор выведения двухступенчатой ракеты на орбиту произвольной планеты. Задаёшь параметры планеты,
-атмосферы, ракеты и программу тангажа → «Старт» → живая визуализация полёта с телеметрией → графики.
-Go + Ebiten, всё считается по-настоящему.
+A launch simulator: a two-stage rocket flown to orbit around an arbitrary planet. Set up the planet, the
+atmosphere, the vehicle and the pitch programme → "Launch" → live ascent with telemetry → graphs.
+Go + Ebiten, and the physics is real.
 
 ## Build & run
 
 ```
-go run .                       # запустить
-go run . -preset 2             # стартовать с пресета №2 (0..3)
-go run . -shot ./shots         # прогнать сценарий и сохранить PNG-скриншоты всех экранов
-go run . -camtrace 700         # напечатать экранные координаты ракеты по кадрам (ловля тряски камеры)
-go run . -en                   # стартовать с английским интерфейсом
-go test ./sim/                 # физика
+go run .                       # start
+go run . -preset 2             # start on preset 2 (0..3)
+go run . -shot ./shots         # run the capture script and save a PNG of every screen
+go run . -camtrace 700         # print the vehicle's screen coordinates per frame (catches camera shake)
+go run . -en                   # start with the interface in English
+go test ./sim/                 # physics
 go build ./... && go vet ./...
 ```
 
-`-shot` существует потому, что Ebiten умеет создавать и читать изображения только внутри работающего
-game loop — headless отрендерить UI нельзя. Флаг прогоняет настоящий цикл по скрипту из `shot.go` и
-сохраняет канвас в PNG. Единственный способ посмотреть на интерфейс без человека за клавиатурой.
+`-shot` exists because Ebiten can only create and read images inside a running game loop — there is no
+way to render the UI headless. The flag drives the real loop through the script in `shot.go` and dumps
+the canvas to PNG. It is the only way to look at the interface without a human at the keyboard.
 
-## Структура
+## Layout
 
-| Файл | Содержимое |
-|------|------------|
-| `sim/body.go` | Планета: радиус + одно из {масса, плотность, g} → остальное. `Normalize()` обязателен перед использованием `Mu` |
-| `sim/atmosphere.go` | Состав газа → молярная масса и γ; слои с градиентом → барометрический профиль T/P/ρ/a |
-| `sim/rocket.go` | Ступени: масса, топливо, тяга, Isp(p), ṁ, отсечка, режим зажигания. Циолковский, TWR |
-| `sim/program.go` | Кейфреймы pitch(t), интерполяция, режим «по вектору скорости» |
-| `sim/orbit.go` | `Vec2` + оскулирующие элементы из (r, v) |
-| `sim/sim.go` | Состояние, RK4-шаг, стейт-машина ступеней, учёт потерь Δv, телеметрия, история |
-| `sim/presets.go` | Земля/Falcon-9, Марс, Луна, Кербин — все четыре реально выходят на орбиту |
-| `main.go` | `App` — стейт-машина трёх экранов, `ebiten.Game` |
-| `theme.go` | Палитра и шрифты (goregular/gomono, вкомпилированы, ассетов на диске нет) |
-| `ui.go` | Иммедиат-мод тулкит: `NumField`, `Button`, `Radio`, `Checkbox`, `Scroll` |
-| `lang.go` | Переключение RU/EN, подписи событий, вердиктов, фаз и пресетов |
-| `render.go` | `Rect`, примитивы, `Camera` (мир в метрах → пиксели, с поворотом) |
-| `screen_setup.go` | Форма параметров в четыре колонки, редактор кейфреймов, деривации, пресеты |
-| `screen_flight.go` | Траектория, стартовый стол, автокамера, панель телеметрии, управление временем |
-| `screen_graphs.go` | Шесть графиков на общей оси времени, линейка событий, скраббер |
-| `shot.go` | Скриптованный прогон для скриншотов |
+| File | Contents |
+|------|----------|
+| `sim/body.go` | Planet: radius plus one of {mass, density, g} derives the rest. `Normalize()` is mandatory before using `Mu` |
+| `sim/atmosphere.go` | Gas composition → molar mass and γ; layers with lapse rates → barometric T/P/ρ/a profile |
+| `sim/rocket.go` | Stages: mass, propellant, thrust, Isp(p), ṁ, cutoff, ignition mode. Tsiolkovsky, TWR |
+| `sim/program.go` | Pitch keyframes, interpolation, prograde-hold mode |
+| `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
+| `sim/sim.go` | State, RK4 step, staging state machine, Δv loss accounting, telemetry, history |
+| `sim/presets.go` | Earth/Falcon-9, Mars, Moon, Kerbin — all four actually reach orbit |
+| `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
+| `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk) |
+| `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Scroll` |
+| `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets |
+| `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
+| `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) |
+| `screen_setup.go` | Four-column parameter form, keyframe editor, derived figures, presets |
+| `screen_flight.go` | Trajectory, launch pad, automatic camera, telemetry panel, time controls |
+| `screen_graphs.go` | Seven plots on a shared time axis, event ruler, scrubber |
+| `shot.go` | Scripted run for screenshots |
 
-## Физика — что важно знать
+## Physics — what matters
 
-- **Шаг интегратора фиксированный, `sim.FixedStep` = 0.02 с.** Ускорение времени крутит больше шагов
-  за кадр, а не увеличивает шаг — траектория не зависит ни от FPS, ни от ×500.
-- **`Advance` копит остаток** в `Sim.accum`. Рваные времена кадров дают ровно ту же траекторию, что и
-  ровный цикл `Step(FixedStep)`. Тест `TestAdvanceMatchesFixedSteps` это стережёт.
-- **Шаг укорачивается только до положительного значения.** Раньше `Step` считал схлопнувшийся шаг
-  признаком выгорания и обнулял бак — float-крошка в конце каждого `Advance` съедала всю ступень.
-- **Масса внутри шага — точная линейная функция времени** (`burnContext`), поэтому все четыре стадии
-  RK4 видят согласованную массу.
-- **Δv за шаг берётся в замкнутой форме** `F/ṁ · ln(m₀/m₁)`, а не прямоугольником: масса за шаг падает,
-  и левый прямоугольник систематически недобирает (0.013% на ступень — вылезало в тесте Циолковского).
-- **`Orbit.Bound()` смотрит на энергию, а не на эксцентриситет.** У чисто радиального падения e = 1
-  ровно, и проверка по e объявляла свободное падение уходом с орбиты.
-- **`Body.Mu` заполняется только в `Normalize()`.** Локальная копия `Config` его не имеет — брать
-  всегда из `s.Cfg.Body` уже созданной симуляции.
-- **Ракета с TWR < 1 стоит на столе и жжёт топливо.** Специальная ветка `holdOnPad`, иначе она бы
-  проваливалась сквозь планету. Высота при этом ровно 0, поэтому крушение ловится по `alt < 0`, а не `<= 0`.
-- **Потери на гравитацию считаются от угла к горизонту в системе, вращающейся вместе с планетой.**
-  В инерциальной на старте скорость горизонтальная (от вращения) и потери вышли бы нулевыми.
-- **g в барометрической формуле — поверхностное, постоянное.** Стандартное упрощение ISA, ~3% на 100 км.
-- **Метка max q ставится задним числом.** Пик известен только после того, как он пройден, поэтому
-  `checkMaxQPassed` ждёт, пока напор не упадёт ниже четверти от максимума, и вставляет событие через
-  `markAt` на реальный момент пика — с сохранением хронологического порядка списка событий, иначе
-  линейка на графиках раскладывает подписи по строкам неправильно.
-  **`MarkMaxQ` не делает ничего, пока полёт идёт.** Экран графиков открывается и на паузе посреди
-  подъёма, а тот вызов ставил метку на текущий бегущий максимум — и навсегда, потому что флаг
-  `maxQMarked` глушит автоматику. Форсированная простановка живёт в `emitMaxQ`, её зовут только
-  `checkMaxQPassed` и `finish`.
+- **The integrator step is fixed, `sim.FixedStep` = 0.02 s.** Time warp runs more steps per frame rather
+  than a longer step, so the trajectory depends on neither the frame rate nor the ×500 setting.
+- **`Advance` carries the remainder** in `Sim.accum`. Ragged frame times give exactly the same
+  trajectory as an even `Step(FixedStep)` loop. `TestAdvanceMatchesFixedSteps` guards this.
+- **The step is only ever shortened to a positive value.** `Step` used to treat a collapsed step as
+  burnout and empty the tank — the floating-point crumb at the end of every `Advance` ate a whole stage.
+- **Mass inside a step is an exact linear function of time** (`burnContext`), so all four Runge-Kutta
+  stages see a consistent mass.
+- **Δv over a step is integrated in closed form,** `F/ṁ · ln(m₀/m₁)`, not as a rectangle: mass drops
+  during the step and the left-hand rectangle systematically undershoots (0.013% per stage — it showed
+  up in the Tsiolkovsky test).
+- **`Orbit.Bound()` tests the energy, not the eccentricity.** A purely radial fall has e = 1 exactly,
+  and an eccentricity test declared free fall an escape trajectory.
+- **`Body.Mu` is only filled in by `Normalize()`.** A local copy of `Config` does not have it — always
+  take it from `s.Cfg.Body` of an already constructed simulation.
+- **A rocket with TWR < 1 sits on the pad and burns propellant.** That is the `holdOnPad` branch;
+  without it the vehicle sinks through the planet. Its altitude is exactly 0 there, which is why a
+  crash is detected with `alt < 0` rather than `<= 0`.
+- **Gravity losses use the flight path angle in the frame rotating with the planet.** In the inertial
+  frame the velocity at liftoff is horizontal (from rotation) and the losses would come out zero.
+- **g in the barometric formula is the surface value, held constant.** The standard ISA simplification,
+  worth about 3% at 100 km.
+- **The max-q marker is placed in hindsight.** The peak is only knowable once it has passed, so
+  `checkMaxQPassed` waits until the pressure drops below a quarter of the maximum and then inserts the
+  event through `markAt` at the real instant of the peak — keeping the event list in chronological
+  order, otherwise the ruler on the graph screen assigns label rows incorrectly.
+  **`MarkMaxQ` does nothing while the flight is running.** The graph screen also opens on a pause
+  mid-ascent, and that call used to pin the marker to whatever the running maximum was — permanently,
+  because the `maxQMarked` flag silences the automatic detection. The forced placement lives in
+  `emitMaxQ`, called only by `checkMaxQPassed` and `finish`.
 
-## Системы отсчёта — тут легко запутаться
+## Frames of reference — easy to get lost in
 
-Интегрирование идёт в **инерциальной** системе с центром планеты. Но ракета стоит на вращающемся столе и
-уносит его 465 м/с, поэтому в инерциальной системе за первые 15 секунд она «уезжает» вбок на 6 км при
-наборе 400 м высоты. Физически верно, читается как «ракету сдувает».
+Integration happens in the **inertial** frame centred on the planet. But the rocket stands on a rotating
+pad and carries its 465 m/s away with it, so in the inertial frame it "drifts" 6 km sideways over the
+first 15 seconds while climbing 400 m. Physically correct, reads as the rocket being blown off course.
 
-- **Δальность** меряется от стартового стола в системе, вращающейся с планетой: угол площадки
-  доворачивается на `ω·t`. Без этого поле показывало собственное вращение планеты как дальность полёта.
-- **След траектории и метки событий** рисуются через `Sim.GroundFrame` — выборка времени `t`
-  доворачивается на `ω·(T−t)`. Текущая точка при этом не смещается, так что эллипс орбиты и кольца,
-  которые все относятся к моменту `T`, остаются согласованными. На орбите след отстаёт от эллипса на
-  `ω·T` (2° за 500 с) — это наземная трасса, так и должно быть.
-- **`Telemetry.Speed` — инерциальная, `SurfSpeed`/`VertSpeed`/`HorizSpeed` — относительно земли.**
-  Панель показывает обе; смешивать их в одной колонке нельзя, получается 475 м/с при вертикальной 65
-  и горизонтальной 6.
+- **Downrange** is measured from the pad in the frame rotating with the planet: the launch site's angle
+  is advanced by `ω·t`. Without that the field reported the planet's own rotation as distance flown.
+- **The trail and the event markers** are drawn through `Sim.GroundFrame` — a sample taken at time `t`
+  is rotated forward by `ω·(T−t)`. The current point does not move, so the orbit ellipse and the rings,
+  which all refer to instant `T`, stay consistent. In orbit the trail lags the ellipse by `ω·T` (2° over
+  500 s) — that is the ground track, and it should.
+- **`Telemetry.Speed` is inertial; `SurfSpeed`/`VertSpeed`/`HorizSpeed` are relative to the ground.**
+  The panel shows both. Mixing them in one column produces 475 m/s next to a vertical 65 and a
+  horizontal 6.
 
-## Язык интерфейса
+## Interface language
 
-Два языка, переключатель РУС/ENG в шапке настроек и в нижних панелях полёта и графиков.
+All interface text lives in `assets/locale/ru.json` and `assets/locale/en.json`, embedded into the
+binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A toggle sits in the setup
+header and in the bottom bars of the flight and graph screens.
 
-- **`t(ru, en)` вместо таблицы ключей.** При двух языках держать оба варианта рядом на месте вызова
-  надёжнее: нечему разъехаться, нечему потеряться, и код читается. Третий язык потребует переделки —
-  это осознанный размен.
-- **В пакете `sim` текста нет вообще.** События несут только `Kind`, вердикты — только `Outcome`,
-  пресеты — идентификатор (`earth-falcon`). Подписи выдаёт `lang.go`. Физика не должна знать про язык.
-- **Ничего не кэшировать при создании экрана.** Подписи графиков раньше вычислялись в
-  `NewGraphScreen`, и переключение языка на них не действовало. Теперь `plotSeries()` вызывается
-  каждый кадр.
-- **Осторожно с именем `t`.** Это функция перевода; локальные переменные `t` для времени её
-  затеняют — в `screen_graphs.go` пришлось переименовать в `at`, в `ui.go` — в `tgt`.
-- CLI-флаги и логи оставлены на английском: это машинная поверхность, а не интерфейс.
+- **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
+  presets an identifier (`earth-falcon`). Labels come from `lang.go`. The physics must not know about
+  language.
+- **A string key gives up the compiler's help, so `lang_test.go` takes the job over.** It scans the
+  source for every `T("...")` and checks the key exists, that both languages carry the same key set,
+  that no value is blank, that no key is orphaned, and that a format string takes the same verbs in
+  every language. That last one matters: a translation that loses a `%s` panics at print time, on
+  whichever screen happens to use it.
+- **A missing key renders as `«key»`, not as nothing.** An empty gap reads as a layout bug; the key in
+  guillemets reads as what it is.
+- **Text assembled from fragments must be a whole format string.** Word order differs between
+  languages, so the max-q readout is `"%s на %s км"` / `"%s at %s km"` rather than a label glued to a
+  unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.
+- **Cache nothing at screen construction.** The plot captions used to be computed in `NewGraphScreen`,
+  and switching language did not relabel them. `plotSeries()` is now called every frame.
+- The switch button keeps each language written in its own script (`РУС` / `ENG`), which is the one
+  piece of display text deliberately kept out of the locale files.
+- CLI flags and log messages stay in English: that is a machine-facing surface, not the interface.
+- A third language is one more file plus an entry in `localeFile`; the tests will list every key it is
+  missing.
 
-## Отрисовка — ловушки
+## Rendering — traps
 
-- **Камера повёрнута:** `Camera.Rot` = угол местной вертикали, чтобы «вверх» на экране было от планеты.
-  Стартовая площадка лежит на оси +X, без поворота взлёт выглядел бы полётом вбок. Направления
-  (вектор тяги, касательная к поверхности) гнать через `Camera.Dir`, не через `(v.X, -v.Y)`.
-- **Два режима мира.** Пока радиус планеты в пикселях меньше `maxRingPx`, земля и атмосфера — концентрические
-  кольца. Дальше — горизонтальные полосы: окружность в миллион пикселей растеризатор не переживёт.
-- **Центр камеры не сглаживается вообще, только зум.** Сглаживать положение можно лишь в какой-то
-  системе отсчёта, и инерциальная тут категорически не годится: ракета несётся по ней со скоростью
-  465 м/с, камера постоянно висит метров на сто позади, а неровный шаг интегратора (0.02 с не делится
-  нацело на кадр 1/60) превращает это отставание в тряску ±5 px, 150 смен направления за 700 кадров.
-  Центр теперь вычисляется от текущего положения ракеты каждый кадр — ноль смен направления.
-  Проверяется флагом `-camtrace N`: он печатает экранные координаты ракеты и стола по кадрам.
-- **Кадрирование считается от сглаженного зума, а не от сырого `span`.** Иначе скачок span (например,
-  когда орбита замкнулась) дёргает композицию, пока зум ещё плавно едет.
-- **Фокус камеры нельзя лерпить к центру планеты линейно.** Цель в тысячах километров, поэтому даже
-  доля 1e-4 сдвигает картинку на сотни метров и выкидывает стартовый стол за пределы полуторакилометрового
-  обзора. Блендинг стоит на нуле, пока обзор не дорастёт до половины радиуса планеты.
-- **Стартовый стол рисуется в метрах** и сам сжимается по мере набора высоты; когда становится меньше
-  7 пикселей, схлопывается в подпись «СТАРТ». Её якорь скармливается в расталкивание меток событий,
-  иначе на орбитальном масштабе она ложится поверх «ОТСЕЧКА».
-- **Число полос атмосферы зависит от масштаба.** С орбиты вся атмосфера — несколько пикселей, шестнадцать
-  субпиксельных колец просто исчезают.
-- **Тулкит опознаёт виджет по адресу редактируемого значения.** Нельзя биндить `NumField` к локальной
-  переменной — адрес меняется каждый кадр и фокус слетает. Поле «Диаметр» поэтому привязано прямо к
-  `Body.Radius` со `Scale: 500`.
-- **Весь интерфейс строится в `Update`, а не в `Draw`.** Тулкит иммедиат-мод и читает just-pressed ввод;
-  Ebiten вызывает `Draw` реже, чем `Update`, и клики бы терялись. `Draw` только блитит канвас.
+- **The camera is rotated:** `Camera.Rot` is the angle of the local vertical, so "up" on screen points
+  away from the planet. The launch site sits on the +X axis, and without the rotation the ascent would
+  look like sideways flight. Push directions (thrust vector, surface tangent) through `Camera.Dir`, not
+  through `(v.X, -v.Y)`.
+- **Two world modes.** While the planet's radius in pixels is under `maxRingPx`, the ground and the
+  atmosphere are concentric rings. Beyond that they become horizontal bands: the rasteriser will not
+  survive a circle a million pixels across.
+- **The camera centre is not smoothed at all, only the zoom.** Smoothing a position has to happen in
+  some frame of reference, and the inertial one is flatly wrong here: the vehicle sweeps through it at
+  465 m/s, the camera ends up permanently a hundred metres behind, and the uneven integrator step
+  (0.02 s does not divide the 1/60 frame) turns that lag into ±5 px of shake — 150 direction reversals
+  over 700 frames. The centre is now derived from the vehicle's current position every frame: zero
+  reversals. Checked with `-camtrace N`, which prints the vehicle and pad screen coordinates per frame.
+- **Framing is derived from the eased zoom, not the raw `span`.** Otherwise a step in the span — the
+  orbit closing, say — jolts the composition while the zoom is still gliding.
+- **The camera focus cannot be lerped towards the planet's centre linearly.** The target is thousands of
+  kilometres away, so even a factor of 1e-4 shifts the picture by hundreds of metres and throws the
+  launch pad out of a 1.5 km wide view. The blend stays at zero until the span reaches half a planet
+  radius.
+- **The launch pad is drawn in metres** and shrinks on its own as the vehicle climbs; below 7 pixels it
+  collapses into a label. That label's anchor is fed into the event-marker spacing, otherwise at
+  orbital scale it lands on top of the cutoff marker.
+- **The number of atmosphere bands follows the scale.** From orbit the whole atmosphere is a few pixels
+  deep, and sixteen sub-pixel rings simply vanish.
+- **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a
+  local variable — the address changes every frame and focus is lost. That is why the diameter field is
+  bound straight to `Body.Radius` with `Scale: 500`.
+- **The whole interface is built in `Update`, not in `Draw`.** The toolkit is immediate mode and reads
+  just-pressed input; Ebiten calls `Draw` less often than `Update`, and clicks would be dropped. `Draw`
+  only blits the canvas.
 
-## Пресеты
+## Presets
 
-Программы тангажа и время отсечки второй ступени подобраны перебором (генератор профиля
-`pitch = 90·(1-f)^p` + свип отсечки по минимуму отклонения от круговой цели). Тюнер жил в
-`sim/zz_tune_test.go` и удалён — если пресеты поедут, проще написать его заново, чем подбирать руками.
+The pitch programmes and the second-stage cutoffs were found by search (a profile generator,
+`pitch = 90·(1-f)^p`, plus a cutoff sweep minimising the deviation from the circular target). The tuner
+lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it again beats
+tuning by hand.
 
-Земля/Falcon-9: орбита 304/239 км, Δv 8995 м/с, max q 43 кПа на 11 км, max 5.9 g. Δv меньше реальных
-9.3–9.5 км/с потому, что старт с экватора даёт все 465 м/с вращения.
+Earth/Falcon-9: a 304/239 km orbit, Δv 8995 m/s, max q 43 kPa at 11 km, peak 5.9 g. The Δv is below the
+real-world 9.3–9.5 km/s because launching from the equator hands over all 465 m/s of rotation.
 
-Кербину пришлось дать зажигание второй ступени **в апогее**: планета 600 км радиусом с земной
-атмосферой в 70 км, прямое выведение одним включением там не сходится.
+Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet wearing an Earth-thick
+70 km atmosphere does not yield to direct ascent on a single burn.

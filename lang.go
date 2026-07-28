@@ -1,14 +1,27 @@
 package main
 
 import (
+	"embed"
+	"encoding/json"
+	"fmt"
+	"log"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"fsim/sim"
 )
 
-// Interface language. With exactly two languages, keeping both variants side
-// by side at the call site beats a keyed table: nothing can drift out of sync,
-// nothing can be missing, and the surrounding code stays readable.
+// Interface text lives in assets/locale/<code>.json, keyed by dotted
+// identifiers, and is embedded into the binary. Keeping the copy out of the
+// screens means the whole wording of the program can be read and revised in
+// one place, and a new language is one more file.
+//
+// The compiler cannot check a string key, so TestLocales stands in for it: it
+// verifies that every language carries the same key set and that every key
+// used anywhere in the source actually exists.
+
+//go:embed assets/locale/*.json
+var localeFS embed.FS
 
 // Lang is the language the interface is drawn in.
 type Lang int
@@ -18,16 +31,48 @@ const (
 	EN
 )
 
+// localeFile is the asset each language loads from.
+var localeFile = map[Lang]string{
+	RU: "assets/locale/ru.json",
+	EN: "assets/locale/en.json",
+}
+
 // lang is global on purpose. It is read from every draw call in the program
 // and changes only when the user clicks the toggle.
 var lang = RU
 
-// t picks the variant for the current language.
-func t(ru, en string) string {
-	if lang == EN {
-		return en
+// locales holds every language's table, loaded once at startup.
+var locales = map[Lang]map[string]string{}
+
+// loadLocales reads every embedded language file. A failure here is fatal:
+// without text the interface is unusable, and the files ship inside the
+// binary, so a failure means the build itself is broken.
+func loadLocales() {
+	for l, path := range localeFile {
+		data, err := localeFS.ReadFile(path)
+		if err != nil {
+			log.Fatalf("locale %s: %v", path, err)
+		}
+		var table map[string]string
+		if err := json.Unmarshal(data, &table); err != nil {
+			log.Fatalf("locale %s: %v", path, err)
+		}
+		locales[l] = table
 	}
-	return ru
+}
+
+// T looks up interface text by key in the current language.
+//
+// A missing key renders as the key itself in guillemets rather than as an
+// empty gap, so a typo is loud on screen instead of silently invisible.
+func T(key string) string {
+	if s, ok := locales[lang][key]; ok {
+		return s
+	}
+	if s, ok := locales[RU][key]; ok {
+		return s
+	}
+	return fmt.Sprintf("«%s»", key)
 }
 
 // langToggleW is the width the switch occupies in every bar that hosts it.
@@ -45,6 +90,9 @@ func (u *UI) LangToggle(dst *ebiten.Image, r Rect) {
 		}
 		return ButtonNormal
 	}
+	// Each language is written in its own script, so this label stays Cyrillic
+	// whichever language is currently selected. It is the one piece of display
+	// text deliberately kept out of the locale files.
 	if u.Button(dst, ru, "РУС", style(RU)) {
 		lang = RU
 	}
@@ -57,19 +105,19 @@ func (u *UI) LangToggle(dst *ebiten.Image, r Rect) {
 func eventLabel(k sim.EventKind) string {
 	switch k {
 	case sim.EvLiftoff:
-		return t("СТАРТ", "LIFTOFF")
+		return T("event.liftoff")
 	case sim.EvMaxQ:
 		return "MAX Q"
 	case sim.EvCutoff:
-		return t("ОТСЕЧКА", "CUTOFF")
+		return T("event.cutoff")
 	case sim.EvSeparation:
-		return t("РАЗДЕЛЕНИЕ", "SEPARATION")
+		return T("event.separation")
 	case sim.EvIgnition:
-		return t("ЗАЖИГАНИЕ", "IGNITION")
+		return T("event.ignition")
 	case sim.EvApoapsis:
-		return t("АПОГЕЙ", "APOAPSIS")
+		return T("event.apoapsis")
 	case sim.EvEnd:
-		return t("КОНЕЦ", "END")
+		return T("event.end")
 	default:
 		return ""
 	}
@@ -79,20 +127,19 @@ func eventLabel(k sim.EventKind) string {
 func outcomeText(o sim.Outcome) string {
 	switch o {
 	case sim.OutcomeOrbit:
-		return t("ОРБИТА ДОСТИГНУТА", "ORBIT ACHIEVED")
+		return T("outcome.orbit")
 	case sim.OutcomeDecaying:
-		return t("ОРБИТА НЕУСТОЙЧИВА — ПЕРИГЕЙ В АТМОСФЕРЕ",
-			"ORBIT UNSTABLE — PERIAPSIS INSIDE THE ATMOSPHERE")
+		return T("outcome.decaying")
 	case sim.OutcomeSuborbital:
-		return t("СУБОРБИТАЛЬНЫЙ ПОЛЁТ", "SUBORBITAL FLIGHT")
+		return T("outcome.suborbital")
 	case sim.OutcomeCrashed:
-		return t("АВАРИЯ — УДАР О ПОВЕРХНОСТЬ", "CRASHED INTO THE SURFACE")
+		return T("outcome.crashed")
 	case sim.OutcomeEscape:
-		return t("УХОД С ОРБИТЫ ПЛАНЕТЫ", "ESCAPED THE PLANET")
+		return T("outcome.escape")
 	case sim.OutcomeTimeout:
-		return t("ЛИМИТ ВРЕМЕНИ ИСЧЕРПАН", "TIME LIMIT REACHED")
+		return T("outcome.timeout")
 	default:
-		return t("ПОЛЁТ", "IN FLIGHT")
+		return T("outcome.flying")
 	}
 }
 
@@ -100,13 +147,13 @@ func outcomeText(o sim.Outcome) string {
 func phaseText(p sim.Phase) string {
 	switch p {
 	case sim.PhaseBurn:
-		return t("РАБОТА ДВИГАТЕЛЯ", "ENGINE BURNING")
+		return T("phase.burn")
 	case sim.PhaseSepWait:
-		return t("ОЖИДАНИЕ РАЗДЕЛЕНИЯ", "AWAITING SEPARATION")
+		return T("phase.sepWait")
 	case sim.PhaseIgnitionWait:
-		return t("ОЖИДАНИЕ ЗАЖИГАНИЯ", "AWAITING IGNITION")
+		return T("phase.ignitionWait")
 	default:
-		return t("ПАССИВНЫЙ ПОЛЁТ", "COASTING")
+		return T("phase.coast")
 	}
 }
 
@@ -114,13 +161,13 @@ func phaseText(p sim.Phase) string {
 func presetName(key string) string {
 	switch key {
 	case "earth-falcon":
-		return t("Земля / Falcon-9", "Earth / Falcon-9")
+		return T("preset.earthFalcon")
 	case "mars":
-		return t("Марс / лёгкий носитель", "Mars / light launcher")
+		return T("preset.mars")
 	case "moon":
-		return t("Луна / без атмосферы", "Moon / no atmosphere")
+		return T("preset.moon")
 	case "kerbin":
-		return t("Кербин / KSP-подобный", "Kerbin / KSP-like")
+		return T("preset.kerbin")
 	default:
 		return key
 	}

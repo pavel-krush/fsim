@@ -1,7 +1,7 @@
-# Собранный бинарь: имя совпадает с именем модуля, go build кладёт его в корень
+# Built binary: go build names it after the module and drops it in the root
 /fsim
 
-# Скриншоты из -shot и всё остальное черновое
+# Screenshots from -shot, and anything else scratch
 /tmp/
 /shots/
 *.png
@@ -11,7 +11,7 @@
 *.out
 /vendor/
 
-# macOS / редакторы
+# macOS / editors
 .DS_Store
 *.swp
 .idea/

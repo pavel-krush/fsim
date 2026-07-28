@@ -449,11 +449,11 @@ func fmtEng(v float64, unit string) string {
 	case math.IsInf(v, 0):
 		return "∞"
 	case a >= 1e9:
-		return fmt.Sprintf("%.2f %s%s", v/1e9, t("Г", "G"), unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e9, T("unit.prefixGiga"), unit)
 	case a >= 1e6:
-		return fmt.Sprintf("%.2f %s%s", v/1e6, t("М", "M"), unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e6, T("unit.prefixMega"), unit)
 	case a >= 1e3:
-		return fmt.Sprintf("%.2f %s%s", v/1e3, t("к", "k"), unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e3, T("unit.prefixKilo"), unit)
 	default:
 		return fmt.Sprintf("%.2f %s", v, unit)
 	}
