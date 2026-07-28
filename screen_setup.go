@@ -84,7 +84,7 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 
 	// Bound to the radius with a halved scale, so the widget keeps a stable
 	// identity across frames: the field edits the very value it displays.
-	u.NumField(dst, c.next(rowH), T("setup.diameter"), &b.Radius, NumOpt{Unit: T("unit.km"), Scale: 500, Min: 500, Max: 1e10})
+	u.NumField(dst, c.next(rowH), T("setup.diameter"), &b.Radius, NumOpt{Unit: T("unit.km"), Scale: 500, Min: 500, Max: 1e10, Info: "setup.diameter.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.radius"), formatNum(b.Radius/1000, 1), T("unit.km"))
 
 	c.gap(8)
@@ -99,38 +99,38 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	// Exactly one of the three is editable; the other two follow from it.
 	switch b.MassSource {
 	case sim.FromMass:
-		u.NumField(dst, c.next(rowH), T("setup.mass"), &b.Mass, NumOpt{Unit: T("unit.e21kg"), Scale: 1e21, Min: 1e10, Max: 1e30})
+		u.NumField(dst, c.next(rowH), T("setup.mass"), &b.Mass, NumOpt{Unit: T("unit.e21kg"), Scale: 1e21, Min: 1e10, Max: 1e30, Info: "setup.mass.info"})
 		u.ReadOnly(dst, c.next(rowH), T("setup.density"), formatNum(b.Density, 0), T("unit.kgm3"))
 		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), formatNum(b.SurfaceG, 3), T("unit.mps2"))
 	case sim.FromDensity:
 		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), formatNum(b.Mass/1e21, 3), T("unit.e21kg"))
-		u.NumField(dst, c.next(rowH), T("setup.density"), &b.Density, NumOpt{Unit: T("unit.kgm3"), Min: 1, Max: 1e6})
+		u.NumField(dst, c.next(rowH), T("setup.density"), &b.Density, NumOpt{Unit: T("unit.kgm3"), Min: 1, Max: 1e6, Info: "setup.density.info"})
 		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), formatNum(b.SurfaceG, 3), T("unit.mps2"))
 	case sim.FromSurfaceG:
 		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), formatNum(b.Mass/1e21, 3), T("unit.e21kg"))
 		u.ReadOnly(dst, c.next(rowH), T("setup.density"), formatNum(b.Density, 0), T("unit.kgm3"))
-		u.NumField(dst, c.next(rowH), T("setup.surfaceGravity"), &b.SurfaceG, NumOpt{Unit: T("unit.mps2"), Min: 0.001, Max: 1000})
+		u.NumField(dst, c.next(rowH), T("setup.surfaceGravity"), &b.SurfaceG, NumOpt{Unit: T("unit.mps2"), Min: 0.001, Max: 1000, Info: "setup.surfaceGravity.info"})
 	}
 
 	c.gap(8)
-	u.NumField(dst, c.next(rowH), T("setup.rotationPeriod"), &b.RotationPeriod, NumOpt{Unit: T("unit.h"), Scale: 3600, Min: 0, Max: 1e9})
+	u.NumField(dst, c.next(rowH), T("setup.rotationPeriod"), &b.RotationPeriod, NumOpt{Unit: T("unit.h"), Scale: 3600, Min: 0, Max: 1e9, Info: "setup.rotationPeriod.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.equatorialSpeed"), formatNum(b.EquatorialSpeed(), 1), T("unit.mps"))
 
 	c.gap(10)
 	u.SectionHeader(dst, c.next(20), T("setup.secTarget"))
-	u.NumField(dst, c.next(rowH), T("setup.orbitAltitude"), &a.cfg.TargetOrbit, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e9})
+	u.NumField(dst, c.next(rowH), T("setup.orbitAltitude"), &a.cfg.TargetOrbit, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.orbitAltitude.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.circularSpeed"), formatNum(b.CircularSpeed(a.cfg.TargetOrbit), 0), T("unit.mps"))
 	u.ReadOnly(dst, c.next(rowH), T("setup.escapeSpeed"), formatNum(b.EscapeSpeed(0), 0), T("unit.mps"))
-	u.NumField(dst, c.next(rowH), T("setup.timeLimit"), &a.cfg.MaxTime, NumOpt{Unit: T("unit.min"), Scale: 60, Min: 60, Max: 1e6})
+	u.NumField(dst, c.next(rowH), T("setup.timeLimit"), &a.cfg.MaxTime, NumOpt{Unit: T("unit.min"), Scale: 60, Min: 60, Max: 1e6, Info: "setup.timeLimit.info"})
 }
 
 func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	at := &a.cfg.Atmo
 	u := a.ui
 
-	u.NumField(dst, c.next(rowH), T("setup.surfacePressure"), &at.SurfacePressure, NumOpt{Unit: T("unit.kpa"), Scale: 1000, Min: 0, Max: 1e8})
-	u.NumField(dst, c.next(rowH), T("setup.temperature"), &at.SurfaceTemp, NumOpt{Unit: "K", Min: 1, Max: 5000})
-	u.NumField(dst, c.next(rowH), T("setup.upperBoundary"), &at.Top, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e7})
+	u.NumField(dst, c.next(rowH), T("setup.surfacePressure"), &at.SurfacePressure, NumOpt{Unit: T("unit.kpa"), Scale: 1000, Min: 0, Max: 1e8, Info: "setup.surfacePressure.info"})
+	u.NumField(dst, c.next(rowH), T("setup.temperature"), &at.SurfaceTemp, NumOpt{Unit: "K", Min: 1, Max: 5000, Info: "setup.temperature.info"})
+	u.NumField(dst, c.next(rowH), T("setup.upperBoundary"), &at.Top, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e7, Info: "setup.upperBoundary.info"})
 
 	c.gap(10)
 	u.SectionHeader(dst, c.next(20), T("setup.secComposition"))
@@ -145,7 +145,7 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	}
 	for i := range sim.Gases {
 		u.NumField(dst, c.next(rowH), sim.Gases[i].Name, &at.Fractions[i],
-			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1})
+			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1, Info: "setup.composition.info"})
 	}
 	u.ReadOnly(dst, c.next(rowH), T("setup.total"), formatNum(sum*100, 1), "%")
 
@@ -192,8 +192,8 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 
 	u.NumField(dst, c.next(rowH), T("setup.payload"), &rk.Payload,
 		NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.payload.info"})
-	u.NumField(dst, c.next(rowH), T("setup.bodyDiameter"), &rk.Diameter, NumOpt{Unit: T("unit.m"), Min: 0.1, Max: 100})
-	u.NumField(dst, c.next(rowH), T("setup.cd"), &rk.Cd, NumOpt{Min: 0, Max: 5})
+	u.NumField(dst, c.next(rowH), T("setup.bodyDiameter"), &rk.Diameter, NumOpt{Unit: T("unit.m"), Min: 0.1, Max: 100, Info: "setup.bodyDiameter.info"})
+	u.NumField(dst, c.next(rowH), T("setup.cd"), &rk.Cd, NumOpt{Min: 0, Max: 5, Info: "setup.cd.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.referenceArea"), formatNum(rk.Area(), 2), T("unit.m2"))
 
 	for i := range rk.Stages {
@@ -201,16 +201,16 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		c.gap(10)
 		u.SectionHeader(dst, c.next(20), fmt.Sprintf(T("setup.stageN"), i+1))
 
-		u.NumField(dst, c.next(rowH), T("setup.dryMass"), &st.DryMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 1, Max: 1e9})
-		u.NumField(dst, c.next(rowH), T("setup.propellant"), &st.PropMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9})
-		u.NumField(dst, c.next(rowH), T("setup.thrustVac"), &st.ThrustVac, NumOpt{Unit: T("unit.kn"), Scale: 1000, Min: 0, Max: 1e9})
-		u.NumField(dst, c.next(rowH), T("setup.ispVac"), &st.IspVac, NumOpt{Unit: T("unit.s"), Min: 1, Max: 10000})
-		u.NumField(dst, c.next(rowH), T("setup.ispSL"), &st.IspSL, NumOpt{Unit: T("unit.s"), Min: 1, Max: 10000})
-		u.NumField(dst, c.next(rowH), T("setup.throttle"), &st.Throttle, NumOpt{Min: 0, Max: 1})
-		u.NumField(dst, c.next(rowH), T("setup.cutoff"), &st.CutoffTime, NumOpt{Unit: T("unit.s"), Min: 0, Max: 1e6})
+		u.NumField(dst, c.next(rowH), T("setup.dryMass"), &st.DryMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 1, Max: 1e9, Info: "setup.dryMass.info"})
+		u.NumField(dst, c.next(rowH), T("setup.propellant"), &st.PropMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.propellant.info"})
+		u.NumField(dst, c.next(rowH), T("setup.thrustVac"), &st.ThrustVac, NumOpt{Unit: T("unit.kn"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.thrustVac.info"})
+		u.NumField(dst, c.next(rowH), T("setup.ispVac"), &st.IspVac, NumOpt{Unit: T("unit.s"), Min: 1, Max: 10000, Info: "setup.ispVac.info"})
+		u.NumField(dst, c.next(rowH), T("setup.ispSL"), &st.IspSL, NumOpt{Unit: T("unit.s"), Min: 1, Max: 10000, Info: "setup.ispSL.info"})
+		u.NumField(dst, c.next(rowH), T("setup.throttle"), &st.Throttle, NumOpt{Min: 0, Max: 1, Info: "setup.throttle.info"})
+		u.NumField(dst, c.next(rowH), T("setup.cutoff"), &st.CutoffTime, NumOpt{Unit: T("unit.s"), Min: 0, Max: 1e6, Info: "setup.cutoff.info"})
 
 		if i < len(rk.Stages)-1 {
-			u.NumField(dst, c.next(rowH), T("setup.sepDelay"), &st.SepDelay, NumOpt{Unit: T("unit.s"), Min: 0, Max: 600})
+			u.NumField(dst, c.next(rowH), T("setup.sepDelay"), &st.SepDelay, NumOpt{Unit: T("unit.s"), Min: 0, Max: 600, Info: "setup.sepDelay.info"})
 		}
 		if i > 0 {
 			drawText(dst, T("setup.ignitionLabel"), fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
@@ -219,7 +219,7 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 			u.Radio(dst, c.next(18), T("setup.ignitionDelayed"), ig, int(sim.IgniteAfterDelay))
 			u.Radio(dst, c.next(18), T("setup.ignitionApoapsis"), ig, int(sim.IgniteAtApoapsis))
 			if st.Ignition == sim.IgniteAfterDelay {
-				u.NumField(dst, c.next(rowH), T("setup.ignitionDelay"), &st.IgnitionDelay, NumOpt{Unit: T("unit.s"), Min: 0, Max: 1e5})
+				u.NumField(dst, c.next(rowH), T("setup.ignitionDelay"), &st.IgnitionDelay, NumOpt{Unit: T("unit.s"), Min: 0, Max: 1e5, Info: "setup.ignitionDelay.info"})
 			}
 		}
 

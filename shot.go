@@ -44,7 +44,10 @@ func newShotRunner(dir string) *shotRunner {
 		steps: []shotStep{
 			{name: "1-setup", screen: ScreenSetup},
 			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
-			{name: "1c-setup-info", screen: ScreenSetup, hover: &struct{ X, Y float64 }{904, 105}},
+			{name: "1c-setup-info", screen: ScreenSetup, hover: &struct{ X, Y float64 }{914, 105}},
+			{name: "1d-setup-info-atmo", screen: ScreenSetup, hover: &struct{ X, Y float64 }{542, 127}},
+			{name: "1e-setup-info-low", screen: ScreenSetup, hover: &struct{ X, Y float64 }{914, 355}},
+			{name: "1f-setup-info-gas", screen: ScreenSetup, hover: &struct{ X, Y float64 }{542, 289}},
 			{name: "2-pad", screen: ScreenFlight, advance: 2},
 			{name: "3-liftoff", screen: ScreenFlight, advance: 18},
 			{name: "4-maxq", screen: ScreenFlight, advance: 45},

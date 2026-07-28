@@ -197,6 +197,11 @@ func parseNum(s string) (float64, error) {
 	return strconv.ParseFloat(s, 64)
 }
 
+// labelColW caps the label column. It has to clear the widest label that goes
+// through a field — "Задержка разделения", 134 px — plus the info mark that
+// sits at its right edge, or the two collide.
+const labelColW = 160
+
 // unitColW is the strip kept clear to the right of every labelled field for
 // its unit. It fits the widest unit in the locale files ("×10²¹ kg", 44 px)
 // with room for the gap.
@@ -225,7 +230,7 @@ func (u *UI) NumField(dst *ebiten.Image, r Rect, label string, val *float64, o N
 		o.Dec = -1
 	}
 
-	labelW := math.Min(r.W*0.52, 150)
+	labelW := math.Min(r.W*0.52, labelColW)
 	box := Rect{r.X + labelW, r.Y, r.W - labelW, r.H}
 	switch {
 	case label != "":
