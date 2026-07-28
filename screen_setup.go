@@ -85,7 +85,7 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	// Bound to the radius with a halved scale, so the widget keeps a stable
 	// identity across frames: the field edits the very value it displays.
 	u.NumField(dst, c.next(rowH), T("setup.diameter"), &b.Radius, NumOpt{Unit: T("unit.km"), Scale: 500, Min: 500, Max: 1e10})
-	u.ReadOnly(dst, c.next(rowH), T("setup.radius"), fmt.Sprintf("%s %s", formatNum(b.Radius/1000, 1), T("unit.km")))
+	u.ReadOnly(dst, c.next(rowH), T("setup.radius"), formatNum(b.Radius/1000, 1), T("unit.km"))
 
 	c.gap(8)
 	drawText(dst, T("setup.massSourceLabel"), fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
@@ -100,27 +100,27 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	switch b.MassSource {
 	case sim.FromMass:
 		u.NumField(dst, c.next(rowH), T("setup.mass"), &b.Mass, NumOpt{Unit: T("unit.e21kg"), Scale: 1e21, Min: 1e10, Max: 1e30})
-		u.ReadOnly(dst, c.next(rowH), T("setup.density"), fmt.Sprintf("%s %s", formatNum(b.Density, 0), T("unit.kgm3")))
-		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), fmt.Sprintf("%s %s", formatNum(b.SurfaceG, 3), T("unit.mps2")))
+		u.ReadOnly(dst, c.next(rowH), T("setup.density"), formatNum(b.Density, 0), T("unit.kgm3"))
+		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), formatNum(b.SurfaceG, 3), T("unit.mps2"))
 	case sim.FromDensity:
-		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), fmt.Sprintf("%s %s", formatNum(b.Mass/1e21, 3), T("unit.e21kg")))
+		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), formatNum(b.Mass/1e21, 3), T("unit.e21kg"))
 		u.NumField(dst, c.next(rowH), T("setup.density"), &b.Density, NumOpt{Unit: T("unit.kgm3"), Min: 1, Max: 1e6})
-		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), fmt.Sprintf("%s %s", formatNum(b.SurfaceG, 3), T("unit.mps2")))
+		u.ReadOnly(dst, c.next(rowH), T("setup.surfaceGravity"), formatNum(b.SurfaceG, 3), T("unit.mps2"))
 	case sim.FromSurfaceG:
-		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), fmt.Sprintf("%s %s", formatNum(b.Mass/1e21, 3), T("unit.e21kg")))
-		u.ReadOnly(dst, c.next(rowH), T("setup.density"), fmt.Sprintf("%s %s", formatNum(b.Density, 0), T("unit.kgm3")))
+		u.ReadOnly(dst, c.next(rowH), T("setup.mass"), formatNum(b.Mass/1e21, 3), T("unit.e21kg"))
+		u.ReadOnly(dst, c.next(rowH), T("setup.density"), formatNum(b.Density, 0), T("unit.kgm3"))
 		u.NumField(dst, c.next(rowH), T("setup.surfaceGravity"), &b.SurfaceG, NumOpt{Unit: T("unit.mps2"), Min: 0.001, Max: 1000})
 	}
 
 	c.gap(8)
 	u.NumField(dst, c.next(rowH), T("setup.rotationPeriod"), &b.RotationPeriod, NumOpt{Unit: T("unit.h"), Scale: 3600, Min: 0, Max: 1e9})
-	u.ReadOnly(dst, c.next(rowH), T("setup.equatorialSpeed"), fmt.Sprintf("%s %s", formatNum(b.EquatorialSpeed(), 1), T("unit.mps")))
+	u.ReadOnly(dst, c.next(rowH), T("setup.equatorialSpeed"), formatNum(b.EquatorialSpeed(), 1), T("unit.mps"))
 
 	c.gap(10)
 	u.SectionHeader(dst, c.next(20), T("setup.secTarget"))
 	u.NumField(dst, c.next(rowH), T("setup.orbitAltitude"), &a.cfg.TargetOrbit, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e9})
-	u.ReadOnly(dst, c.next(rowH), T("setup.circularSpeed"), speed(b.CircularSpeed(a.cfg.TargetOrbit)))
-	u.ReadOnly(dst, c.next(rowH), T("setup.escapeSpeed"), speed(b.EscapeSpeed(0)))
+	u.ReadOnly(dst, c.next(rowH), T("setup.circularSpeed"), formatNum(b.CircularSpeed(a.cfg.TargetOrbit), 0), T("unit.mps"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.escapeSpeed"), formatNum(b.EscapeSpeed(0), 0), T("unit.mps"))
 	u.NumField(dst, c.next(rowH), T("setup.timeLimit"), &a.cfg.MaxTime, NumOpt{Unit: T("unit.min"), Scale: 60, Min: 60, Max: 1e6})
 }
 
@@ -147,15 +147,15 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		u.NumField(dst, c.next(rowH), sim.Gases[i].Name, &at.Fractions[i],
 			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1})
 	}
-	u.ReadOnly(dst, c.next(rowH), T("setup.total"), fmt.Sprintf("%s %%", formatNum(sum*100, 1)))
+	u.ReadOnly(dst, c.next(rowH), T("setup.total"), formatNum(sum*100, 1), "%")
 
 	// The mixture properties are what the composition actually buys you.
 	at.Prepare(a.cfg.Body.SurfaceG)
-	u.ReadOnly(dst, c.next(rowH), T("setup.molarMass"), fmt.Sprintf("%s %s", formatNum(at.MolarMass()*1000, 2), T("unit.gmol")))
-	u.ReadOnly(dst, c.next(rowH), T("setup.gamma"), formatNum(at.Gamma(), 3))
+	u.ReadOnly(dst, c.next(rowH), T("setup.molarMass"), formatNum(at.MolarMass()*1000, 2), T("unit.gmol"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.gamma"), formatNum(at.Gamma(), 3), "")
 	st := at.State(0)
-	u.ReadOnly(dst, c.next(rowH), T("setup.surfaceDensity"), fmt.Sprintf("%s %s", formatNum(st.Density, 4), T("unit.kgm3")))
-	u.ReadOnly(dst, c.next(rowH), T("setup.speedOfSound"), fmt.Sprintf("%s %s", formatNum(st.Sound, 1), T("unit.mps")))
+	u.ReadOnly(dst, c.next(rowH), T("setup.surfaceDensity"), formatNum(st.Density, 4), T("unit.kgm3"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.speedOfSound"), formatNum(st.Sound, 1), T("unit.mps"))
 
 	c.gap(10)
 	u.SectionHeader(dst, c.next(20), T("setup.secLayers"))
@@ -194,7 +194,7 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.payload.info"})
 	u.NumField(dst, c.next(rowH), T("setup.bodyDiameter"), &rk.Diameter, NumOpt{Unit: T("unit.m"), Min: 0.1, Max: 100})
 	u.NumField(dst, c.next(rowH), T("setup.cd"), &rk.Cd, NumOpt{Min: 0, Max: 5})
-	u.ReadOnly(dst, c.next(rowH), T("setup.referenceArea"), fmt.Sprintf("%s %s", formatNum(rk.Area(), 2), T("unit.m2")))
+	u.ReadOnly(dst, c.next(rowH), T("setup.referenceArea"), formatNum(rk.Area(), 2), T("unit.m2"))
 
 	for i := range rk.Stages {
 		st := &rk.Stages[i]
@@ -223,9 +223,9 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 			}
 		}
 
-		u.ReadOnly(dst, c.next(rowH), T("setup.massFlow"), fmt.Sprintf("%s %s", formatNum(st.MassFlow(), 1), T("unit.kgs")))
-		u.ReadOnly(dst, c.next(rowH), T("setup.burnTime"), fmt.Sprintf("%s %s", formatNum(st.BurnTime(), 1), T("unit.s")))
-		u.ReadOnly(dst, c.next(rowH), T("setup.stageDv"), speed(rk.StageDeltaV(i)))
+		u.ReadOnly(dst, c.next(rowH), T("setup.massFlow"), formatNum(st.MassFlow(), 1), T("unit.kgs"))
+		u.ReadOnly(dst, c.next(rowH), T("setup.burnTime"), formatNum(st.BurnTime(), 1), T("unit.s"))
+		u.ReadOnly(dst, c.next(rowH), T("setup.stageDv"), formatNum(rk.StageDeltaV(i), 0), T("unit.mps"))
 	}
 	c.gap(10)
 }

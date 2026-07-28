@@ -197,6 +197,11 @@ func parseNum(s string) (float64, error) {
 	return strconv.ParseFloat(s, 64)
 }
 
+// unitColW is the strip kept clear to the right of every labelled field for
+// its unit. It fits the widest unit in the locale files ("×10²¹ kg", 44 px)
+// with room for the gap.
+const unitColW = 48
+
 // NumOpt configures a numeric field.
 type NumOpt struct {
 	Unit  string
@@ -222,10 +227,16 @@ func (u *UI) NumField(dst *ebiten.Image, r Rect, label string, val *float64, o N
 
 	labelW := math.Min(r.W*0.52, 150)
 	box := Rect{r.X + labelW, r.Y, r.W - labelW, r.H}
-	unitW := 0.0
-	if o.Unit != "" {
-		unitW = textWidth(o.Unit, fontUISm) + 6
-		box.W -= unitW
+	switch {
+	case label != "":
+		// A labelled field is a form row, and form rows stack into a column:
+		// reserve the same strip for the unit on every one of them, whatever
+		// that unit happens to be, so all the boxes end on the same line.
+		box.W -= unitColW
+	case o.Unit != "":
+		// No label means a cell in a compact grid — the layer and keyframe
+		// editors — where a fixed reserve would eat most of the width.
+		box.W -= textWidth(o.Unit, fontUISm) + 6
 	}
 
 	drawText(dst, label, fontUI, r.X, r.Y+(r.H-fontUI.Size)/2-1, colTextDim, alignLeft)
@@ -304,12 +315,17 @@ func (u *UI) typeInto() {
 	u.editBad = err != nil && u.editBuf != ""
 }
 
-// ReadOnly draws a label with a computed value that cannot be edited.
-func (u *UI) ReadOnly(dst *ebiten.Image, r Rect, label, value string) {
-	labelW := math.Min(r.W*0.52, 150)
+// ReadOnly draws a label with a computed value that cannot be edited. The
+// value and its unit are passed apart so the row lands on the same two columns
+// an editable row uses: the number ends where the input boxes end, and the
+// unit sits in the strip beside them.
+func (u *UI) ReadOnly(dst *ebiten.Image, r Rect, label, value, unit string) {
+	valueRight := r.Right() - unitColW
 	drawText(dst, label, fontUI, r.X, r.Y+(r.H-fontUI.Size)/2-1, colTextFaint, alignLeft)
-	drawText(dst, value, fontMono, r.Right()-4, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
-	_ = labelW
+	drawText(dst, value, fontMono, valueRight-6, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
+	if unit != "" {
+		drawText(dst, unit, fontUISm, valueRight+4, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+	}
 }
 
 // Button draws a clickable button and reports whether it was pressed.
