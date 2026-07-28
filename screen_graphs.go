@@ -311,8 +311,8 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 		a.Launch()
 	}
 
-	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, by, langToggleW, bh})
-	infoRight := r.Right() - 20 - langToggleW
+	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, by, langPickerW, bh})
+	infoRight := r.Right() - 20 - langPickerW
 
 	if g.hover >= 0 && g.hover < len(g.s.Hist) {
 		sm := g.s.Hist[g.hover]

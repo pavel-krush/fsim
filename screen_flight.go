@@ -619,10 +619,10 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 		a.ShowGraphs(f.s)
 	}
 
-	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, by, langToggleW, bh})
+	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, by, langPickerW, bh})
 
 	hint := T("flight.hint")
-	drawText(dst, hint, fontUISm, r.Right()-20-langToggleW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
+	drawText(dst, hint, fontUISm, r.Right()-20-langPickerW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 }
 
 // sampleAt finds the recorded sample closest to time t.

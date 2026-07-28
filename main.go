@@ -61,7 +61,7 @@ func (a *App) Update() error {
 		}
 	}
 
-	a.ui.BeginFrame(1.0 / float64(ebiten.TPS()))
+	a.ui.BeginFrame(1.0/float64(ebiten.TPS()), a.Bounds())
 	a.canvas.Fill(colBG)
 
 	switch a.screen {

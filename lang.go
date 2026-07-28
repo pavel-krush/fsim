@@ -83,29 +83,30 @@ func T(key string) string {
 	return fmt.Sprintf("«%s»", key)
 }
 
-// langToggleW is the width the switch occupies in every bar that hosts it.
-const langToggleW = 96
+// langPickerW is the width the switch occupies in every bar that hosts it.
+const langPickerW = 116
 
-// LangToggle draws the two-part language switch and applies a click.
-func (u *UI) LangToggle(dst *ebiten.Image, r Rect) {
-	half := r.W / 2
-	ru := Rect{r.X, r.Y, half, r.H}
-	en := Rect{r.X + half, r.Y, r.W - half, r.H}
+// langOrder is the order the languages appear in the picker, and it starts
+// with the default. langName is each one written in its own script — a picker
+// that translated its own options would be useless to whoever cannot read the
+// language currently selected.
+var (
+	langOrder = []Lang{EN, RU}
+	langName  = map[Lang]string{EN: "English", RU: "Русский"}
+)
 
-	style := func(l Lang) ButtonStyle {
-		if lang == l {
-			return ButtonActive
+// LangPicker draws the language picker and applies a change.
+func (u *UI) LangPicker(dst *ebiten.Image, r Rect) {
+	names := make([]string, len(langOrder))
+	sel := 0
+	for i, l := range langOrder {
+		names[i] = langName[l]
+		if l == lang {
+			sel = i
 		}
-		return ButtonNormal
 	}
-	// Each language is written in its own script, so this label stays Cyrillic
-	// whichever language is currently selected. It is the one piece of display
-	// text deliberately kept out of the locale files.
-	if u.Button(dst, ru, "РУС", style(RU)) {
-		lang = RU
-	}
-	if u.Button(dst, en, "ENG", style(EN)) {
-		lang = EN
+	if picked := u.Dropdown(dst, r, "language", names, sel); picked != sel {
+		lang = langOrder[picked]
 	}
 }
 

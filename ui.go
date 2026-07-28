@@ -35,13 +35,26 @@ type UI struct {
 
 	clip     []Rect
 	consumed bool // a widget has already taken this frame's click
+
+	// An open dropdown list floats above the rest of the interface. Its
+	// drawing is deferred to the end of the frame so it lands on top, and the
+	// area it covers is fenced off from every other widget so that whatever
+	// happens to be underneath cannot steal the click.
+	Bounds     Rect
+	openList   any  // identity of the open dropdown, nil when none
+	listRect   Rect // where that list was drawn, carried over from last frame
+	insideList bool // set while the owning dropdown handles its own area
+	deferred   []func()
 }
 
 // NewUI builds the toolkit state.
 func NewUI() *UI { return &UI{} }
 
-// BeginFrame samples the input devices. dt is the frame time in seconds.
-func (u *UI) BeginFrame(dt float64) {
+// BeginFrame samples the input devices. dt is the frame time in seconds, and
+// bounds is the whole drawing area, which dropdowns need in order to decide
+// whether to open downwards or upwards.
+func (u *UI) BeginFrame(dt float64, bounds Rect) {
+	u.Bounds = bounds
 	mx, my := ebiten.CursorPosition()
 	u.MX, u.MY = float64(mx), float64(my)
 	u.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
@@ -54,13 +67,25 @@ func (u *UI) BeginFrame(dt float64) {
 	u.keys = inpututil.AppendJustPressedKeys(u.keys[:0])
 	u.clip = u.clip[:0]
 	u.consumed = false
+	u.deferred = u.deferred[:0]
 }
 
-// EndFrame commits an in-progress edit if the user clicked somewhere else.
+// EndFrame draws whatever was deferred, on top of everything else, and commits
+// an in-progress edit if the user clicked somewhere else.
 func (u *UI) EndFrame() {
+	for _, fn := range u.deferred {
+		fn()
+	}
+	u.deferred = u.deferred[:0]
 	if u.Click && !u.consumed && u.focus != nil {
 		u.commit()
 	}
+}
+
+// fenced reports whether a point belongs to an open dropdown list rather than
+// to whatever widget is asking about it.
+func (u *UI) fenced() bool {
+	return u.openList != nil && !u.insideList && u.listRect.Contains(u.MX, u.MY)
 }
 
 // PushClip limits hit testing to r until the matching PopClip.
@@ -75,7 +100,7 @@ func (u *UI) PopClip() {
 
 // hover reports whether the pointer is inside r and not clipped away.
 func (u *UI) hover(r Rect) bool {
-	if !r.Contains(u.MX, u.MY) {
+	if !r.Contains(u.MX, u.MY) || u.fenced() {
 		return false
 	}
 	for _, c := range u.clip {
@@ -300,6 +325,107 @@ const (
 	ButtonActive
 	ButtonDanger
 )
+
+// Dropdown draws a selector showing the current choice and, while open, a list
+// of the alternatives. It returns the selected index, which is the one passed
+// in unless the user picked something else this frame.
+//
+// id identifies the dropdown across frames; anything comparable will do.
+func (u *UI) Dropdown(dst *ebiten.Image, r Rect, id any, items []string, sel int) int {
+	open := u.openList == id
+
+	border := colBorder
+	if open {
+		border = colAccent
+	} else if u.hover(r) {
+		border = colAccentDim
+	}
+	fillRect(dst, r, colPanelHi)
+	strokeRect(dst, r, 1, border)
+
+	label := ""
+	if sel >= 0 && sel < len(items) {
+		label = items[sel]
+	}
+	drawText(dst, label, fontUI, r.X+8, r.Y+(r.H-fontUI.Size)/2-1, colText, alignLeft)
+	drawCaret(dst, r.Right()-13, r.Y+r.H/2, open)
+
+	if u.clicked(r) {
+		if open {
+			u.openList = nil
+		} else {
+			u.openList = id
+		}
+		return sel
+	}
+	if !open {
+		return sel
+	}
+
+	// Open downwards, or upwards when the list would fall off the bottom —
+	// which is what happens for the copies living in the bottom bars.
+	itemH := r.H
+	listH := itemH * float64(len(items))
+	list := Rect{r.X, r.Bottom() + 2, r.W, listH}
+	if list.Bottom() > u.Bounds.Bottom() {
+		list = Rect{r.X, r.Y - 2 - listH, r.W, listH}
+	}
+	u.listRect = list
+
+	// Clicks that land on the list belong to the list, whatever was drawn
+	// underneath it earlier in the frame.
+	u.insideList = true
+	chosen := sel
+	for i := range items {
+		if u.clicked(Rect{list.X, list.Y + float64(i)*itemH, list.W, itemH}) {
+			chosen = i
+			u.openList = nil
+		}
+	}
+	hovered := -1
+	for i := range items {
+		if u.hover(Rect{list.X, list.Y + float64(i)*itemH, list.W, itemH}) {
+			hovered = i
+		}
+	}
+	u.insideList = false
+
+	// Anything else closes it. The click still reaches whatever it landed on.
+	if u.Click && !u.consumed {
+		u.openList = nil
+	}
+
+	u.deferred = append(u.deferred, func() {
+		fillRect(dst, list, colPanel)
+		for i, it := range items {
+			ir := Rect{list.X, list.Y + float64(i)*itemH, list.W, itemH}
+			fg := colTextDim
+			if i == hovered {
+				fillRect(dst, ir, colPanelHi)
+				fg = colText
+			}
+			if i == sel {
+				fillRect(dst, Rect{ir.X, ir.Y, 2, ir.H}, colAccent)
+				fg = colText
+			}
+			drawText(dst, it, fontUI, ir.X+8, ir.Y+(ir.H-fontUI.Size)/2-1, fg, alignLeft)
+		}
+		strokeRect(dst, list, 1, colAccent)
+	})
+	return chosen
+}
+
+// drawCaret draws the little triangle on a dropdown, pointing down when the
+// list is closed and up when it is open.
+func drawCaret(dst *ebiten.Image, x, y float64, up bool) {
+	const w, h = 4.0, 2.5
+	dy := h
+	if up {
+		dy = -h
+	}
+	line(dst, x-w, y-dy, x, y+dy, 1.5, colTextDim)
+	line(dst, x, y+dy, x+w, y-dy, 1.5, colTextDim)
+}
 
 // Checkbox draws a labelled tick box and reports whether it was toggled.
 func (u *UI) Checkbox(dst *ebiten.Image, r Rect, label string, val *bool) bool {

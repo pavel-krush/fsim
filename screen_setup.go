@@ -343,11 +343,11 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 	drawText(dst, T("setup.tagline"), fontUISm, r.X+14+textWidth("FSIM", fontBig)+10,
 		r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
 
-	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, r.Y + 8, langToggleW, r.H - 16})
+	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, r.Y + 8, langPickerW, r.H - 16})
 
 	presets := sim.Presets()
 	bw := 168.0
-	x := r.Right() - 20 - langToggleW - float64(len(presets))*(bw+6)
+	x := r.Right() - 20 - langPickerW - float64(len(presets))*(bw+6)
 	drawText(dst, T("setup.presetLabel"), fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
 	for _, p := range presets {
 		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, presetName(p.Name), ButtonNormal) {

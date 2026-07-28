@@ -24,6 +24,9 @@ type shotStep struct {
 	advance float64
 	screen  Screen
 	graphs  bool
+	// openLang forces the language picker open. Its list only exists while the
+	// pointer is on it, so a scripted run has no other way to photograph it.
+	openLang bool
 }
 
 type shotRunner struct {
@@ -38,9 +41,11 @@ func newShotRunner(dir string) *shotRunner {
 		dir: dir,
 		steps: []shotStep{
 			{name: "1-setup", screen: ScreenSetup},
+			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
 			{name: "2-pad", screen: ScreenFlight, advance: 2},
 			{name: "3-liftoff", screen: ScreenFlight, advance: 18},
 			{name: "4-maxq", screen: ScreenFlight, advance: 45},
+			{name: "4b-flight-lang", screen: ScreenFlight, openLang: true},
 			{name: "5-staging", screen: ScreenFlight, advance: 100},
 			{name: "6-insertion", screen: ScreenFlight, advance: 400},
 			{name: "7-orbit", screen: ScreenFlight, advance: 900},
@@ -75,6 +80,12 @@ func (sr *shotRunner) step(a *App) bool {
 		a.flight.s.Advance(st.advance - a.flight.s.St.T)
 		// Snap the camera instead of easing, so the capture is not mid-zoom.
 		a.flight.cam.Scale = 0
+	}
+
+	if st.openLang {
+		a.ui.openList = "language"
+	} else {
+		a.ui.openList = nil
 	}
 
 	sr.i++

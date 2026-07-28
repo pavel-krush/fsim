@@ -33,7 +33,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/presets.go` | Earth/Falcon-9, Mars, Moon, Kerbin — all four actually reach orbit |
 | `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk) |
-| `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Scroll` |
+| `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
 | `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets |
 | `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) |
@@ -94,7 +94,7 @@ first 15 seconds while climbing 400 m. Physically correct, reads as the rocket b
 ## Interface language
 
 All interface text lives in `assets/locale/ru.json` and `assets/locale/en.json`, embedded into the
-binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A toggle sits in the setup
+binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A picker sits in the setup
 header and in the bottom bars of the flight and graph screens.
 
 - **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
@@ -112,8 +112,10 @@ header and in the bottom bars of the flight and graph screens.
   unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.
 - **Cache nothing at screen construction.** The plot captions used to be computed in `NewGraphScreen`,
   and switching language did not relabel them. `plotSeries()` is now called every frame.
-- The switch button keeps each language written in its own script (`РУС` / `ENG`), which is the one
-  piece of display text deliberately kept out of the locale files.
+- The picker lists each language written in its own script (`English`, `Русский`), which is the one
+  piece of display text deliberately kept out of the locale files: a picker that translated its own
+  options would be useless to whoever cannot read the language currently selected. `langOrder` decides
+  the order and starts with the default.
 - CLI flags and log messages stay in English: that is a machine-facing surface, not the interface.
 - The program starts in English (`defaultLang`), and that is also where a key missing from the selected
   language falls back to. `-lang ru` starts in Russian.
@@ -149,6 +151,11 @@ header and in the bottom bars of the flight and graph screens.
 - **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a
   local variable — the address changes every frame and focus is lost. That is why the diameter field is
   bound straight to `Body.Radius` with `Scale: 500`.
+- **An open dropdown needs two things that immediate mode does not give for free.** Its list is drawn
+  through `UI.deferred`, flushed in `EndFrame`, so it lands on top of widgets that were drawn later.
+  And `UI.fenced` blocks hover and clicks over the list rect for every other widget, so whatever sits
+  underneath cannot steal the click — the flight and graph pickers open upwards over panels that were
+  already drawn by then.
 - **The whole interface is built in `Update`, not in `Draw`.** The toolkit is immediate mode and reads
   just-pressed input; Ebiten calls `Draw` less often than `Update`, and clicks would be dropped. `Draw`
   only blits the canvas.
