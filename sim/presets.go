@@ -1,6 +1,7 @@
 package sim
 
-// Preset is a named, ready-to-fly configuration.
+// Preset is a ready-to-fly configuration. Name is a stable identifier, not
+// display text: the setup screen translates it.
 type Preset struct {
 	Name string
 	Cfg  Config
@@ -54,10 +55,10 @@ func DefaultConfig() Config { return earthFalcon().Cfg }
 
 func earthFalcon() Preset {
 	return Preset{
-		Name: "Земля / Falcon-9",
+		Name: "earth-falcon",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Земля",
+				Name:           "Earth",
 				Radius:         6371000,
 				MassSource:     FromMass,
 				Mass:           5.97237e24,
@@ -110,10 +111,10 @@ func earthFalcon() Preset {
 
 func marsAscent() Preset {
 	return Preset{
-		Name: "Марс / лёгкий носитель",
+		Name: "mars",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Марс",
+				Name:           "Mars",
 				Radius:         3389500,
 				MassSource:     FromMass,
 				Mass:           6.4171e23,
@@ -168,10 +169,10 @@ func marsAscent() Preset {
 
 func moonAscent() Preset {
 	return Preset{
-		Name: "Луна / без атмосферы",
+		Name: "moon",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Луна",
+				Name:           "Moon",
 				Radius:         1737400,
 				MassSource:     FromMass,
 				Mass:           7.342e22,
@@ -225,10 +226,10 @@ func moonAscent() Preset {
 
 func kerbin() Preset {
 	return Preset{
-		Name: "Кербин / KSP-подобный",
+		Name: "kerbin",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Кербин",
+				Name:           "Kerbin",
 				Radius:         600000,
 				MassSource:     FromMass,
 				Mass:           5.2915158e22,

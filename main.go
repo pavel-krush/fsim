@@ -116,11 +116,15 @@ func (a *App) ShowGraphs(s *sim.Sim) {
 }
 
 func main() {
-	shotDir := flag.String("shot", "", "прогнать сценарий и сохранить скриншоты экранов в этот каталог")
-	preset := flag.Int("preset", 0, "номер пресета для старта (0 — первый)")
-	camTrace := flag.Int("camtrace", 0, "напечатать экранные координаты ракеты за N кадров живого полёта")
+	shotDir := flag.String("shot", "", "run the capture script and save screenshots of every screen into this directory")
+	preset := flag.Int("preset", 0, "index of the preset to start from (0 is the first)")
+	camTrace := flag.Int("camtrace", 0, "print the vehicle's screen coordinates for N frames of live flight")
+	english := flag.Bool("en", false, "start with the interface in English")
 	flag.Parse()
 
+	if *english {
+		lang = EN
+	}
 	initFonts()
 
 	presets := sim.Presets()
@@ -140,7 +144,7 @@ func main() {
 	app.traceLeft = *camTrace
 
 	ebiten.SetWindowSize(winW, winH)
-	ebiten.SetWindowTitle("fsim — симулятор выведения на орбиту")
+	ebiten.SetWindowTitle("fsim — orbital launch simulator")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 
 	if err := ebiten.RunGame(app); err != nil && !errors.Is(err, ebiten.Termination) {

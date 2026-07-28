@@ -78,7 +78,7 @@ func initFonts() {
 func mustSource(ttf []byte) *text.GoTextFaceSource {
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(ttf))
 	if err != nil {
-		log.Fatalf("не удалось загрузить шрифт: %v", err)
+		log.Fatalf("could not load font: %v", err)
 	}
 	return s
 }

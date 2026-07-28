@@ -94,15 +94,15 @@ func (sr *shotRunner) save(a *App) {
 	path := filepath.Join(sr.dir, name+".png")
 	f, err := os.Create(path)
 	if err != nil {
-		log.Printf("скриншот %s: %v", path, err)
+		log.Printf("screenshot %s: %v", path, err)
 		return
 	}
 	defer f.Close()
 	if err := png.Encode(f, img); err != nil {
-		log.Printf("скриншот %s: %v", path, err)
+		log.Printf("screenshot %s: %v", path, err)
 		return
 	}
-	fmt.Println("сохранён", path)
+	fmt.Println("saved", path)
 }
 
 // runShots drives the app through the capture script and quits.

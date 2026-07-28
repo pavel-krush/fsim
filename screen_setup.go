@@ -37,10 +37,10 @@ func (s *SetupScreen) Update(a *App, dst *ebiten.Image) {
 	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - footH - 3*pad - 8}
 	colW := (body.W - 3*pad) / 4
 
-	s.column(a, dst, Rect{body.X, body.Y, colW, body.H}, "ПЛАНЕТА", &s.colPlanet, s.planetRows)
-	s.column(a, dst, Rect{body.X + colW + pad, body.Y, colW, body.H}, "АТМОСФЕРА", &s.colAtmo, s.atmoRows)
-	s.column(a, dst, Rect{body.X + 2*(colW+pad), body.Y, colW, body.H}, "РАКЕТА", &s.colRocket, s.rocketRows)
-	s.column(a, dst, Rect{body.X + 3*(colW+pad), body.Y, colW, body.H}, "ПРОГРАММА ТАНГАЖА", &s.colProg, s.programRows)
+	s.column(a, dst, Rect{body.X, body.Y, colW, body.H}, t("ПЛАНЕТА", "PLANET"), &s.colPlanet, s.planetRows)
+	s.column(a, dst, Rect{body.X + colW + pad, body.Y, colW, body.H}, t("АТМОСФЕРА", "ATMOSPHERE"), &s.colAtmo, s.atmoRows)
+	s.column(a, dst, Rect{body.X + 2*(colW+pad), body.Y, colW, body.H}, t("РАКЕТА", "VEHICLE"), &s.colRocket, s.rocketRows)
+	s.column(a, dst, Rect{body.X + 3*(colW+pad), body.Y, colW, body.H}, t("ПРОГРАММА ТАНГАЖА", "PITCH PROGRAMME"), &s.colProg, s.programRows)
 
 	s.drawFooter(a, dst, Rect{pad, b.H - footH - pad, b.W - 2*pad, footH})
 }
@@ -84,56 +84,56 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 
 	// Bound to the radius with a halved scale, so the widget keeps a stable
 	// identity across frames: the field edits the very value it displays.
-	u.NumField(dst, c.next(rowH), "Диаметр", &b.Radius, NumOpt{Unit: "км", Scale: 500, Min: 500, Max: 1e10})
-	u.ReadOnly(dst, c.next(rowH), "Радиус", fmt.Sprintf("%s км", formatNum(b.Radius/1000, 1)))
+	u.NumField(dst, c.next(rowH), t("Диаметр", "Diameter"), &b.Radius, NumOpt{Unit: t("км", "km"), Scale: 500, Min: 500, Max: 1e10})
+	u.ReadOnly(dst, c.next(rowH), t("Радиус", "Radius"), fmt.Sprintf("%s %s", formatNum(b.Radius/1000, 1), t("км", "km")))
 
 	c.gap(8)
-	drawText(dst, "Задавать массу через:", fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
+	drawText(dst, t("Задавать массу через:", "Define the mass by:"), fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
 
 	src := (*int)(&b.MassSource)
-	u.Radio(dst, c.next(18), "массу", src, int(sim.FromMass))
-	u.Radio(dst, c.next(18), "среднюю плотность", src, int(sim.FromDensity))
-	u.Radio(dst, c.next(18), "g на поверхности", src, int(sim.FromSurfaceG))
+	u.Radio(dst, c.next(18), t("массу", "mass"), src, int(sim.FromMass))
+	u.Radio(dst, c.next(18), t("среднюю плотность", "mean density"), src, int(sim.FromDensity))
+	u.Radio(dst, c.next(18), t("g на поверхности", "surface gravity"), src, int(sim.FromSurfaceG))
 	c.gap(6)
 
 	// Exactly one of the three is editable; the other two follow from it.
 	switch b.MassSource {
 	case sim.FromMass:
-		u.NumField(dst, c.next(rowH), "Масса", &b.Mass, NumOpt{Unit: "×10²¹ кг", Scale: 1e21, Min: 1e10, Max: 1e30})
-		u.ReadOnly(dst, c.next(rowH), "Плотность", fmt.Sprintf("%s кг/м³", formatNum(b.Density, 0)))
-		u.ReadOnly(dst, c.next(rowH), "g поверхности", fmt.Sprintf("%s м/с²", formatNum(b.SurfaceG, 3)))
+		u.NumField(dst, c.next(rowH), t("Масса", "Mass"), &b.Mass, NumOpt{Unit: t("×10²¹ кг", "×10²¹ kg"), Scale: 1e21, Min: 1e10, Max: 1e30})
+		u.ReadOnly(dst, c.next(rowH), t("Плотность", "Density"), fmt.Sprintf("%s %s", formatNum(b.Density, 0), t("кг/м³", "kg/m³")))
+		u.ReadOnly(dst, c.next(rowH), t("g поверхности", "Surface gravity"), fmt.Sprintf("%s %s", formatNum(b.SurfaceG, 3), t("м/с²", "m/s²")))
 	case sim.FromDensity:
-		u.ReadOnly(dst, c.next(rowH), "Масса", fmt.Sprintf("%s ×10²¹ кг", formatNum(b.Mass/1e21, 3)))
-		u.NumField(dst, c.next(rowH), "Плотность", &b.Density, NumOpt{Unit: "кг/м³", Min: 1, Max: 1e6})
-		u.ReadOnly(dst, c.next(rowH), "g поверхности", fmt.Sprintf("%s м/с²", formatNum(b.SurfaceG, 3)))
+		u.ReadOnly(dst, c.next(rowH), t("Масса", "Mass"), fmt.Sprintf("%s %s", formatNum(b.Mass/1e21, 3), t("×10²¹ кг", "×10²¹ kg")))
+		u.NumField(dst, c.next(rowH), t("Плотность", "Density"), &b.Density, NumOpt{Unit: t("кг/м³", "kg/m³"), Min: 1, Max: 1e6})
+		u.ReadOnly(dst, c.next(rowH), t("g поверхности", "Surface gravity"), fmt.Sprintf("%s %s", formatNum(b.SurfaceG, 3), t("м/с²", "m/s²")))
 	case sim.FromSurfaceG:
-		u.ReadOnly(dst, c.next(rowH), "Масса", fmt.Sprintf("%s ×10²¹ кг", formatNum(b.Mass/1e21, 3)))
-		u.ReadOnly(dst, c.next(rowH), "Плотность", fmt.Sprintf("%s кг/м³", formatNum(b.Density, 0)))
-		u.NumField(dst, c.next(rowH), "g поверхности", &b.SurfaceG, NumOpt{Unit: "м/с²", Min: 0.001, Max: 1000})
+		u.ReadOnly(dst, c.next(rowH), t("Масса", "Mass"), fmt.Sprintf("%s %s", formatNum(b.Mass/1e21, 3), t("×10²¹ кг", "×10²¹ kg")))
+		u.ReadOnly(dst, c.next(rowH), t("Плотность", "Density"), fmt.Sprintf("%s %s", formatNum(b.Density, 0), t("кг/м³", "kg/m³")))
+		u.NumField(dst, c.next(rowH), t("g поверхности", "Surface gravity"), &b.SurfaceG, NumOpt{Unit: t("м/с²", "m/s²"), Min: 0.001, Max: 1000})
 	}
 
 	c.gap(8)
-	u.NumField(dst, c.next(rowH), "Период вращения", &b.RotationPeriod, NumOpt{Unit: "ч", Scale: 3600, Min: 0, Max: 1e9})
-	u.ReadOnly(dst, c.next(rowH), "Скорость экватора", fmt.Sprintf("%s м/с", formatNum(b.EquatorialSpeed(), 1)))
+	u.NumField(dst, c.next(rowH), t("Период вращения", "Rotation period"), &b.RotationPeriod, NumOpt{Unit: t("ч", "h"), Scale: 3600, Min: 0, Max: 1e9})
+	u.ReadOnly(dst, c.next(rowH), t("Скорость экватора", "Equatorial speed"), fmt.Sprintf("%s %s", formatNum(b.EquatorialSpeed(), 1), t("м/с", "m/s")))
 
 	c.gap(10)
-	u.SectionHeader(dst, c.next(20), "ЦЕЛЬ")
-	u.NumField(dst, c.next(rowH), "Высота орбиты", &a.cfg.TargetOrbit, NumOpt{Unit: "км", Scale: 1000, Min: 0, Max: 1e9})
-	u.ReadOnly(dst, c.next(rowH), "Круговая скорость", fmt.Sprintf("%s м/с", formatNum(b.CircularSpeed(a.cfg.TargetOrbit), 0)))
-	u.ReadOnly(dst, c.next(rowH), "Вторая космическая", fmt.Sprintf("%s м/с", formatNum(b.EscapeSpeed(0), 0)))
-	u.NumField(dst, c.next(rowH), "Лимит времени", &a.cfg.MaxTime, NumOpt{Unit: "мин", Scale: 60, Min: 60, Max: 1e6})
+	u.SectionHeader(dst, c.next(20), t("ЦЕЛЬ", "TARGET"))
+	u.NumField(dst, c.next(rowH), t("Высота орбиты", "Orbit altitude"), &a.cfg.TargetOrbit, NumOpt{Unit: t("км", "km"), Scale: 1000, Min: 0, Max: 1e9})
+	u.ReadOnly(dst, c.next(rowH), t("Круговая скорость", "Circular speed"), speed(b.CircularSpeed(a.cfg.TargetOrbit)))
+	u.ReadOnly(dst, c.next(rowH), t("Вторая космическая", "Escape speed"), speed(b.EscapeSpeed(0)))
+	u.NumField(dst, c.next(rowH), t("Лимит времени", "Time limit"), &a.cfg.MaxTime, NumOpt{Unit: t("мин", "min"), Scale: 60, Min: 60, Max: 1e6})
 }
 
 func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	at := &a.cfg.Atmo
 	u := a.ui
 
-	u.NumField(dst, c.next(rowH), "Давление у земли", &at.SurfacePressure, NumOpt{Unit: "кПа", Scale: 1000, Min: 0, Max: 1e8})
-	u.NumField(dst, c.next(rowH), "Температура", &at.SurfaceTemp, NumOpt{Unit: "K", Min: 1, Max: 5000})
-	u.NumField(dst, c.next(rowH), "Верхняя граница", &at.Top, NumOpt{Unit: "км", Scale: 1000, Min: 0, Max: 1e7})
+	u.NumField(dst, c.next(rowH), t("Давление у земли", "Surface pressure"), &at.SurfacePressure, NumOpt{Unit: t("кПа", "kPa"), Scale: 1000, Min: 0, Max: 1e8})
+	u.NumField(dst, c.next(rowH), t("Температура", "Temperature"), &at.SurfaceTemp, NumOpt{Unit: "K", Min: 1, Max: 5000})
+	u.NumField(dst, c.next(rowH), t("Верхняя граница", "Upper boundary"), &at.Top, NumOpt{Unit: t("км", "km"), Scale: 1000, Min: 0, Max: 1e7})
 
 	c.gap(10)
-	u.SectionHeader(dst, c.next(20), "СОСТАВ")
+	u.SectionHeader(dst, c.next(20), t("СОСТАВ", "COMPOSITION"))
 	if len(at.Fractions) < len(sim.Gases) {
 		f := make([]float64, len(sim.Gases))
 		copy(f, at.Fractions)
@@ -147,28 +147,28 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		u.NumField(dst, c.next(rowH), sim.Gases[i].Name, &at.Fractions[i],
 			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1})
 	}
-	u.ReadOnly(dst, c.next(rowH), "Сумма", fmt.Sprintf("%s %%", formatNum(sum*100, 1)))
+	u.ReadOnly(dst, c.next(rowH), t("Сумма", "Total"), fmt.Sprintf("%s %%", formatNum(sum*100, 1)))
 
 	// The mixture properties are what the composition actually buys you.
 	at.Prepare(a.cfg.Body.SurfaceG)
-	u.ReadOnly(dst, c.next(rowH), "Молярная масса", fmt.Sprintf("%s г/моль", formatNum(at.MolarMass()*1000, 2)))
-	u.ReadOnly(dst, c.next(rowH), "Показатель γ", formatNum(at.Gamma(), 3))
+	u.ReadOnly(dst, c.next(rowH), t("Молярная масса", "Molar mass"), fmt.Sprintf("%s %s", formatNum(at.MolarMass()*1000, 2), t("г/моль", "g/mol")))
+	u.ReadOnly(dst, c.next(rowH), t("Показатель γ", "Adiabatic index γ"), formatNum(at.Gamma(), 3))
 	st := at.State(0)
-	u.ReadOnly(dst, c.next(rowH), "Плотность у земли", fmt.Sprintf("%s кг/м³", formatNum(st.Density, 4)))
-	u.ReadOnly(dst, c.next(rowH), "Скорость звука", fmt.Sprintf("%s м/с", formatNum(st.Sound, 1)))
+	u.ReadOnly(dst, c.next(rowH), t("Плотность у земли", "Surface density"), fmt.Sprintf("%s %s", formatNum(st.Density, 4), t("кг/м³", "kg/m³")))
+	u.ReadOnly(dst, c.next(rowH), t("Скорость звука", "Speed of sound"), fmt.Sprintf("%s %s", formatNum(st.Sound, 1), t("м/с", "m/s")))
 
 	c.gap(10)
-	u.SectionHeader(dst, c.next(20), "СЛОИ")
-	drawText(dst, "высота / градиент", fontUISm, c.x, c.next(15).Y+1, colTextFaint, alignLeft)
+	u.SectionHeader(dst, c.next(20), t("СЛОИ", "LAYERS"))
+	drawText(dst, t("высота / градиент", "altitude / lapse rate"), fontUISm, c.x, c.next(15).Y+1, colTextFaint, alignLeft)
 
 	remove := -1
 	for i := range at.Layers {
 		r := c.next(rowH)
 		half := (r.W - 26) / 2
 		u.NumField(dst, Rect{r.X, r.Y, half, r.H}, "", &at.Layers[i].BaseAlt,
-			NumOpt{Unit: "км", Scale: 1000, Min: 0, Max: 1e7})
+			NumOpt{Unit: t("км", "km"), Scale: 1000, Min: 0, Max: 1e7})
 		u.NumField(dst, Rect{r.X + half + 4, r.Y, half, r.H}, "", &at.Layers[i].Lapse,
-			NumOpt{Unit: "K/км", Scale: 0.001, Min: -0.2, Max: 0.2})
+			NumOpt{Unit: t("K/км", "K/km"), Scale: 0.001, Min: -0.2, Max: 0.2})
 		if u.Button(dst, Rect{r.Right() - 18, r.Y + 2, 18, r.H - 4}, "×", ButtonDanger) {
 			remove = i
 		}
@@ -176,7 +176,7 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	if remove >= 0 && len(at.Layers) > 1 {
 		at.Layers = append(at.Layers[:remove], at.Layers[remove+1:]...)
 	}
-	if u.Button(dst, c.next(rowH+2), "+ слой", ButtonNormal) {
+	if u.Button(dst, c.next(rowH+2), t("+ слой", "+ layer"), ButtonNormal) {
 		top := 0.0
 		if n := len(at.Layers); n > 0 {
 			top = at.Layers[n-1].BaseAlt + 10000
@@ -190,41 +190,41 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	rk := &a.cfg.Rocket
 	u := a.ui
 
-	u.NumField(dst, c.next(rowH), "Полезная нагрузка", &rk.Payload, NumOpt{Unit: "т", Scale: 1000, Min: 0, Max: 1e9})
-	u.NumField(dst, c.next(rowH), "Диаметр корпуса", &rk.Diameter, NumOpt{Unit: "м", Min: 0.1, Max: 100})
-	u.NumField(dst, c.next(rowH), "Коэффициент Cd", &rk.Cd, NumOpt{Min: 0, Max: 5})
-	u.ReadOnly(dst, c.next(rowH), "Площадь миделя", fmt.Sprintf("%s м²", formatNum(rk.Area(), 2)))
+	u.NumField(dst, c.next(rowH), t("Полезная нагрузка", "Payload"), &rk.Payload, NumOpt{Unit: t("т", "t"), Scale: 1000, Min: 0, Max: 1e9})
+	u.NumField(dst, c.next(rowH), t("Диаметр корпуса", "Body diameter"), &rk.Diameter, NumOpt{Unit: t("м", "m"), Min: 0.1, Max: 100})
+	u.NumField(dst, c.next(rowH), t("Коэффициент Cd", "Drag coefficient Cd"), &rk.Cd, NumOpt{Min: 0, Max: 5})
+	u.ReadOnly(dst, c.next(rowH), t("Площадь миделя", "Reference area"), fmt.Sprintf("%s %s", formatNum(rk.Area(), 2), t("м²", "m²")))
 
 	for i := range rk.Stages {
 		st := &rk.Stages[i]
 		c.gap(10)
-		u.SectionHeader(dst, c.next(20), fmt.Sprintf("СТУПЕНЬ %d", i+1))
+		u.SectionHeader(dst, c.next(20), fmt.Sprintf("%s %d", t("СТУПЕНЬ", "STAGE"), i+1))
 
-		u.NumField(dst, c.next(rowH), "Сухая масса", &st.DryMass, NumOpt{Unit: "т", Scale: 1000, Min: 1, Max: 1e9})
-		u.NumField(dst, c.next(rowH), "Топливо", &st.PropMass, NumOpt{Unit: "т", Scale: 1000, Min: 0, Max: 1e9})
-		u.NumField(dst, c.next(rowH), "Тяга (вакуум)", &st.ThrustVac, NumOpt{Unit: "кН", Scale: 1000, Min: 0, Max: 1e9})
-		u.NumField(dst, c.next(rowH), "Isp вакуум", &st.IspVac, NumOpt{Unit: "с", Min: 1, Max: 10000})
-		u.NumField(dst, c.next(rowH), "Isp у земли", &st.IspSL, NumOpt{Unit: "с", Min: 1, Max: 10000})
-		u.NumField(dst, c.next(rowH), "Дроссель", &st.Throttle, NumOpt{Min: 0, Max: 1})
-		u.NumField(dst, c.next(rowH), "Отсечка (0=до конца)", &st.CutoffTime, NumOpt{Unit: "с", Min: 0, Max: 1e6})
+		u.NumField(dst, c.next(rowH), t("Сухая масса", "Dry mass"), &st.DryMass, NumOpt{Unit: t("т", "t"), Scale: 1000, Min: 1, Max: 1e9})
+		u.NumField(dst, c.next(rowH), t("Топливо", "Propellant"), &st.PropMass, NumOpt{Unit: t("т", "t"), Scale: 1000, Min: 0, Max: 1e9})
+		u.NumField(dst, c.next(rowH), t("Тяга (вакуум)", "Thrust (vacuum)"), &st.ThrustVac, NumOpt{Unit: t("кН", "kN"), Scale: 1000, Min: 0, Max: 1e9})
+		u.NumField(dst, c.next(rowH), t("Isp вакуум", "Isp vacuum"), &st.IspVac, NumOpt{Unit: t("с", "s"), Min: 1, Max: 10000})
+		u.NumField(dst, c.next(rowH), t("Isp у земли", "Isp sea level"), &st.IspSL, NumOpt{Unit: t("с", "s"), Min: 1, Max: 10000})
+		u.NumField(dst, c.next(rowH), t("Дроссель", "Throttle"), &st.Throttle, NumOpt{Min: 0, Max: 1})
+		u.NumField(dst, c.next(rowH), t("Отсечка (0=до конца)", "Cutoff (0 = burn out)"), &st.CutoffTime, NumOpt{Unit: t("с", "s"), Min: 0, Max: 1e6})
 
 		if i < len(rk.Stages)-1 {
-			u.NumField(dst, c.next(rowH), "Задержка разделения", &st.SepDelay, NumOpt{Unit: "с", Min: 0, Max: 600})
+			u.NumField(dst, c.next(rowH), t("Задержка разделения", "Separation delay"), &st.SepDelay, NumOpt{Unit: t("с", "s"), Min: 0, Max: 600})
 		}
 		if i > 0 {
-			drawText(dst, "Зажигание:", fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
+			drawText(dst, t("Зажигание:", "Ignition:"), fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
 			ig := (*int)(&st.Ignition)
-			u.Radio(dst, c.next(18), "сразу после разделения", ig, int(sim.IgniteImmediate))
-			u.Radio(dst, c.next(18), "через задержку", ig, int(sim.IgniteAfterDelay))
-			u.Radio(dst, c.next(18), "в апогее", ig, int(sim.IgniteAtApoapsis))
+			u.Radio(dst, c.next(18), t("сразу после разделения", "right after separation"), ig, int(sim.IgniteImmediate))
+			u.Radio(dst, c.next(18), t("через задержку", "after a delay"), ig, int(sim.IgniteAfterDelay))
+			u.Radio(dst, c.next(18), t("в апогее", "at apoapsis"), ig, int(sim.IgniteAtApoapsis))
 			if st.Ignition == sim.IgniteAfterDelay {
-				u.NumField(dst, c.next(rowH), "Задержка зажигания", &st.IgnitionDelay, NumOpt{Unit: "с", Min: 0, Max: 1e5})
+				u.NumField(dst, c.next(rowH), t("Задержка зажигания", "Ignition delay"), &st.IgnitionDelay, NumOpt{Unit: t("с", "s"), Min: 0, Max: 1e5})
 			}
 		}
 
-		u.ReadOnly(dst, c.next(rowH), "Расход", fmt.Sprintf("%s кг/с", formatNum(st.MassFlow(), 1)))
-		u.ReadOnly(dst, c.next(rowH), "Время работы", fmt.Sprintf("%s с", formatNum(st.BurnTime(), 1)))
-		u.ReadOnly(dst, c.next(rowH), "Δv ступени", fmt.Sprintf("%s м/с", formatNum(rk.StageDeltaV(i), 0)))
+		u.ReadOnly(dst, c.next(rowH), t("Расход", "Mass flow"), fmt.Sprintf("%s %s", formatNum(st.MassFlow(), 1), t("кг/с", "kg/s")))
+		u.ReadOnly(dst, c.next(rowH), t("Время работы", "Burn time"), fmt.Sprintf("%s %s", formatNum(st.BurnTime(), 1), t("с", "s")))
+		u.ReadOnly(dst, c.next(rowH), t("Δv ступени", "Stage Δv"), speed(rk.StageDeltaV(i)))
 	}
 	c.gap(10)
 }
@@ -233,14 +233,14 @@ func (s *SetupScreen) programRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	p := &a.cfg.Program
 	u := a.ui
 
-	drawText(dst, "90° — вертикаль, 0° — горизонт.", fontUISm, c.x, c.next(15).Y, colTextFaint, alignLeft)
-	drawText(dst, "«по вектору» держит тягу вдоль скорости.", fontUISm, c.x, c.next(17).Y, colTextFaint, alignLeft)
+	drawText(dst, t("90° — вертикаль, 0° — горизонт.", "90° is straight up, 0° is the horizon."), fontUISm, c.x, c.next(15).Y, colTextFaint, alignLeft)
+	drawText(dst, t("«по вектору» держит тягу вдоль скорости.", "\"prograde\" holds thrust along the velocity."), fontUISm, c.x, c.next(17).Y, colTextFaint, alignLeft)
 
 	c.gap(4)
 	hdr := c.next(16)
-	drawText(dst, "время, с", fontUISm, hdr.X, hdr.Y+1, colTextFaint, alignLeft)
-	drawText(dst, "угол, °", fontUISm, hdr.X+hdr.W*0.34, hdr.Y+1, colTextFaint, alignLeft)
-	drawText(dst, "по вектору", fontUISm, hdr.X+hdr.W*0.62, hdr.Y+1, colTextFaint, alignLeft)
+	drawText(dst, t("время, с", "time, s"), fontUISm, hdr.X, hdr.Y+1, colTextFaint, alignLeft)
+	drawText(dst, t("угол, °", "pitch, °"), fontUISm, hdr.X+hdr.W*0.34, hdr.Y+1, colTextFaint, alignLeft)
+	drawText(dst, t("по вектору", "prograde"), fontUISm, hdr.X+hdr.W*0.62, hdr.Y+1, colTextFaint, alignLeft)
 
 	remove := -1
 	for i := range p.Keys {
@@ -253,7 +253,7 @@ func (s *SetupScreen) programRows(a *App, dst *ebiten.Image, c *rowCursor) {
 			ghost := Rect{r.X + w*0.34, r.Y, w * 0.26, r.H}
 			fillRect(dst, ghost, colPanel)
 			strokeRect(dst, ghost, 1, colBorder)
-			drawText(dst, "прогр.", fontUISm, ghost.X+ghost.W/2, ghost.Y+(ghost.H-fontUISm.Size)/2, colTextFaint, alignCenter)
+			drawText(dst, t("прогр.", "prog."), fontUISm, ghost.X+ghost.W/2, ghost.Y+(ghost.H-fontUISm.Size)/2, colTextFaint, alignCenter)
 		}
 		u.Checkbox(dst, Rect{r.X + w*0.64, r.Y, 20, r.H}, "", &p.Keys[i].Prograde)
 		if u.Button(dst, Rect{r.Right() - 18, r.Y + 2, 18, r.H - 4}, "×", ButtonDanger) {
@@ -266,7 +266,7 @@ func (s *SetupScreen) programRows(a *App, dst *ebiten.Image, c *rowCursor) {
 
 	c.gap(4)
 	add := c.next(rowH + 2)
-	if u.Button(dst, Rect{add.X, add.Y, add.W/2 - 3, add.H}, "+ точка", ButtonNormal) {
+	if u.Button(dst, Rect{add.X, add.Y, add.W/2 - 3, add.H}, t("+ точка", "+ point"), ButtonNormal) {
 		t, pitch := 0.0, 90.0
 		if n := len(p.Keys); n > 0 {
 			t = p.Keys[n-1].Time + 30
@@ -274,12 +274,12 @@ func (s *SetupScreen) programRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		}
 		p.Keys = append(p.Keys, sim.Keyframe{Time: t, Pitch: pitch})
 	}
-	if u.Button(dst, Rect{add.X + add.W/2 + 3, add.Y, add.W/2 - 3, add.H}, "сортировать", ButtonNormal) {
+	if u.Button(dst, Rect{add.X + add.W/2 + 3, add.Y, add.W/2 - 3, add.H}, t("сортировать", "sort"), ButtonNormal) {
 		p.Sort()
 	}
 
 	c.gap(12)
-	u.SectionHeader(dst, c.next(20), "ПРОФИЛЬ")
+	u.SectionHeader(dst, c.next(20), t("ПРОФИЛЬ", "PROFILE"))
 	s.drawPitchPreview(a, dst, c.next(120))
 	c.gap(10)
 }
@@ -331,7 +331,7 @@ func (s *SetupScreen) drawPitchPreview(a *App, dst *ebiten.Image, r Rect) {
 		}
 		circle(dst, x, in.Bottom()-clamp(pitch, -90, 90)/90*in.H, 2.5, colWarn)
 	}
-	drawText(dst, fmt.Sprintf("%.0f с", tMax), fontUISm, in.Right()-2, in.Bottom()-fontUISm.Size-1, colTextFaint, alignRight)
+	drawText(dst, fmt.Sprintf("%.0f %s", tMax, t("с", "s")), fontUISm, in.Right()-2, in.Bottom()-fontUISm.Size-1, colTextFaint, alignRight)
 }
 
 // drawHeader is the title bar with the preset buttons.
@@ -340,15 +340,17 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 	panel(dst, r, colPanel)
 
 	drawText(dst, "FSIM", fontBig, r.X+14, r.Y+(r.H-fontBig.Size)/2-2, colAccent, alignLeft)
-	drawText(dst, "симулятор выведения на орбиту", fontUISm, r.X+14+textWidth("FSIM", fontBig)+10,
+	drawText(dst, t("симулятор выведения на орбиту", "orbital launch simulator"), fontUISm, r.X+14+textWidth("FSIM", fontBig)+10,
 		r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+
+	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, r.Y + 8, langToggleW, r.H - 16})
 
 	presets := sim.Presets()
 	bw := 168.0
-	x := r.Right() - 10 - float64(len(presets))*(bw+6)
-	drawText(dst, "пресет:", fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
+	x := r.Right() - 20 - langToggleW - float64(len(presets))*(bw+6)
+	drawText(dst, t("пресет:", "preset:"), fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
 	for _, p := range presets {
-		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, p.Name, ButtonNormal) {
+		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, presetName(p.Name), ButtonNormal) {
 			a.cfg = p.Cfg
 		}
 		x += bw + 6
@@ -373,16 +375,16 @@ func (s *SetupScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 		}
 	}
 	stats := []stat{
-		{"Стартовая масса", fmt.Sprintf("%s т", formatNum(rk.LiftoffMass()/1000, 1)), colText},
-		{"Тяговооружённость", formatNum(twr, 2), twrColor(twr)},
-		{"Δv суммарный", fmt.Sprintf("%s м/с", formatNum(rk.TotalDeltaV(), 0)), colText},
-		{"Нужно на орбиту", fmt.Sprintf("~%s м/с", formatNum(need, 0)), colTextDim},
-		{"Запас Δv", fmt.Sprintf("%s м/с", formatNum(rk.TotalDeltaV()-need*1.28, 0)), marginColor(rk.TotalDeltaV() - need*1.28)},
+		{t("Стартовая масса", "Liftoff mass"), fmt.Sprintf("%s %s", formatNum(rk.LiftoffMass()/1000, 1), t("т", "t")), colText},
+		{t("Тяговооружённость", "Thrust/weight"), formatNum(twr, 2), twrColor(twr)},
+		{t("Δv суммарный", "Total Δv"), speed(rk.TotalDeltaV()), colText},
+		{t("Нужно на орбиту", "Needed for orbit"), "~" + speed(need), colTextDim},
+		{t("Запас Δv", "Δv margin"), speed(rk.TotalDeltaV() - need*1.28), marginColor(rk.TotalDeltaV() - need*1.28)},
 	}
 	for i := range rk.Stages {
 		stats = append(stats, stat{
-			fmt.Sprintf("Δv ступени %d", i+1),
-			fmt.Sprintf("%s м/с", formatNum(rk.StageDeltaV(i), 0)),
+			fmt.Sprintf("%s %d", t("Δv ступени", "Stage Δv"), i+1),
+			speed(rk.StageDeltaV(i)),
 			colTextDim,
 		})
 	}
@@ -399,20 +401,23 @@ func (s *SetupScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 	msg := ""
 	switch {
 	case twr <= 1 && surfaceP >= 0:
-		msg = "Тяговооружённость ниже 1 — ракета не оторвётся от стола."
+		msg = t("Тяговооружённость ниже 1 — ракета не оторвётся от стола.",
+			"Thrust-to-weight below 1 — the vehicle will not leave the pad.")
 	case len(rk.Stages) == 0:
-		msg = "Нет ни одной ступени."
+		msg = t("Нет ни одной ступени.", "No stages defined.")
 	case rk.TotalDeltaV() < need:
-		msg = "Суммарного Δv не хватит даже без потерь."
+		msg = t("Суммарного Δv не хватит даже без потерь.",
+			"Total Δv falls short even before losses.")
 	}
 	if msg != "" {
 		drawText(dst, msg, fontUI, r.X+14, r.Y+62, colWarn, alignLeft)
 	} else {
-		drawText(dst, "Готов к запуску. Клавиша Enter или кнопка справа.", fontUI, r.X+14, r.Y+62, colTextFaint, alignLeft)
+		drawText(dst, t("Готов к запуску. Клавиша Enter или кнопка справа.",
+			"Ready to launch. Press Enter or the button on the right."), fontUI, r.X+14, r.Y+62, colTextFaint, alignLeft)
 	}
 
 	btn := Rect{r.Right() - 190, r.Y + 18, 176, r.H - 36}
-	launch := u.Button(dst, btn, "СТАРТ", ButtonPrimary)
+	launch := u.Button(dst, btn, t("СТАРТ", "LAUNCH"), ButtonPrimary)
 	if !u.Editing() && (u.keyPressed(ebiten.KeyEnter) || u.keyPressed(ebiten.KeyNumpadEnter)) {
 		launch = true
 	}

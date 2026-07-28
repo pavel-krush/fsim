@@ -21,24 +21,26 @@ type series struct {
 
 // GraphScreen plots the recorded flight on a shared time axis.
 type GraphScreen struct {
-	s      *sim.Sim
-	series []series
-	hover  int // index of the sample under the cursor, -1 if none
+	s     *sim.Sim
+	hover int // index of the sample under the cursor, -1 if none
 }
 
 func NewGraphScreen(s *sim.Sim) *GraphScreen {
-	return &GraphScreen{
-		s:     s,
-		hover: -1,
-		series: []series{
-			{"высота", "км", func(x sim.Sample) float64 { return x.Alt }, 1000, 1},
-			{"скорость инерциальная", "м/с", func(x sim.Sample) float64 { return x.Speed }, 1, 0},
-			{"скорость отн. земли", "м/с", func(x sim.Sample) float64 { return x.SurfSpeed }, 1, 0},
-			{"скоростной напор", "кПа", func(x sim.Sample) float64 { return x.Q }, 1000, 2},
-			{"масса", "т", func(x sim.Sample) float64 { return x.Mass }, 1000, 1},
-			{"перегрузка", "g", func(x sim.Sample) float64 { return x.AccelG }, 1, 2},
-			{"тангаж", "°", func(x sim.Sample) float64 { return x.Pitch }, 1, 1},
-		},
+	return &GraphScreen{s: s, hover: -1}
+}
+
+// plotSeries is rebuilt every frame rather than cached on the screen, so that
+// switching language relabels the plots immediately instead of on the next
+// visit.
+func plotSeries() []series {
+	return []series{
+		{t("высота", "altitude"), t("км", "km"), func(x sim.Sample) float64 { return x.Alt }, 1000, 1},
+		{t("скорость инерциальная", "inertial speed"), t("м/с", "m/s"), func(x sim.Sample) float64 { return x.Speed }, 1, 0},
+		{t("скорость отн. земли", "surface speed"), t("м/с", "m/s"), func(x sim.Sample) float64 { return x.SurfSpeed }, 1, 0},
+		{t("скоростной напор", "dynamic pressure"), t("кПа", "kPa"), func(x sim.Sample) float64 { return x.Q }, 1000, 2},
+		{t("масса", "mass"), t("т", "t"), func(x sim.Sample) float64 { return x.Mass }, 1000, 1},
+		{t("перегрузка", "acceleration"), "g", func(x sim.Sample) float64 { return x.AccelG }, 1, 2},
+		{t("тангаж", "pitch"), "°", func(x sim.Sample) float64 { return x.Pitch }, 1, 1},
 	}
 }
 
@@ -77,21 +79,21 @@ func (g *GraphScreen) drawHeader(dst *ebiten.Image, r Rect) {
 	case sim.OutcomeFlying:
 		vc = colTextDim
 	}
-	drawText(dst, sim.OutcomeText(st.Outcome), fontBig, r.X+14, r.Y+10, vc, alignLeft)
+	drawText(dst, outcomeText(st.Outcome), fontBig, r.X+14, r.Y+10, vc, alignLeft)
 
 	q, qAlt := g.s.MaxQ()
 	cells := [][2]string{
-		{"длительность", fmtClock(st.T)},
-		{"апогей", altText(tm.ApoAlt)},
-		{"перигей", altText(tm.PeriAlt)},
-		{"эксцентриситет", formatNum(tm.Ecc, 4)},
-		{"Δv выработано", fmt.Sprintf("%s м/с", formatNum(st.DeltaV, 0))},
-		{"потери гравит.", fmt.Sprintf("%s м/с", formatNum(st.GravLoss, 0))},
-		{"потери аэро", fmt.Sprintf("%s м/с", formatNum(st.DragLoss, 0))},
-		{"потери упр.", fmt.Sprintf("%s м/с", formatNum(st.SteerLoss, 0))},
-		{"max q", fmtEng(q, "Па")},
-		{"на высоте", fmt.Sprintf("%s км", formatNum(qAlt/1000, 1))},
-		{"max перегрузка", fmt.Sprintf("%s g", formatNum(g.s.MaxG(), 2))},
+		{t("длительность", "duration"), fmtClock(st.T)},
+		{t("апогей", "apoapsis"), altText(tm.ApoAlt)},
+		{t("перигей", "periapsis"), altText(tm.PeriAlt)},
+		{t("эксцентриситет", "eccentricity"), formatNum(tm.Ecc, 4)},
+		{t("Δv выработано", "Δv expended"), speed(st.DeltaV)},
+		{t("потери гравит.", "gravity loss"), speed(st.GravLoss)},
+		{t("потери аэро", "drag loss"), speed(st.DragLoss)},
+		{t("потери упр.", "steering loss"), speed(st.SteerLoss)},
+		{"max q", fmtEng(q, t("Па", "Pa"))},
+		{t("на высоте", "at altitude"), fmt.Sprintf("%s %s", formatNum(qAlt/1000, 1), t("км", "km"))},
+		{t("max перегрузка", "max acceleration"), fmt.Sprintf("%s g", formatNum(g.s.MaxG(), 2))},
 	}
 	colW := (r.W - 28) / float64(len(cells))
 	for i, c := range cells {
@@ -146,15 +148,16 @@ func (g *GraphScreen) drawEventRuler(dst *ebiten.Image, r Rect, tMax float64) {
 			}
 		}
 		line(dst, x, r.Y, x, r.Bottom(), 1, c)
-		w := textWidth(e.Label, fontMonoSm)
+		label := eventLabel(e.Kind)
+		w := textWidth(label, fontMonoSm)
 		ly := r.Y + 3 + float64(row)*(fontMonoSm.Size+4)
 		if x+3+w > plot.Right() {
 			// Near the right edge, hang the label off the other side of the
 			// line rather than letting the panel clip it.
-			drawText(dst, e.Label, fontMonoSm, x-3, ly, c, alignRight)
+			drawText(dst, label, fontMonoSm, x-3, ly, c, alignRight)
 			lastX[row] = x
 		} else {
-			drawText(dst, e.Label, fontMonoSm, x+3, ly, c, alignLeft)
+			drawText(dst, label, fontMonoSm, x+3, ly, c, alignLeft)
 			lastX[row] = x + w + 3
 		}
 	}
@@ -167,7 +170,7 @@ const rulerRows = 3
 func (g *GraphScreen) drawPlots(a *App, dst *ebiten.Image, r Rect) {
 	h := g.s.Hist
 	if len(h) < 2 {
-		drawText(dst, "нет данных", fontUI, r.X+r.W/2, r.Y+r.H/2, colTextDim, alignCenter)
+		drawText(dst, t("нет данных", "no data"), fontUI, r.X+r.W/2, r.Y+r.H/2, colTextDim, alignCenter)
 		return
 	}
 	tMax := h[len(h)-1].T
@@ -187,10 +190,11 @@ func (g *GraphScreen) drawPlots(a *App, dst *ebiten.Image, r Rect) {
 	g.drawEventRuler(dst, Rect{r.X, r.Y, r.W, rulerH}, tMax)
 
 	plots := Rect{r.X, r.Y + rulerH + 6, r.W, r.H - rulerH - 6}
-	n := len(g.series)
+	all := plotSeries()
+	n := len(all)
 	gap := 6.0
 	ph := (plots.H - gap*float64(n-1)) / float64(n)
-	for i, s := range g.series {
+	for i, s := range all {
 		g.drawPlot(dst, Rect{plots.X, plots.Y + float64(i)*(ph+gap), plots.W, ph},
 			s, plotColors[i%len(plotColors)], tMax, i == n-1)
 	}
@@ -276,7 +280,8 @@ func (g *GraphScreen) drawPlot(dst *ebiten.Image, r Rect, s series, c color.NRGB
 
 	if showTimeAxis {
 		for i := 0; i <= 6; i++ {
-			t := tMax * float64(i) / 6
+			// Not named t: that is the translation helper.
+			at := tMax * float64(i) / 6
 			a := alignCenter
 			switch i {
 			case 0:
@@ -284,7 +289,8 @@ func (g *GraphScreen) drawPlot(dst *ebiten.Image, r Rect, s series, c color.NRGB
 			case 6:
 				a = alignRight
 			}
-			drawText(dst, fmt.Sprintf("%.0fс", t), fontMonoSm, toX(t), r.Bottom()-fontMonoSm.Size-1, colTextFaint, a)
+			drawText(dst, fmt.Sprintf("%.0f%s", at, t("с", "s")), fontMonoSm,
+				toX(at), r.Bottom()-fontMonoSm.Size-1, colTextFaint, a)
 		}
 	}
 }
@@ -295,24 +301,29 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 
 	bh := r.H - 16
 	by := r.Y + 8
-	if u.Button(dst, Rect{r.X + 10, by, 150, bh}, "К ПОЛЁТУ", ButtonNormal) {
+	if u.Button(dst, Rect{r.X + 10, by, 150, bh}, t("К ПОЛЁТУ", "TO FLIGHT"), ButtonNormal) {
 		a.screen = ScreenFlight
 	}
-	if u.Button(dst, Rect{r.X + 168, by, 150, bh}, "НАСТРОЙКИ", ButtonNormal) {
+	if u.Button(dst, Rect{r.X + 168, by, 150, bh}, t("НАСТРОЙКИ", "SETUP"), ButtonNormal) {
 		a.screen = ScreenSetup
 	}
-	if u.Button(dst, Rect{r.X + 326, by, 150, bh}, "ЗАПУСТИТЬ СНОВА", ButtonPrimary) {
+	if u.Button(dst, Rect{r.X + 326, by, 150, bh}, t("ЗАПУСТИТЬ СНОВА", "LAUNCH AGAIN"), ButtonPrimary) {
 		a.Launch()
 	}
 
+	u.LangToggle(dst, Rect{r.Right() - 10 - langToggleW, by, langToggleW, bh})
+	infoRight := r.Right() - 20 - langToggleW
+
 	if g.hover >= 0 && g.hover < len(g.s.Hist) {
 		sm := g.s.Hist[g.hover]
-		info := fmt.Sprintf("%s   h %s   v %s м/с   апогей %s   перигей %s",
-			fmtClock(sm.T), fmtEng(sm.Alt, "м"), formatNum(sm.Speed, 0),
-			altText(sm.ApoAlt), altText(sm.PeriAlt))
-		drawText(dst, info, fontMono, r.Right()-12, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
+		info := fmt.Sprintf("%s   h %s   v %s   %s %s   %s %s",
+			fmtClock(sm.T), fmtEng(sm.Alt, t("м", "m")), speed(sm.Speed),
+			t("апогей", "apoapsis"), altText(sm.ApoAlt),
+			t("перигей", "periapsis"), altText(sm.PeriAlt))
+		drawText(dst, info, fontMono, infoRight, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
 	} else {
-		drawText(dst, "наведи курсор на график — покажет значения в точке · ESC — назад",
-			fontUISm, r.Right()-12, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
+		drawText(dst, t("наведи курсор на график — покажет значения в точке · ESC — назад",
+			"hover a plot for values at that instant · ESC to go back"),
+			fontUISm, infoRight, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 	}
 }

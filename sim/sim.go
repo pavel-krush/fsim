@@ -44,10 +44,11 @@ const (
 )
 
 // Event is a timestamped marker used by the trajectory view and the graphs.
+// It carries no text: what an event is called, and in which language, is a
+// presentation decision that does not belong in the physics.
 type Event struct {
-	T     float64
-	Kind  EventKind
-	Label string
+	T    float64
+	Kind EventKind
 }
 
 // Config is everything the user typed in on the setup screen.
@@ -202,7 +203,7 @@ func (s *Sim) Reset() {
 	s.lastRecord = -1
 	s.prevRadialV = 0
 	s.reachedSpace = false
-	s.mark(EvLiftoff, "СТАРТ")
+	s.mark(EvLiftoff)
 	s.record()
 }
 
@@ -255,7 +256,7 @@ func (s *Sim) RunToEnd() {
 		s.Step(FixedStep)
 	}
 	if !s.St.Done {
-		s.finish(OutcomeTimeout, "ЛИМИТ ВРЕМЕНИ")
+		s.finish(OutcomeTimeout)
 	}
 }
 
@@ -509,14 +510,14 @@ func (s *Sim) checkPhase() {
 		if s.St.PhaseT >= stages[s.St.Stage].SepDelay-1e-9 {
 			s.St.Stage++
 			s.setPhase(PhaseIgnitionWait)
-			s.mark(EvSeparation, "РАЗДЕЛЕНИЕ")
+			s.mark(EvSeparation)
 		}
 
 	case PhaseIgnitionWait:
 		if s.readyToIgnite() {
 			s.St.StageBurnT = 0
 			s.setPhase(PhaseBurn)
-			s.mark(EvIgnition, "ЗАЖИГАНИЕ")
+			s.mark(EvIgnition)
 		}
 	}
 
@@ -528,11 +529,11 @@ func (s *Sim) endBurn() {
 	last := s.St.Stage >= len(s.Cfg.Rocket.Stages)-1
 	if last {
 		s.setPhase(PhaseCoast)
-		s.mark(EvCutoff, "ОТСЕЧКА")
+		s.mark(EvCutoff)
 		return
 	}
 	s.setPhase(PhaseSepWait)
-	s.mark(EvCutoff, "ОТСЕЧКА")
+	s.mark(EvCutoff)
 }
 
 // readyToIgnite tests the ignition cue of the stage now at the bottom.
@@ -571,15 +572,15 @@ func (s *Sim) checkEnd() {
 	// exactly zero altitude and must not count as a crash.
 	if !s.St.Landed && alt < 0 {
 		if s.reachedSpace {
-			s.finish(OutcomeSuborbital, "СУБОРБИТАЛЬНАЯ")
+			s.finish(OutcomeSuborbital)
 		} else {
-			s.finish(OutcomeCrashed, "УПАЛ")
+			s.finish(OutcomeCrashed)
 		}
 		return
 	}
 
 	if s.Cfg.MaxTime > 0 && s.St.T >= s.Cfg.MaxTime {
-		s.finish(OutcomeTimeout, "ЛИМИТ ВРЕМЕНИ")
+		s.finish(OutcomeTimeout)
 		return
 	}
 
@@ -589,7 +590,7 @@ func (s *Sim) checkEnd() {
 
 	o := ComputeOrbit(s.St.Pos, s.St.Vel, b.Mu)
 	if o.Energy >= 0 {
-		s.finish(OutcomeEscape, "УЛЕТЕЛ")
+		s.finish(OutcomeEscape)
 		return
 	}
 
@@ -597,19 +598,19 @@ func (s *Sim) checkEnd() {
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
 	case peri >= top:
-		s.finish(OutcomeOrbit, "ОРБИТА")
+		s.finish(OutcomeOrbit)
 	case peri >= 0 && alt > top:
 		// The vehicle is above the air but its low point is still inside it:
 		// a real orbit for a few revolutions, then it comes down.
-		s.finish(OutcomeDecaying, "ОРБИТА С ТОРМОЖЕНИЕМ")
+		s.finish(OutcomeDecaying)
 	}
 }
 
-func (s *Sim) finish(o Outcome, label string) {
+func (s *Sim) finish(o Outcome) {
 	s.St.Done = true
 	s.St.Outcome = o
 	s.emitMaxQ()
-	s.mark(EvEnd, label)
+	s.mark(EvEnd)
 	s.record()
 }
 
@@ -625,7 +626,7 @@ func (s *Sim) postStep() {
 
 	radial := s.St.Pos.Unit().Dot(s.St.Vel)
 	if s.prevRadialV > 0 && radial <= 0 && alt > 1000 {
-		s.mark(EvApoapsis, "АПОГЕЙ")
+		s.mark(EvApoapsis)
 	}
 	s.prevRadialV = radial
 
@@ -635,19 +636,19 @@ func (s *Sim) postStep() {
 }
 
 // mark appends a timeline event, collapsing duplicates at the same instant.
-func (s *Sim) mark(k EventKind, label string) {
+func (s *Sim) mark(k EventKind) {
 	for i := range s.Events {
 		if s.Events[i].Kind == k && math.Abs(s.Events[i].T-s.St.T) < 1e-6 {
 			return
 		}
 	}
-	s.Events = append(s.Events, Event{T: s.St.T, Kind: k, Label: label})
+	s.Events = append(s.Events, Event{T: s.St.T, Kind: k})
 }
 
 // markAt inserts an event at a time that has already passed, keeping the list
 // in chronological order.
-func (s *Sim) markAt(t float64, k EventKind, label string) {
-	e := Event{T: t, Kind: k, Label: label}
+func (s *Sim) markAt(t float64, k EventKind) {
+	e := Event{T: t, Kind: k}
 	i := len(s.Events)
 	for i > 0 && s.Events[i-1].T > t {
 		i--
@@ -665,7 +666,7 @@ func (s *Sim) emitMaxQ() {
 		return
 	}
 	s.maxQMarked = true
-	s.markAt(s.maxQT, EvMaxQ, "MAX Q")
+	s.markAt(s.maxQT, EvMaxQ)
 }
 
 // MarkMaxQ is the fallback for a flight that ended before the peak could be
@@ -799,24 +800,4 @@ func (s *Sim) GroundFrame(p Vec2, t float64) Vec2 {
 		return p
 	}
 	return p.Rotate(w * (s.St.T - t))
-}
-
-// OutcomeText is a short human-readable verdict.
-func OutcomeText(o Outcome) string {
-	switch o {
-	case OutcomeOrbit:
-		return "ОРБИТА ДОСТИГНУТА"
-	case OutcomeDecaying:
-		return "ОРБИТА НЕУСТОЙЧИВА — ПЕРИГЕЙ В АТМОСФЕРЕ"
-	case OutcomeSuborbital:
-		return "СУБОРБИТАЛЬНЫЙ ПОЛЁТ"
-	case OutcomeCrashed:
-		return "АВАРИЯ — УДАР О ПОВЕРХНОСТЬ"
-	case OutcomeEscape:
-		return "УХОД С ОРБИТЫ ПЛАНЕТЫ"
-	case OutcomeTimeout:
-		return "ЛИМИТ ВРЕМЕНИ ИСЧЕРПАН"
-	default:
-		return "ПОЛЁТ"
-	}
 }

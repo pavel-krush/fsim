@@ -312,8 +312,8 @@ func TestMaxQMarkerAppearsDuringFlight(t *testing.T) {
 	// Emitting it late must not leave the timeline out of order.
 	for i := 1; i < len(s.Events); i++ {
 		if s.Events[i].T < s.Events[i-1].T {
-			t.Fatalf("events out of order: %s at %.1f after %s at %.1f",
-				s.Events[i].Label, s.Events[i].T, s.Events[i-1].Label, s.Events[i-1].T)
+			t.Fatalf("events out of order: kind %d at %.1f after kind %d at %.1f",
+				s.Events[i].Kind, s.Events[i].T, s.Events[i-1].Kind, s.Events[i-1].T)
 		}
 	}
 	// MarkMaxQ is the end-of-flight fallback and must not double up.
@@ -374,7 +374,7 @@ func TestMaxQMarkedWhenFlightEndsAtThePeak(t *testing.T) {
 	s.RunToEnd()
 
 	if s.St.Outcome != OutcomeTimeout {
-		t.Fatalf("expected the run to be cut short, got %s", OutcomeText(s.St.Outcome))
+		t.Fatalf("expected the run to be cut short, got outcome %d", s.St.Outcome)
 	}
 	q, _ := s.MaxQ()
 	if s.lastQ < q*0.25 {
@@ -390,7 +390,7 @@ func TestMaxQMarkedWhenFlightEndsAtThePeak(t *testing.T) {
 	}
 	for i := 1; i < len(s.Events); i++ {
 		if s.Events[i].T < s.Events[i-1].T {
-			t.Fatalf("events out of order around %s at %.1f", s.Events[i].Label, s.Events[i].T)
+			t.Fatalf("events out of order around kind %d at %.1f", s.Events[i].Kind, s.Events[i].T)
 		}
 	}
 }
@@ -447,8 +447,8 @@ func TestEarthPresetReachesOrbit(t *testing.T) {
 
 	if s.St.Outcome != OutcomeOrbit {
 		tm := s.Telemetry()
-		t.Fatalf("outcome = %s at t=%.0fs; apoapsis %.0f km, periapsis %.0f km",
-			OutcomeText(s.St.Outcome), s.St.T, tm.ApoAlt/1000, tm.PeriAlt/1000)
+		t.Fatalf("outcome = %d at t=%.0fs; apoapsis %.0f km, periapsis %.0f km",
+			s.St.Outcome, s.St.T, tm.ApoAlt/1000, tm.PeriAlt/1000)
 	}
 
 	tm := s.Telemetry()
@@ -486,8 +486,8 @@ func TestAllPresetsReachOrbit(t *testing.T) {
 			s.RunToEnd()
 			tm := s.Telemetry()
 			if s.St.Outcome != OutcomeOrbit {
-				t.Errorf("outcome = %s; apoapsis %.0f km, periapsis %.0f km, dv %.0f m/s",
-					OutcomeText(s.St.Outcome), tm.ApoAlt/1000, tm.PeriAlt/1000, s.St.DeltaV)
+				t.Errorf("outcome = %d; apoapsis %.0f km, periapsis %.0f km, dv %.0f m/s",
+					s.St.Outcome, tm.ApoAlt/1000, tm.PeriAlt/1000, s.St.DeltaV)
 			}
 		})
 	}

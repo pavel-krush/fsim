@@ -122,17 +122,17 @@ var activeTarget numTarget
 
 // commit parses the edit buffer into the focused value and drops focus.
 func (u *UI) commit() {
-	t := activeTarget
-	if t.val != nil {
+	tgt := activeTarget
+	if tgt.val != nil {
 		if v, err := parseNum(u.editBuf); err == nil {
-			v *= t.scale
-			if t.min != t.max {
-				v = clamp(v, t.min, t.max)
+			v *= tgt.scale
+			if tgt.min != tgt.max {
+				v = clamp(v, tgt.min, tgt.max)
 			}
-			if *t.val != v {
-				*t.val = v
-				if t.after != nil {
-					t.after()
+			if *tgt.val != v {
+				*tgt.val = v
+				if tgt.after != nil {
+					tgt.after()
 				}
 			}
 		}
@@ -449,11 +449,11 @@ func fmtEng(v float64, unit string) string {
 	case math.IsInf(v, 0):
 		return "∞"
 	case a >= 1e9:
-		return fmt.Sprintf("%.2f Г%s", v/1e9, unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e9, t("Г", "G"), unit)
 	case a >= 1e6:
-		return fmt.Sprintf("%.2f М%s", v/1e6, unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e6, t("М", "M"), unit)
 	case a >= 1e3:
-		return fmt.Sprintf("%.2f к%s", v/1e3, unit)
+		return fmt.Sprintf("%.2f %s%s", v/1e3, t("к", "k"), unit)
 	default:
 		return fmt.Sprintf("%.2f %s", v, unit)
 	}
