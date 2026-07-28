@@ -31,15 +31,23 @@ const (
 	EN
 )
 
-// localeFile is the asset each language loads from.
+// localeFile is the asset each language loads from. The code is also what the
+// -lang flag accepts.
 var localeFile = map[Lang]string{
 	RU: "assets/locale/ru.json",
 	EN: "assets/locale/en.json",
 }
 
+// localeCode maps a command-line code onto a language.
+var localeCode = map[string]Lang{"ru": RU, "en": EN}
+
+// defaultLang is what the program starts in, and what a key missing from the
+// selected language falls back to.
+const defaultLang = EN
+
 // lang is global on purpose. It is read from every draw call in the program
 // and changes only when the user clicks the toggle.
-var lang = RU
+var lang = defaultLang
 
 // locales holds every language's table, loaded once at startup.
 var locales = map[Lang]map[string]string{}
@@ -69,7 +77,7 @@ func T(key string) string {
 	if s, ok := locales[lang][key]; ok {
 		return s
 	}
-	if s, ok := locales[RU][key]; ok {
+	if s, ok := locales[defaultLang][key]; ok {
 		return s
 	}
 	return fmt.Sprintf("«%s»", key)

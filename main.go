@@ -119,13 +119,16 @@ func main() {
 	shotDir := flag.String("shot", "", "run the capture script and save screenshots of every screen into this directory")
 	preset := flag.Int("preset", 0, "index of the preset to start from (0 is the first)")
 	camTrace := flag.Int("camtrace", 0, "print the vehicle's screen coordinates for N frames of live flight")
-	english := flag.Bool("en", false, "start with the interface in English")
+	langCode := flag.String("lang", "en", "interface language to start in: en or ru")
 	flag.Parse()
 
 	loadLocales()
-	if *english {
-		lang = EN
+	l, ok := localeCode[*langCode]
+	if !ok {
+		log.Fatalf("unknown language %q; expected one of en, ru", *langCode)
 	}
+	lang = l
+
 	initFonts()
 
 	presets := sim.Presets()

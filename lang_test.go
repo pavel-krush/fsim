@@ -140,3 +140,20 @@ func TestMissingKeyIsVisible(t *testing.T) {
 		t.Errorf("T on a missing key returned %q, which hides the mistake", got)
 	}
 }
+
+// Every language the -lang flag accepts must actually have a file to load,
+// and the default has to be one of them.
+func TestLanguagesAreLoadable(t *testing.T) {
+	loadLocales()
+	for code, l := range localeCode {
+		if _, ok := localeFile[l]; !ok {
+			t.Errorf("-lang %s selects a language with no locale file", code)
+		}
+		if len(locales[l]) == 0 {
+			t.Errorf("-lang %s selects a language that loaded no text", code)
+		}
+	}
+	if len(locales[defaultLang]) == 0 {
+		t.Error("the default language loaded no text")
+	}
+}

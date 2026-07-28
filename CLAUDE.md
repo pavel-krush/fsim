@@ -11,7 +11,7 @@ go run .                       # start
 go run . -preset 2             # start on preset 2 (0..3)
 go run . -shot ./shots         # run the capture script and save a PNG of every screen
 go run . -camtrace 700         # print the vehicle's screen coordinates per frame (catches camera shake)
-go run . -en                   # start with the interface in English
+go run . -lang ru              # start with the interface in Russian (default is English)
 go test ./sim/                 # physics
 go build ./... && go vet ./...
 ```
@@ -115,8 +115,10 @@ header and in the bottom bars of the flight and graph screens.
 - The switch button keeps each language written in its own script (`РУС` / `ENG`), which is the one
   piece of display text deliberately kept out of the locale files.
 - CLI flags and log messages stay in English: that is a machine-facing surface, not the interface.
-- A third language is one more file plus an entry in `localeFile`; the tests will list every key it is
-  missing.
+- The program starts in English (`defaultLang`), and that is also where a key missing from the selected
+  language falls back to. `-lang ru` starts in Russian.
+- A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
+  every key it is missing.
 
 ## Rendering — traps
 
