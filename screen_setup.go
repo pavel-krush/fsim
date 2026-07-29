@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -144,7 +145,7 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		sum += at.Fractions[i]
 	}
 	for i := range sim.Gases {
-		u.NumField(dst, c.next(rowH), sim.Gases[i].Name, &at.Fractions[i],
+		u.NumField(dst, c.next(rowH), gasLabel(sim.Gases[i].Name), &at.Fractions[i],
 			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1, Info: "setup.composition.info"})
 	}
 	u.ReadOnly(dst, c.next(rowH), T("setup.total"), formatNum(sum*100, 1), "%")
@@ -184,6 +185,21 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		at.Layers = append(at.Layers, sim.Layer{BaseAlt: top})
 	}
 	c.gap(10)
+}
+
+// gasLabel renders a chemical formula the way it is written: the digits become
+// subscripts, so N2 shows as N₂. The names in sim stay plain ASCII, because
+// there they are lookup keys for the presets, not display text.
+func gasLabel(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r >= '0' && r <= '9' {
+			b.WriteRune('₀' + (r - '0'))
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
