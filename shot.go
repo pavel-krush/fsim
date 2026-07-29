@@ -57,6 +57,7 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "5-staging", screen: ScreenFlight, advance: 100},
 			{name: "6-insertion", screen: ScreenFlight, advance: 400},
 			{name: "7-orbit", screen: ScreenFlight, advance: 900},
+			{name: "7b-orbiting", screen: ScreenFlight, advance: 12000},
 			{name: "8-graphs", screen: ScreenGraphs, graphs: true},
 		},
 	}

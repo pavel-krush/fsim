@@ -704,14 +704,16 @@ func fmtEng(v float64, unit string) string {
 	}
 }
 
-// fmtClock renders seconds as T+MM:SS.
+// fmtClock renders seconds as T+MM:SS.S.
+//
+// Rounding happens before the split, not after: 11999.98 s split first gives
+// 199 minutes and 59.98 seconds, which prints as "T+199:60.0".
 func fmtClock(t float64) string {
 	if t < 0 {
 		t = 0
 	}
-	m := int(t) / 60
-	s := t - float64(m*60)
-	return fmt.Sprintf("T+%02d:%04.1f", m, s)
+	tenths := int64(math.Round(t * 10))
+	return fmt.Sprintf("T+%02d:%04.1f", tenths/600, float64(tenths%600)/10)
 }
 
 // measureRows is the standard height of one form row.

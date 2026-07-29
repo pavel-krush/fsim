@@ -125,6 +125,8 @@ func eventLabel(k sim.EventKind) string {
 		return T("event.ignition")
 	case sim.EvApoapsis:
 		return T("event.apoapsis")
+	case sim.EvOrbit:
+		return T("event.orbit")
 	case sim.EvEnd:
 		return T("event.end")
 	default:

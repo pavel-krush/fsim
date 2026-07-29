@@ -477,6 +477,82 @@ func TestEarthPresetReachesOrbit(t *testing.T) {
 	}
 }
 
+// Reaching orbit is a verdict, not the end of the run: the vehicle has to keep
+// going round, and running out of clock later must not overwrite the verdict
+// with a timeout.
+func TestOrbitDoesNotStopTheSimulation(t *testing.T) {
+	s := New(earthFalcon().Cfg)
+
+	// Fly until the verdict lands.
+	for !s.Settled() && s.St.T < s.Cfg.MaxTime {
+		s.Step(FixedStep)
+	}
+	if s.St.Outcome != OutcomeOrbit {
+		t.Fatalf("expected orbit, got outcome %d at T+%.0f", s.St.Outcome, s.St.T)
+	}
+	if s.St.Done {
+		t.Fatal("the run stopped the moment orbit was reached")
+	}
+
+	settledAt := s.St.T
+	before := ComputeOrbit(s.St.Pos, s.St.Vel, s.Cfg.Body.Mu)
+
+	// Keep flying for a full revolution and a bit.
+	for n := int(before.Period * 1.2 / FixedStep); n > 0 && !s.St.Done; n-- {
+		s.Step(FixedStep)
+	}
+	if s.St.T <= settledAt {
+		t.Fatal("time did not advance after the verdict")
+	}
+
+	// A stable orbit must still be the same orbit a revolution later.
+	after := ComputeOrbit(s.St.Pos, s.St.Vel, s.Cfg.Body.Mu)
+	close(t, "semi-major axis", after.SemiMajor, before.SemiMajor, 1e-6)
+	close(t, "eccentricity", after.Eccentricity, before.Eccentricity, 1e-3)
+
+	// And the time limit does not apply to a flight that got where it was
+	// going: it exists to cut short the ones that did not.
+	for s.St.T < s.Cfg.MaxTime*2 && !s.St.Done {
+		s.Step(FixedStep)
+	}
+	if s.St.Done {
+		t.Errorf("the run stopped at T+%.0f, past a time limit that should no longer apply", s.St.T)
+	}
+	if s.St.Outcome != OutcomeOrbit {
+		t.Errorf("outcome became %d; nothing should overrule a reached orbit", s.St.Outcome)
+	}
+	if !hasEvent(s.Events, EvOrbit) {
+		t.Error("no orbit marker on the timeline")
+	}
+}
+
+// A flight with no end must not record itself without bound.
+func TestHistoryStaysBoundedInOrbit(t *testing.T) {
+	s := New(earthFalcon().Cfg)
+	for !s.Settled() && s.St.T < s.Cfg.MaxTime {
+		s.Step(FixedStep)
+	}
+	if !s.Settled() {
+		t.Fatal("never reached orbit")
+	}
+	ascent := len(s.Hist)
+
+	// Six hours of coasting, twenty times the ascent.
+	for target := s.St.T + 6*3600; s.St.T < target && !s.St.Done; {
+		s.Step(FixedStep)
+	}
+
+	added := len(s.Hist) - ascent
+	full := int(6 * 3600 / s.HistInterval)
+	if added >= full/10 {
+		t.Errorf("six hours of orbit added %d samples; at full rate it would be %d, "+
+			"so the record is barely being thinned", added, full)
+	}
+	if added == 0 {
+		t.Error("nothing was recorded at all during the coast")
+	}
+}
+
 // Every shipped preset has to be flyable, otherwise the setup screen offers
 // broken starting points.
 func TestAllPresetsReachOrbit(t *testing.T) {

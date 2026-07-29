@@ -66,6 +66,14 @@ the canvas to PNG. It is the only way to look at the interface without a human a
   frame the velocity at liftoff is horizontal (from rotation) and the losses would come out zero.
 - **g in the barometric formula is the surface value, held constant.** The standard ISA simplification,
   worth about 3% at 100 km.
+- **Reaching orbit is a verdict, not the end of the run.** `settle` records the outcome and lets the
+  vehicle keep going round for ever; `finish` is for the terminal cases — crashed, escaped — and `stop`
+  ends the run when the clock runs out. `Settled()` is what the interface watches, not `Done`.
+- **`MaxTime` only applies while there is no verdict.** It exists to cut short a flight that is going
+  nowhere; one that made orbit has somewhere to be. That does mean a settled flight never ends on its
+  own, so three things had to be bounded behind it: the history thins by `coastRecordFactor` once
+  settled, apoapsis stops being marked (it comes round every revolution for ever), and the graph axis
+  stops shortly after the last event instead of stretching to hours of flat line.
 - **The max-q marker is placed in hindsight.** The peak is only knowable once it has passed, so
   `checkMaxQPassed` waits until the pressure drops below a quarter of the maximum and then inserts the
   event through `markAt` at the real instant of the peak — keeping the event list in chronological
@@ -146,6 +154,11 @@ header and in the bottom bars of the flight and graph screens.
 - **The launch pad is drawn in metres** and shrinks on its own as the vehicle climbs; below 7 pixels it
   collapses into a label. That label's anchor is fed into the event-marker spacing, otherwise at
   orbital scale it lands on top of the cutoff marker.
+- **The mission clock rounds before it splits.** Taking the minutes off first turned 11999.98 s into
+  "T+199:60.0". Only visible once flights could run for hours.
+- **The trail is trimmed to `trailWindow` seconds.** With the flight no longer ending at orbit, an
+  unbounded trail wraps the planet over and over until the picture is one smear. The window is longer
+  than any ascent in the presets, so nothing is lost on the way up.
 - **The number of atmosphere bands follows the scale.** From orbit the whole atmosphere is a few pixels
   deep, and sixteen sub-pixel rings simply vanish.
 - **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a

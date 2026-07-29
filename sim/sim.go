@@ -40,6 +40,7 @@ const (
 	EvSeparation
 	EvIgnition
 	EvApoapsis
+	EvOrbit
 	EvEnd
 )
 
@@ -246,17 +247,19 @@ func (s *Sim) Advance(dt float64) {
 	}
 }
 
-// RunToEnd integrates until the flight finishes or MaxTime is reached.
+// RunToEnd integrates until the flight has a verdict, or the clock runs out
+// without one. It stops at the verdict rather than at the end of the flight
+// because an orbit does not have an end.
 func (s *Sim) RunToEnd() {
 	limit := s.Cfg.MaxTime
 	if limit <= 0 {
 		limit = 6 * 3600
 	}
-	for !s.St.Done && s.St.T < limit {
+	for !s.St.Done && !s.Settled() && s.St.T < limit {
 		s.Step(FixedStep)
 	}
-	if !s.St.Done {
-		s.finish(OutcomeTimeout)
+	if !s.St.Done && !s.Settled() {
+		s.stop(OutcomeTimeout)
 	}
 }
 
@@ -579,12 +582,14 @@ func (s *Sim) checkEnd() {
 		return
 	}
 
-	if s.Cfg.MaxTime > 0 && s.St.T >= s.Cfg.MaxTime {
-		s.finish(OutcomeTimeout)
+	// The clock is there to cut short a flight that is going nowhere. A
+	// vehicle that made orbit has somewhere to be, and gets to stay there.
+	if s.Cfg.MaxTime > 0 && s.St.T >= s.Cfg.MaxTime && !s.Settled() {
+		s.stop(OutcomeTimeout)
 		return
 	}
 
-	if s.St.Phase != PhaseCoast {
+	if s.St.Phase != PhaseCoast || s.Settled() {
 		return
 	}
 
@@ -598,12 +603,37 @@ func (s *Sim) checkEnd() {
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
 	case peri >= top:
-		s.finish(OutcomeOrbit)
+		s.settle(OutcomeOrbit)
 	case peri >= 0 && alt > top:
 		// The vehicle is above the air but its low point is still inside it:
 		// a real orbit for a few revolutions, then it comes down.
-		s.finish(OutcomeDecaying)
+		s.settle(OutcomeDecaying)
 	}
+}
+
+// Settled reports whether the flight has a verdict yet. It is not the same as
+// finished: reaching orbit is a result, not a reason to stop the clock.
+func (s *Sim) Settled() bool { return s.St.Outcome != OutcomeFlying }
+
+// settle records the verdict and lets the vehicle carry on flying. Watching
+// the thing actually go round is most of the reward for getting it up there.
+func (s *Sim) settle(o Outcome) {
+	s.St.Outcome = o
+	s.emitMaxQ()
+	s.mark(EvOrbit)
+}
+
+// stop ends the run without overruling a verdict already reached. Running out
+// of clock while in a perfectly good orbit is not a timeout, it is just the
+// end of the recording.
+func (s *Sim) stop(fallback Outcome) {
+	if !s.Settled() {
+		s.St.Outcome = fallback
+	}
+	s.St.Done = true
+	s.emitMaxQ()
+	s.mark(EvEnd)
+	s.record()
 }
 
 func (s *Sim) finish(o Outcome) {
@@ -624,8 +654,10 @@ func (s *Sim) postStep() {
 		s.reachedSpace = true
 	}
 
+	// Apoapsis is worth marking on the way up. In orbit it comes round every
+	// revolution for ever, which is neither news nor a bounded list.
 	radial := s.St.Pos.Unit().Dot(s.St.Vel)
-	if s.prevRadialV > 0 && radial <= 0 && alt > 1000 {
+	if s.prevRadialV > 0 && radial <= 0 && alt > 1000 && !s.Settled() {
 		s.mark(EvApoapsis)
 	}
 	s.prevRadialV = radial
@@ -694,9 +726,18 @@ func (s *Sim) checkMaxQPassed() {
 	}
 }
 
+// coastRecordFactor is how much more sparsely the history is written once the
+// flight has a verdict. Nothing changes in a stable orbit, and the flight now
+// has no end, so recording it at full rate would grow without bound.
+const coastRecordFactor = 50
+
 // record appends a history sample if enough simulated time has passed.
 func (s *Sim) record() {
-	if s.lastRecord >= 0 && s.St.T-s.lastRecord < s.HistInterval && !s.St.Done {
+	interval := s.HistInterval
+	if s.Settled() {
+		interval *= coastRecordFactor
+	}
+	if s.lastRecord >= 0 && s.St.T-s.lastRecord < interval && !s.St.Done {
 		return
 	}
 	s.lastRecord = s.St.T

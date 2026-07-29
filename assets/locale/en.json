@@ -17,6 +17,7 @@
   "event.end": "END",
   "event.ignition": "IGNITION",
   "event.liftoff": "LIFTOFF",
+  "event.orbit": "ORBIT",
   "event.separation": "SEPARATION",
   "flight.circularAtTarget": "circular at target",
   "flight.density": "density",

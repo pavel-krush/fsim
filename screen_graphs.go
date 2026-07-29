@@ -128,7 +128,7 @@ func (g *GraphScreen) drawEventRuler(dst *ebiten.Image, r Rect, tMax float64) {
 		x := plot.X + e.T/tMax*plot.W
 		c := colWarn
 		switch e.Kind {
-		case sim.EvEnd:
+		case sim.EvEnd, sim.EvOrbit:
 			c = colGood
 		case sim.EvMaxQ:
 			c = colMaxQ
@@ -173,7 +173,15 @@ func (g *GraphScreen) drawPlots(a *App, dst *ebiten.Image, r Rect) {
 		drawText(dst, T("graph.noData"), fontUI, r.X+r.W/2, r.Y+r.H/2, colTextDim, alignCenter)
 		return
 	}
+	// An orbit has no end, so the history keeps growing while nothing happens.
+	// Stop the axis shortly after the last thing that did, or hours of flat
+	// line would squash the whole ascent into the first few pixels.
 	tMax := h[len(h)-1].T
+	if evs := g.s.Events; len(evs) > 0 {
+		if last := evs[len(evs)-1].T * 1.05; last > 0 && last < tMax {
+			tMax = last
+		}
+	}
 	if tMax <= 0 {
 		tMax = 1
 	}

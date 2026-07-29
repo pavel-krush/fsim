@@ -17,6 +17,7 @@
   "event.end": "КОНЕЦ",
   "event.ignition": "ЗАЖИГАНИЕ",
   "event.liftoff": "СТАРТ",
+  "event.orbit": "ОРБИТА",
   "event.separation": "РАЗДЕЛЕНИЕ",
   "flight.circularAtTarget": "круговая на цели",
   "flight.density": "плотность",

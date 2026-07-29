@@ -165,6 +165,11 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	f.drawViewHUD(clip, view, tm)
 }
 
+// trailWindow is how much of the flight, in seconds, stays drawn behind the
+// vehicle. Longer than any ascent in the presets, so nothing is trimmed on the
+// way up; in orbit it becomes an arc that follows the craft round.
+const trailWindow = 900
+
 // maxRingPx is the largest circle worth tessellating. Beyond this the arc is
 // indistinguishable from a straight line anyway, and the vector rasteriser
 // would be asked to emit an absurd number of segments.
@@ -356,16 +361,28 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	// a frame, and it grew for as long as the flight lasted.
 	const minSeg = 1.5
 
+	// Once in orbit the flight has no end, so neither would the trail: it
+	// would wrap the planet again and again until the whole picture is one
+	// smear. Keep a window that comfortably covers a full ascent, and let
+	// anything older drop off the back.
+	first := 0
+	if cutoff := f.s.St.T - trailWindow; cutoff > 0 {
+		first = sampleAt(h, cutoff)
+	}
 	n := len(h)
-	px, py := cam.Project(f.s.GroundFrame(h[0].Pos, h[0].T))
-	for i := 1; i < n; i++ {
+	if n-first < 2 {
+		return
+	}
+
+	px, py := cam.Project(f.s.GroundFrame(h[first].Pos, h[first].T))
+	for i := first + 1; i < n; i++ {
 		x, y := cam.Project(f.s.GroundFrame(h[i].Pos, h[i].T))
 		if i < n-1 && math.Abs(x-px)+math.Abs(y-py) < minSeg {
 			continue
 		}
 		// Older samples fade out, so the recent path stays legible even after
 		// the trajectory has wrapped a long way around the planet.
-		t := float64(i) / float64(n)
+		t := float64(i-first) / float64(n-first)
 		c := color.NRGBA{
 			uint8(float64(colTrailOld.R) + (float64(colTrail.R)-float64(colTrailOld.R))*t),
 			uint8(float64(colTrailOld.G) + (float64(colTrail.G)-float64(colTrailOld.G))*t),
@@ -405,7 +422,7 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 		}
 		c := colWarn
 		switch e.Kind {
-		case sim.EvEnd:
+		case sim.EvEnd, sim.EvOrbit:
 			c = colGood
 		case sim.EvMaxQ:
 			c = colMaxQ
@@ -483,7 +500,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	drawText(dst, fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
 		fontUISm, x, y, c, alignLeft)
 
-	if f.s.St.Done {
+	if f.s.Settled() {
 		y += 22
 		verdict := outcomeText(f.s.St.Outcome)
 		vc := colBad
@@ -623,7 +640,7 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	x += 148
 
 	style := ButtonNormal
-	if f.s.St.Done {
+	if f.s.Settled() {
 		style = ButtonPrimary
 	}
 	if u.Button(dst, Rect{x, by, 150, bh}, T("flight.graphs"), style) {
