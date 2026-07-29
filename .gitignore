@@ -1,10 +1,12 @@
 # Built binary: go build names it after the module and drops it in the root
 /fsim
 
-# Screenshots from -shot, and anything else scratch
+# Screenshots from -shot, and anything else scratch. The ones in docs/ are
+# part of the README and do belong in the repository.
 /tmp/
 /shots/
 *.png
+!/docs/*.png
 
 # Go
 *.test
