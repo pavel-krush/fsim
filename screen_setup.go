@@ -140,13 +140,17 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		copy(f, at.Fractions)
 		at.Fractions = f
 	}
+	s.mixturePicker(a, dst, c.next(rowH+2), at)
+	c.gap(4)
+
 	var sum float64
 	for i := range sim.Gases {
 		sum += at.Fractions[i]
 	}
 	for i := range sim.Gases {
 		u.NumField(dst, c.next(rowH), gasLabel(sim.Gases[i].Name), &at.Fractions[i],
-			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1, Info: "setup.composition.info"})
+			NumOpt{Unit: "%", Scale: 0.01, Min: 0, Max: 1, Info: "setup.composition.info",
+				After: func() { balanceGases(at, i) }})
 	}
 	u.ReadOnly(dst, c.next(rowH), T("setup.total"), formatNum(sum*100, 1), "%")
 
@@ -185,6 +189,93 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		at.Layers = append(at.Layers, sim.Layer{BaseAlt: top})
 	}
 	c.gap(10)
+}
+
+// mixturePicker drops a whole named composition in, and reports which one is
+// currently loaded. Anything the user has since edited reads as custom.
+func (s *SetupScreen) mixturePicker(a *App, dst *ebiten.Image, r Rect, at *sim.Atmosphere) {
+	comps := sim.Compositions()
+
+	items := make([]string, 0, len(comps)+1)
+	items = append(items, T("setup.mixCustom"))
+	sel := 0
+	for i, comp := range comps {
+		items = append(items, T("setup.mix."+comp.Name))
+		if sameMixture(at.Fractions, comp.Fractions) {
+			sel = i + 1
+		}
+	}
+
+	labelW := textWidth(T("setup.mixLabel"), fontUISm) + 6
+	drawText(dst, T("setup.mixLabel"), fontUISm, r.X, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+
+	box := Rect{r.X + labelW, r.Y, r.W - labelW, r.H}
+	if picked := a.ui.Dropdown(dst, box, "mixture", items, sel); picked != sel && picked > 0 {
+		// Dropping in a new slice orphans any pointer a focused field is
+		// holding into the old one, so the edit has to go with it.
+		a.ui.cancel()
+		at.Fractions = append([]float64(nil), comps[picked-1].Fractions...)
+	}
+}
+
+// sameMixture compares two mixtures by proportion, so a composition still
+// counts as loaded whether it was written as fractions or as percentages.
+func sameMixture(a, b []float64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	var sa, sb float64
+	for i := range a {
+		sa += a[i]
+		sb += b[i]
+	}
+	if sa <= 0 || sb <= 0 {
+		return false
+	}
+	for i := range a {
+		if math.Abs(a[i]/sa-b[i]/sb) > 1e-6 {
+			return false
+		}
+	}
+	return true
+}
+
+// balanceGases rescales every fraction except the one just edited so that the
+// mixture adds up to one again, keeping the proportions among the rest.
+//
+// The physics normalises the mixture anyway, so the total never had to be a
+// hundred — but having to make it add up by hand was still the most tedious
+// thing on this screen.
+func balanceGases(at *sim.Atmosphere, edited int) {
+	v := clamp(at.Fractions[edited], 0, 1)
+	at.Fractions[edited] = v
+	rest := 1 - v
+
+	var others float64
+	for j := range at.Fractions {
+		if j != edited {
+			others += at.Fractions[j]
+		}
+	}
+
+	if others > 0 {
+		k := rest / others
+		for j := range at.Fractions {
+			if j != edited {
+				at.Fractions[j] *= k
+			}
+		}
+		return
+	}
+	// Nothing left to scale against: hand the whole remainder to the first
+	// other gas, so a mixture can never get stuck as a single component with
+	// no way back down.
+	for j := range at.Fractions {
+		if j != edited && rest > 0 {
+			at.Fractions[j] = rest
+			return
+		}
+	}
 }
 
 // gasLabel renders a chemical formula the way it is written: the digits become
@@ -368,6 +459,9 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 	drawText(dst, T("setup.presetLabel"), fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
 	for _, p := range presets {
 		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, presetName(p.Name), ButtonNormal) {
+			// Same reason as the mixture picker: the whole config is replaced,
+			// including the slices a focused field may be pointing into.
+			u.cancel()
 			a.cfg = p.Cfg
 		}
 		x += bw + 6

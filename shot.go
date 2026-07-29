@@ -28,6 +28,7 @@ type shotStep struct {
 	// a fixed spot. Neither state can be reached by a scripted run otherwise:
 	// there is no mouse.
 	openLang bool
+	openMix  bool
 	hover    *struct{ X, Y float64 }
 }
 
@@ -48,6 +49,7 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "1d-setup-info-atmo", screen: ScreenSetup, hover: &struct{ X, Y float64 }{542, 127}},
 			{name: "1e-setup-info-low", screen: ScreenSetup, hover: &struct{ X, Y float64 }{914, 355}},
 			{name: "1f-setup-info-gas", screen: ScreenSetup, hover: &struct{ X, Y float64 }{542, 289}},
+			{name: "1g-setup-mixture", screen: ScreenSetup, openMix: true},
 			{name: "2-pad", screen: ScreenFlight, advance: 2},
 			{name: "3-liftoff", screen: ScreenFlight, advance: 18},
 			{name: "4-maxq", screen: ScreenFlight, advance: 45},
@@ -88,9 +90,12 @@ func (sr *shotRunner) step(a *App) bool {
 		a.flight.cam.Scale = 0
 	}
 
-	if st.openLang {
+	switch {
+	case st.openLang:
 		a.ui.openList = "language"
-	} else {
+	case st.openMix:
+		a.ui.openList = "mixture"
+	default:
 		a.ui.openList = nil
 	}
 	a.ui.ForcePointer = st.hover

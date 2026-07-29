@@ -30,6 +30,26 @@ func mix(pairs ...any) []float64 {
 	return f
 }
 
+// Composition is a named gas mixture the setup screen can drop in whole. Name
+// is a stable identifier, not display text.
+type Composition struct {
+	Name      string
+	Fractions []float64
+}
+
+// Compositions are the mixtures offered in the setup screen. Mole fractions,
+// near enough to the real bodies to be worth the name.
+func Compositions() []Composition {
+	return []Composition{
+		{"earth", mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004)},
+		{"mars", mix("CO2", 0.9532, "N2", 0.0270, "Ar", 0.0160, "O2", 0.0013)},
+		{"venus", mix("CO2", 0.9650, "N2", 0.0350)},
+		{"titan", mix("N2", 0.9420, "CH4", 0.0565, "H2", 0.0010)},
+		{"gasGiant", mix("H2", 0.8980, "He", 0.1020)},
+		{"steam", mix("H2O", 1)},
+	}
+}
+
 // earthISA is the International Standard Atmosphere layer structure, extended
 // with an isothermal tail so drag fades out smoothly instead of stopping dead.
 func earthISA() []Layer {
