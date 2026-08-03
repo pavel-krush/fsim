@@ -218,6 +218,43 @@ header and in the bottom bars of the flight and graph screens.
 - A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
   every key it is missing.
 
+## Manoeuvre nodes and the prediction
+
+The pitch programme is a schedule of angles against the clock, and it is the right tool for an ascent —
+but it cannot say "two days from now, add three metres a second along the velocity", which is the whole
+of flying anywhere beyond the launch body. A `sim.Node` is that sentence: a time, a direction to hold and
+a delta-v to spend. `sim/node.go`, edited on the flight screen, drawn as the path it produces.
+
+- **The plan lives in the running simulation** (`Sim.Cfg.Nodes`), not in the app's config, because it is
+  edited during flight. `Reset` keeps it; launching afresh from the setup screen starts from
+  `Config.Nodes`, which is where a preset can put one.
+- **Executed nodes are a bitmask in the state** (`NodesDone`), not a cursor. A cursor goes stale the
+  moment a time is edited mid-flight; a bitmask does not care what order the plan is in. Deleting a node
+  shifts the mask with it — a subtlety that has to be got right or the wrong burn shows as spent.
+- **`State.Node` is -1 when nothing is burning.** Its zero value would mean "node zero is running",
+  which is a lively way to start a flight.
+- **The cutoff is solved, not watched for.** `nodeBurnLeft` inverts the rocket equation for the instant
+  the requested delta-v lands, and `Step` shortens to it. Watching the total go past would overshoot by a
+  whole step's worth of thrust, which on a three metre a second correction is a 6% error.
+- **A node burn ignores the stage's own `CutoffTime`** and does not stage. The stage timer belongs to the
+  ascent and has already had its turn; the node's delta-v is its cutoff.
+- **A node with an empty tank is marked spent, not left pending.** Otherwise it is retried on every step
+  for the rest of the flight.
+- **`plannedStep` lands exactly on the next node.** Otherwise a ten-minute coast step notices the
+  ignition ten minutes late, which for a correction burn is the difference between a transfer and a miss.
+  For the same reason `coastStep` checks whether the phase machine lit something and hands the step back
+  to the fixed integrator: the adaptive propagator knows nothing about thrust.
+- **`Predict` is the flight, not a sketch of it** — the same integrator over the same plan, on a copy that
+  shares nothing writable. Burns run at the same fixed 0.02 s, and points are **sampled** out of the run:
+  the first cut recorded one per step and spent all four hundred points on the first eight seconds of a
+  translunar burn. It also has to set its own `WarpRate`; inheriting the live one made it take
+  minute-long *fixed* steps in low orbit, which is not a trajectory at all.
+- **The predicted path is drawn in the non-rotating frame**, unlike the trail. A future path turned
+  backwards by the ground's rotation is nonsense, which is also why it only appears once the vehicle is
+  out of the air.
+- **The prediction is cached for half a second.** A long plan is tens of thousands of steps, and
+  `maxPredSteps` caps what one recompute may cost.
+
 ## Looking at it — frames, focus and scale
 
 The picture is built around one body: `FlightScreen.frameBody()`, which follows the vehicle's own sphere
@@ -293,6 +330,9 @@ the time it was measured**.
   mixture picker cancel before replacing their slices.
 - **Overlays paint onto `UI.Overlay`, not onto the `dst` they were handed.** The setup columns draw into
   a clipped sub-image, so a tooltip drawn into `dst` would be sliced off at the column edge.
+- **An unlabelled `NumField` has no label column.** It used to reserve the strip either way, which left
+  a 104 px cell with 39 px of box and the leading digit of its own value cut off. The layer and keyframe
+  editors got wider boxes out of the fix.
 - **A parameter gets an explanation by setting `NumOpt.Info` to a locale key.** The mark sits in a fixed
   column just before the input box rather than trailing the label: label widths differ per field and
   per language, and marks at ragged positions read as clutter once many rows carry one.

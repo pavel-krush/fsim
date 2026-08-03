@@ -230,7 +230,13 @@ func (u *UI) NumField(dst *ebiten.Image, r Rect, label string, val *float64, o N
 		o.Dec = -1
 	}
 
-	labelW := math.Min(r.W*0.52, labelColW)
+	// A field with no label has no label column: the box is the whole row. The
+	// first cut reserved the strip either way, which left an unlabelled 104 px
+	// cell with 39 px of box and the leading digit of its own value cut off.
+	labelW := 0.0
+	if label != "" {
+		labelW = math.Min(r.W*0.52, labelColW)
+	}
 	box := Rect{r.X + labelW, r.Y, r.W - labelW, r.H}
 	switch {
 	case label != "":

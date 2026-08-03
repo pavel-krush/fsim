@@ -97,6 +97,13 @@ func (s *Sim) plannedStep() float64 {
 
 	h := math.Min(s.coastTarget(), s.stepCap())
 
+	// Land exactly on a scheduled burn. Without this a ten-minute coast step
+	// would notice the ignition ten minutes late, which for a three-second
+	// correction is the difference between a transfer and a miss.
+	if next := s.nextNodeTime(); next > s.St.T && next-s.St.T < h {
+		h = next - s.St.T
+	}
+
 	// Never reach the air inside one step. The decision to take a long step is
 	// made at the start of it, so without this a descending vehicle would come
 	// out of a ten-minute step somewhere underground and report a crash from a
@@ -140,6 +147,13 @@ func (s *Sim) coastStep(h float64) float64 {
 	s.checkPhase()
 	if s.St.Done {
 		return 0
+	}
+	if !s.coasting() {
+		// The phase machine lit something — a node whose time had come. Hand it
+		// to the fixed integrator, which is the only one that knows about
+		// thrust; it runs checkPhase again, harmlessly.
+		s.Step(FixedStep)
+		return FixedStep
 	}
 
 	y := coastState{s.St.Pos, s.St.Vel}

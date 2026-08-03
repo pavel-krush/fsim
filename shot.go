@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 
 	"github.com/hajimehoshi/ebiten/v2"
+
+	"fsim/sim"
 )
 
 // Screenshot mode. Ebiten images can only be created and read inside a running
@@ -42,6 +44,9 @@ type shotStep struct {
 	// perfectly good thing to look at.
 	zoom  float64
 	focus int
+	// plan drops a flight plan onto the running simulation, which is the only
+	// way a script can show the manoeuvre panel and the predicted path.
+	plan []sim.Node
 }
 
 type shotRunner struct {
@@ -76,6 +81,12 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "8a-zoom-planet", screen: ScreenFlight, zoom: 0.15},
 			{name: "8b-zoom-system", screen: ScreenFlight, zoom: 0.015},
 			{name: "8c-focus-moon", screen: ScreenFlight, focus: 2},
+			// A translunar injection on the plan, not yet fired: the panel shows
+			// the burn and the prediction shows where it goes.
+			{name: "8d-plan", screen: ScreenFlight, zoom: 0.06,
+				plan: []sim.Node{{T: 12600, Frame: sim.BurnPrograde, DeltaV: 3140}}},
+			{name: "8e-plan-wide", screen: ScreenFlight, zoom: 0.012,
+				plan: []sim.Node{{T: 12600, Frame: sim.BurnPrograde, DeltaV: 3140}}},
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
@@ -121,6 +132,8 @@ func (sr *shotRunner) step(a *App) bool {
 			a.flight.zoomBias = st.zoom
 		}
 		a.flight.focus = st.focus - 1
+		a.flight.s.Cfg.Nodes = st.plan
+		a.flight.pred = nil
 		a.flight.cam.Scale = 0 // snap, so the capture is not mid-zoom
 	}
 

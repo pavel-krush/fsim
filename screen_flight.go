@@ -28,6 +28,11 @@ type FlightScreen struct {
 	manualCam bool
 	zoomBias  float64 // user zoom multiplier on top of the automatic scale
 
+	// The predicted path, recomputed on a timer rather than every frame: it is a
+	// few hundred integrator steps and nothing about it changes in 200 ms.
+	pred    []sim.PredPoint
+	predAge float64
+
 	// focus is the body the picture is built around: -1 follows the vehicle and
 	// whatever body currently holds it, which is the default and what the
 	// simulator has always done. Anything else pins a body from the system and
@@ -269,6 +274,7 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 		}
 	}
 	f.drawOsculating(clip, cam, tm.Orbit)
+	f.drawPrediction(clip, cam, a.ui.DT)
 
 	padX, padY, padLabelled := f.drawPad(clip, cam)
 	f.drawTrail(clip, cam)
@@ -276,6 +282,164 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	f.drawVehicle(clip, cam, tm)
 	f.drawScaleBar(clip, view, cam)
 	f.drawViewHUD(clip, view, tm)
+	f.drawNodePanel(a, clip, view)
+}
+
+// nodePanelW is the width of the manoeuvre panel. It fits a time, a direction, a
+// delta-v and a delete button on one row, which is the whole of what a node is.
+const nodePanelW = 356
+
+// drawNodePanel is the flight plan: what burns are scheduled, and the controls to
+// change them. It lives in the trajectory view rather than the telemetry column
+// because it is the one thing on this screen that is edited rather than read, and
+// because the column has no room left.
+func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
+	u := a.ui
+	nodes := f.s.Cfg.Nodes
+
+	rows := len(nodes)
+	for i := range nodes {
+		if nodes[i].Frame == sim.BurnPitch {
+			rows++
+		}
+	}
+	h := 30 + float64(rows)*24 + 28
+	r := Rect{view.Right() - nodePanelW - 12, view.Bottom() - h - 12, nodePanelW, h}
+	panel(dst, r, colPanel)
+
+	u.SectionHeader(dst, Rect{r.X + 10, r.Y + 6, r.W - 20, 18}, T("flight.secPlan"))
+
+	c := &rowCursor{x: r.X + 10, y: r.Y + 28, w: r.W - 20}
+	remove := -1
+	for i := range nodes {
+		n := &nodes[i]
+		done := f.s.St.NodesDone&(1<<uint(i)) != 0
+
+		row := c.next(24)
+		// A node that has already run is history: it is dimmed rather than
+		// hidden, because "this is where that burn happened" is worth keeping.
+		if done {
+			drawText(dst, fmtClock(n.T), fontMonoSm, row.X, row.Y+5, colNodeDone, alignLeft)
+			drawText(dst, nodeFrameName(n.Frame), fontUISm, row.X+112, row.Y+5, colNodeDone, alignLeft)
+			drawText(dst, fmt.Sprintf("%.0f %s", n.DeltaV, T("unit.mps")), fontMonoSm,
+				row.Right()-24, row.Y+5, colNodeDone, alignRight)
+		} else {
+			u.NumField(dst, Rect{row.X, row.Y, 104, 20}, "", &n.T,
+				NumOpt{Unit: T("unit.s"), Dec: 0, Min: 0, Max: 1e9})
+			if u.Button(dst, Rect{row.X + 108, row.Y, 96, 20}, nodeFrameName(n.Frame), ButtonNormal) {
+				n.Frame = (n.Frame + 1) % (sim.BurnPitch + 1)
+			}
+			u.NumField(dst, Rect{row.X + 208, row.Y, 104, 20}, "", &n.DeltaV,
+				NumOpt{Unit: T("unit.mps"), Dec: 0, Min: 0, Max: 1e6})
+		}
+		if u.Button(dst, Rect{row.Right() - 18, row.Y + 1, 18, 18}, "×", ButtonDanger) {
+			remove = i
+		}
+		if n.Frame == sim.BurnPitch {
+			sub := c.next(24)
+			u.NumField(dst, Rect{sub.X + 108, sub.Y, 96, 20}, "", &n.Pitch,
+				NumOpt{Unit: "°", Min: -90, Max: 90, Dec: 0})
+		}
+	}
+
+	if remove >= 0 {
+		// The nodes above shift down inside the same array, so a focused field
+		// would carry on editing what is now a different burn — and the done
+		// bitmask has to shift with them or it marks the wrong one.
+		u.cancel()
+		f.s.Cfg.Nodes = append(nodes[:remove], nodes[remove+1:]...)
+		low := f.s.St.NodesDone & ((1 << uint(remove)) - 1)
+		f.s.St.NodesDone = low | (f.s.St.NodesDone>>1)&^((1<<uint(remove))-1)
+	}
+
+	add := c.next(24)
+	if len(f.s.Cfg.Nodes) < 8 && u.Button(dst, Rect{add.X, add.Y, 120, 20}, T("flight.addNode"), ButtonNormal) {
+		u.cancel()
+		f.s.Cfg.Nodes = append(f.s.Cfg.Nodes, sim.Node{
+			T: math.Round(f.s.St.T + 120), Frame: sim.BurnPrograde, DeltaV: 50,
+		})
+	}
+	if f.s.St.Node >= 0 {
+		drawText(dst, fmt.Sprintf(T("flight.burning"), f.s.St.NodeDV,
+			f.s.Cfg.Nodes[f.s.St.Node].DeltaV), fontUISm,
+			add.Right(), add.Y+4, colPred, alignRight)
+	}
+}
+
+// nodeFrameName is what a burn direction is called on screen.
+func nodeFrameName(fr sim.BurnFrame) string {
+	switch fr {
+	case sim.BurnRetrograde:
+		return T("node.retrograde")
+	case sim.BurnRadialOut:
+		return T("node.radialOut")
+	case sim.BurnRadialIn:
+		return T("node.radialIn")
+	case sim.BurnPitch:
+		return T("node.pitch")
+	default:
+		return T("node.prograde")
+	}
+}
+
+// predHorizon is how far ahead to predict: a couple of orbits, or far enough to
+// see what the last planned burn does, whichever is further.
+func (f *FlightScreen) predHorizon() float64 {
+	o := sim.ComputeOrbit(f.s.St.Pos, f.s.St.Vel, f.s.Center().Mu)
+	horizon := 2 * 3600.0
+	if o.Bound() && o.Period > 0 {
+		horizon = 2 * o.Period
+	}
+	for i := range f.s.Cfg.Nodes {
+		if d := f.s.Cfg.Nodes[i].T - f.s.St.T; d > 0 {
+			// A burn is planned because it changes the trajectory into something
+			// the current orbit's period says nothing about. Four days past it is
+			// enough to see a transfer arrive somewhere.
+			horizon = math.Max(horizon, d+4*86400)
+		}
+	}
+	return clamp(horizon, 600, 10*86400)
+}
+
+// drawPrediction traces where the vehicle is going, planned burns included. The
+// osculating ellipse only answers "what if nothing happens", and a flight plan
+// is a statement that something is about to.
+//
+// Drawn in the non-rotating frame, unlike the trail: a future path turned
+// backwards by the ground's rotation would be nonsense. That is also why it only
+// appears once the vehicle is out of the air, where the ascent's ground-frame
+// reading stops being the useful one.
+func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64) {
+	if f.s.Altitude() <= f.s.Cfg.Atmo.Top || f.s.St.Done {
+		f.pred = nil
+		return
+	}
+
+	f.predAge += dt
+	// Half a second. A long plan is tens of thousands of integrator steps —
+	// a burn runs at the fixed step in the prediction too — and nothing about the
+	// answer changes in that time.
+	if f.pred == nil || f.predAge > 0.5 {
+		f.pred = f.s.Predict(f.predHorizon(), 400)
+		f.predAge = 0
+	}
+
+	// Same reason the trail thins itself: at orbital zoom hundreds of points land
+	// on the same pixel, and every one of them is still a separate draw.
+	var px, py float64
+	first := true
+	for i, p := range f.pred {
+		x, y := cam.Project(f.framePoint(p.Pos, p.Center, p.T))
+		if first {
+			px, py, first = x, y, false
+			continue
+		}
+		if math.Abs(x-px)+math.Abs(y-py) < 1.2 && i < len(f.pred)-1 {
+			continue
+		}
+		line(dst, px, py, x, y, 1, colPred)
+		px, py = x, y
+	}
 }
 
 // trailWindow is how much of the flight, in seconds, stays drawn behind the

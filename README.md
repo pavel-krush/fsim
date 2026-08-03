@@ -73,6 +73,11 @@ burn this simulation has nowhere to send. The lunar module's ride off the surfac
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.
 
+**Manoeuvres.** Past the ascent the pitch programme has nothing useful to say, so a flight plan is a list
+of burns: a time, a direction — prograde, retrograde, radial, or a held pitch — and how much Δv to spend.
+The predicted path is drawn ahead of the vehicle with the plan flown into it, which is the only way to aim
+a transfer at anything.
+
 ## Flying it
 
 The rocket is steered by a pitch programme — a table of times and angles, interpolated between, with
@@ -83,8 +88,8 @@ a delay, or at apoapsis.
 Getting to orbit is a matter of pitching over neither too early, which flies you into the thick air,
 nor too late, which spends everything climbing. The Δv losses panel tells you which mistake you made.
 
-On the flight screen: `SPACE` pauses, `,` and `.` change the time warp, the wheel zooms, `C` puts the
-camera back on automatic.
+On the flight screen: `SPACE` pauses, `,` and `.` change the time warp, the wheel zooms, `TAB` moves the
+camera's focus from body to body, `C` puts it back on the vehicle.
 
 ![Graphs](docs/graphs.png)
 

@@ -68,6 +68,9 @@ type Config struct {
 	Atmo    Atmosphere
 	Rocket  Rocket
 	Program Program
+	// Nodes are the scheduled burns, in no particular order: the pitch programme
+	// flies the ascent and these fly everything after it.
+	Nodes []Node
 
 	// TargetOrbit is the altitude the launch is aiming for, m. It only drives
 	// the reference ring in the trajectory view.
@@ -94,6 +97,13 @@ type State struct {
 	PhaseT     float64 // time spent in the current phase, s
 	StageBurnT float64 // time the current stage has been burning, s
 	Landed     bool
+
+	// Node is the manoeuvre being flown, or -1. NodesDone marks the ones already
+	// run as a bitmask, so the plan can be edited mid-flight without a cursor
+	// into it going stale.
+	Node      int
+	NodeDV    float64 // m/s spent by the running node so far
+	NodesDone uint64
 
 	DeltaV    float64 // m/s, ideal delta-v expended
 	GravLoss  float64 // m/s
@@ -227,6 +237,9 @@ func (s *Sim) Reset() {
 		Center: s.Cfg.LaunchBody,
 		Prop:   make([]float64, len(s.Cfg.Rocket.Stages)),
 		Landed: true,
+		// No node running. The zero value would mean "node zero is burning",
+		// which is a lively way to start a flight.
+		Node: -1,
 	}
 	st.Vel = st.Pos.Perp().Scale(w)
 	s.launchAngle = st.Pos.Angle()
@@ -438,8 +451,17 @@ func (s *Sim) Step(dt float64) {
 			// shortened to a positive value, never to zero, or a short step
 			// requested by the caller would look like a burnout.
 			left := s.St.Prop[s.St.Stage] / ctx.mdot
-			if stg.CutoffTime > 0 {
+			if s.St.Node < 0 && stg.CutoffTime > 0 {
 				if c := stg.CutoffTime - s.St.StageBurnT; c < left {
+					left = c
+				}
+			}
+			if s.St.Node >= 0 {
+				// Solve for the instant the node's delta-v lands, so that a
+				// three metre a second correction is not overshot by a whole
+				// step's worth of thrust.
+				p := s.Cfg.Atmo.State(s.Altitude()).Pressure
+				if c := s.nodeBurnLeft(stg.Thrust(p, s.surfaceP), ctx.mdot, ctx.m0); c < left {
 					left = c
 				}
 			}
@@ -572,10 +594,18 @@ func (s *Sim) forces(t float64, pos, vel Vec2, ctx burnContext) forceSet {
 	}
 
 	if ctx.on && ctx.stage != nil {
-		fpa := FlightPathAngle(pos, vel)
-		f.Pitch = s.Cfg.Program.Pitch(t, fpa)
+		dir := ThrustDirection(up, east, s.Cfg.Program.Pitch(t, FlightPathAngle(pos, vel)))
+		if s.St.Node >= 0 {
+			// A node holds a direction rather than an angle: prograde is
+			// whichever way the vehicle happens to be going, and writing that as
+			// a pitch would go wrong the moment the orbit runs the other way.
+			dir = s.Cfg.Nodes[s.St.Node].Direction(pos, vel)
+		}
+		// The pitch readout is what the thrust is actually doing, measured the
+		// usual way: above the local horizon.
+		f.Pitch = math.Atan2(dir.Dot(up), dir.Dot(east)) * 180 / math.Pi
 		f.ThrustMag = ctx.stage.Thrust(f.Atmo.Pressure, s.surfaceP)
-		f.Thrust = ThrustDirection(up, east, f.Pitch).Scale(f.ThrustMag / f.Mass)
+		f.Thrust = dir.Scale(f.ThrustMag / f.Mass)
 	} else {
 		f.Pitch = FlightPathAngle(pos, vel)
 	}
@@ -598,6 +628,9 @@ func (s *Sim) accumulate(f forceSet, ctx burnContext, dt float64) {
 		}
 	}
 	s.St.DeltaV += dv
+	if s.St.Node >= 0 {
+		s.St.NodeDV += dv
+	}
 	s.St.DragLoss += f.DragMag / f.Mass * dt
 
 	// Flight path angle relative to the ground: at liftoff this is 90 degrees,
@@ -634,8 +667,18 @@ func (s *Sim) checkPhase() {
 	case PhaseBurn:
 		stg := &stages[s.St.Stage]
 		out := s.St.Prop[s.St.Stage] <= 1e-9
-		cut := stg.CutoffTime > 0 && s.St.StageBurnT >= stg.CutoffTime-1e-9
-		if out || cut {
+		// A node's own delta-v is its cutoff; the stage's timer belongs to the
+		// ascent and has already had its turn by the time a node can run.
+		cut := s.St.Node < 0 && stg.CutoffTime > 0 && s.St.StageBurnT >= stg.CutoffTime-1e-9
+		spent := s.St.Node >= 0 && s.St.NodeDV >= s.Cfg.Nodes[s.St.Node].DeltaV-1e-12
+		switch {
+		case s.St.Node >= 0 && (out || spent):
+			// A node burn does not stage: it uses what is attached, and what is
+			// attached stays attached.
+			s.endNode()
+			s.setPhase(PhaseCoast)
+			s.mark(EvCutoff)
+		case out || cut:
 			s.endBurn()
 		}
 
@@ -654,6 +697,7 @@ func (s *Sim) checkPhase() {
 		}
 	}
 
+	s.checkNodes()
 	s.checkEnd()
 }
 

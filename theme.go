@@ -46,6 +46,11 @@ var (
 	colBodyHi   = color.NRGBA{0x8b, 0x92, 0xa1, 0xff}
 	colRail     = color.NRGBA{0x2e, 0x3a, 0x4c, 0xff}
 	colBodyText = color.NRGBA{0x93, 0x9c, 0xab, 0xff}
+
+	// The predicted path, and the node panel's accent. Warmer than the trail so
+	// that where the vehicle is going does not read as where it has been.
+	colPred     = color.NRGBA{0xd0, 0x8a, 0x5a, 0xff}
+	colNodeDone = color.NRGBA{0x54, 0x60, 0x6e, 0xff}
 )
 
 // The plot series colours, kept distinguishable in the graph screen.
