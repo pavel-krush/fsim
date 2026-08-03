@@ -140,16 +140,20 @@ func earthFalcon() Preset {
 // propellant, so what is still in the tank at insertion — four fifths of it — is
 // what would have gone to the Moon. The LM's ride home is the Moon preset.
 func apolloSaturn() Preset {
+	sys := SolarSystem()
+	earth := sys.IndexOf("earth")
+
 	return Preset{
 		Name: "apollo-saturn",
 		Cfg: Config{
-			Body: Body{
-				Name:           "earth",
-				Radius:         6371000,
-				MassSource:     FromMass,
-				Mass:           5.97237e24,
-				RotationPeriod: 86164.1,
-			},
+			// The whole solar system, launched from the Earth in it. Nothing about
+			// the ascent changes — the Sun's pull on a vehicle in the Earth's frame
+			// is all but cancelled by the Earth falling towards it too, leaving a
+			// tide of 1e-7 m/s^2 — and once in orbit the camera can pull back to
+			// the Moon's rail, or to Jupiter's.
+			System:     sys,
+			LaunchBody: earth,
+			Body:       sys.Bodies[earth],
 			Atmo: Atmosphere{
 				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
 				Layers:          earthISA(),
@@ -157,23 +161,6 @@ func apolloSaturn() Preset {
 				SurfacePressure: 101325,
 				Top:             140000,
 			},
-			// The Moon is in this system because the mission was going there. It
-			// pulls on the ascent as well as sitting in the picture — some
-			// 3.3e-5 m/s^2, which moves the insertion by centimetres — and its
-			// phase at liftoff puts it off to one side rather than dead ahead
-			// when the camera pulls back.
-			System: System{Bodies: []Body{
-				{
-					Name: "earth", Radius: 6371000,
-					MassSource: FromMass, Mass: 5.97237e24, RotationPeriod: 86164.1,
-				},
-				{
-					Name: "moon", Radius: 1737400,
-					MassSource: FromMass, Mass: 7.342e22, RotationPeriod: 2360591,
-					Parent: 0, SemiMajor: 3.844e8, Ecc: 0.0549,
-					ArgPeri: 0.5, MeanAnom0: 0.9,
-				},
-			}},
 			Rocket: Rocket{
 				// The spacecraft: command and service module 28.8 t, lunar module
 				// 15.1 t, spacecraft/LM adapter 1.8 t. The escape tower is not
@@ -229,6 +216,13 @@ func apolloSaturn() Preset {
 				{Time: 339, Pitch: 10},
 				{Time: 380, Pitch: 9},
 			}},
+			// Translunar injection, one prograde burn out of the parking orbit with
+			// what the S-IVB kept back for it. The time and the delta-v were found
+			// by search, the same way the pitch programmes were: the Moon has to
+			// be somewhere specific when the vehicle arrives, and the window is
+			// not a thing to guess at.
+			Nodes: []Node{{T: 15325, Frame: BurnPrograde, DeltaV: 3162}},
+
 			TargetOrbit: 185000,
 			MaxTime:     3600,
 		},

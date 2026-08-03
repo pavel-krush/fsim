@@ -52,9 +52,10 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A body's parent always sits at a lower index.** That one invariant makes a cycle impossible to
   express, makes every walk up the tree terminate by construction, and leaves the slice in topological
   order. `Normalize` enforces it, clamping bad data to the root rather than trusting the author.
-- **`Config.Body` is a mirror, not an input, once `New` has run.** It is a copy of
-  `System.Bodies[LaunchBody]`, kept so that everything already reading `Cfg.Body` — the whole interface —
-  still gets the planet being launched from. Edit the system, not the mirror.
+- **`Config.Body` is the launch body's editable face.** `New` copies it *into* the system when it has a
+  radius, then mirrors it back, so the setup screen's fields still work on a multi-body preset — the first
+  cut copied the other way and editing the planet was a silent no-op. A caller that fills the system and
+  leaves `Body` empty, which is every test that builds a system by hand, is left alone.
 - **The state is measured from `State.Center`**, the deepest body whose sphere of influence contains the
   vehicle, in a frame that does not rotate with it. Not from the root: heliocentric coordinates are
   ~1.5e11 m, where float64 resolves 3e-5 m, and the ascent tests assert altitudes to 1e-6 m. They would
@@ -217,6 +218,55 @@ header and in the bottom bars of the flight and graph screens.
   language falls back to. `-lang ru` starts in Russian.
 - A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
   every key it is missing.
+
+## The solar system, and the verdicts
+
+`sim/solar.go` is the real thing: the Sun, eight planets and nine major moons, with real radii, masses,
+semi-major axes and eccentricities. The Apollo preset flies in it, launched from the Earth in it.
+
+- **The inclinations are dropped** — everything shares one plane, which is the whole geometry of this
+  simulator. Triton goes round the same way as everything else for the same reason: in one plane there is
+  nowhere to put a retrograde orbit. Retrograde *rotation* survives, as a negative `RotationPeriod`.
+- **The mean anomalies are not an ephemeris.** Nothing here is tied to a date, so they are spread out to
+  make a picture worth looking at, not to put Mars where Mars was on some particular morning.
+- **Adding the Sun changed nothing about the ascent.** In the Earth's frame the Sun's pull is all but
+  cancelled by the Earth falling towards it too — the rail correction — leaving a tide of 1e-7 m/s².
+  `earth-falcon` stays a single-body Earth on purpose: it is the LEO reference whose figures are quoted.
+- **Verdicts are ranked, and only ever improve** (`outcomeRank`). Reaching orbit and then being captured
+  by a moon is a lunar mission, not a demotion. They are a high-water mark, not a running commentary: a
+  temporary capture stays on the record after the vehicle has left.
+- **`OutcomeCaptured` and `OutcomeImpact` name their body** in `State.OutcomeBody`, because "captured"
+  without saying by what is not a verdict.
+- **Escape is only asked about the root, and only when the root holds the vehicle.** A craft in low lunar
+  orbit is moving faster than Earth escape at that distance and is going nowhere; the Moon is on a rail
+  and the vehicle is attached to the Moon. Asking the question in the wrong frame reported every lunar
+  orbit as an escape.
+- **A flight that orbited and then came down is `OutcomeCrashed`, not `OutcomeSuborbital`** — the latter
+  claims it never got there. It happens: the Moon's pull walks the perigee of a high ellipse down.
+- **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
+  `eventLabel` takes the whole event so it can name it.
+- **`bodyName` is a lookup, not a switch.** Seventeen bodies is where a switch stops being worth writing;
+  a missing entry renders as the identifier, which is the same safety net `T` has.
+
+### Apollo goes to the Moon
+
+The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking
+orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at **T+2.63 days**, passes
+**1789 km** over the surface and leaves again at T+4.0 days.
+
+- **The time and the delta-v were found by search**, the same way the pitch programmes were. The Moon has
+  to be somewhere specific when the vehicle arrives, and a window is not a thing to guess at.
+- **A translunar injection is sharp: two metres a second moves the closest approach by two thousand
+  kilometres.** That is why the preset aims 1800 km clear of the surface rather than at the 200 km that
+  scored best — a preset that turns into a crater when the integrator changes in the tenth digit is not a
+  preset. `TestApolloPresetReachesTheMoon` asserts a wide band for the same reason.
+- **It is a flyby, and it has to be.** Capturing into lunar orbit from that approach needs some 670 m/s and
+  the S-IVB has 540 left. That is not a modelling gap — it is the historical reason Apollo carried a
+  service module with its own engine, which this vehicle does not have.
+- **The osculating lunar orbit at the crossing can read as bound** while the integrated path is a flyby:
+  at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1789 km
+  above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
+  conic and a trajectory.
 
 ## Manoeuvre nodes and the prediction
 

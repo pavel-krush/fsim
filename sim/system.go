@@ -136,6 +136,16 @@ func (s *System) Frame(rootPos Vec2, t float64) int {
 	}
 }
 
+// isAncestor reports whether a is somewhere up b's chain of parents.
+func (s *System) isAncestor(a, b int) bool {
+	for j := b; j > 0; j = s.Bodies[j].Parent {
+		if s.Bodies[j].Parent == a {
+			return true
+		}
+	}
+	return false
+}
+
 // Gravity is the acceleration at a point given as rel, the offset from body
 // center, in m/s^2. Every body in the system contributes.
 //

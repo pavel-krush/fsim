@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -110,9 +111,16 @@ func (u *UI) LangPicker(dst *ebiten.Image, r Rect) {
 	}
 }
 
-// eventLabel is the timeline caption for an event kind.
-func eventLabel(k sim.EventKind) string {
-	switch k {
+// eventLabel is the timeline caption for an event. Some of them are about a
+// body, and pass its name through the format string.
+func eventLabel(e sim.Event, sys *sim.System) string {
+	switch e.Kind {
+	case sim.EvSOIEnter:
+		return fmt.Sprintf(T("event.soiEnter"), bodyName(sys.Bodies[e.Body].Name))
+	case sim.EvSOIExit:
+		return fmt.Sprintf(T("event.soiExit"), bodyName(sys.Bodies[e.Body].Name))
+	}
+	switch e.Kind {
 	case sim.EvLiftoff:
 		return T("event.liftoff")
 	case sim.EvMaxQ:
@@ -134,8 +142,15 @@ func eventLabel(k sim.EventKind) string {
 	}
 }
 
-// outcomeText is the verdict shown when the flight is over.
-func outcomeText(o sim.Outcome) string {
+// outcomeText is the verdict shown when the flight is over. Two of them name the
+// body they are about.
+func outcomeText(o sim.Outcome, body string) string {
+	switch o {
+	case sim.OutcomeCaptured:
+		return fmt.Sprintf(T("outcome.captured"), body)
+	case sim.OutcomeImpact:
+		return fmt.Sprintf(T("outcome.impact"), body)
+	}
 	switch o {
 	case sim.OutcomeOrbit:
 		return T("outcome.orbit")
@@ -170,19 +185,19 @@ func phaseText(p sim.Phase) string {
 
 // bodyName turns a body identifier into display text. Like preset names, what a
 // body is called is a presentation decision: sim only carries the identifier.
+//
+// Looked up rather than switched on, because there are seventeen of them and a
+// switch would be seventeen lines of the same line. An identifier with no entry
+// renders as itself, which is the same safety net T has.
 func bodyName(key string) string {
-	switch key {
-	case "earth":
-		return T("body.earth")
-	case "moon":
-		return T("body.moon")
-	case "mars":
-		return T("body.mars")
-	case "kerbin":
-		return T("body.kerbin")
-	default:
-		return key
+	if key == "" {
+		return ""
 	}
+	full := "body." + key
+	if s := T(full); s != full {
+		return s
+	}
+	return key
 }
 
 // presetName turns a preset identifier into display text.

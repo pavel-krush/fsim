@@ -1,0 +1,196 @@
+package sim
+
+import (
+	"math"
+	"testing"
+)
+
+// The solar system's data has to be the real data. These are the figures every
+// table agrees on, and they are what makes a transfer take the time it takes.
+func TestSolarSystemData(t *testing.T) {
+	sys := SolarSystem()
+
+	if got := len(sys.Bodies); got < 17 {
+		t.Errorf("%d bodies, expected the Sun, eight planets and the major moons", got)
+	}
+	if sys.Bodies[0].Name != "sun" {
+		t.Errorf("root is %q, want the Sun", sys.Bodies[0].Name)
+	}
+
+	// Every child is defined after its parent, which is the invariant the whole
+	// tree rests on, and every one of them has somewhere to be.
+	for i := range sys.Bodies {
+		b := &sys.Bodies[i]
+		if i == 0 {
+			continue
+		}
+		if b.Parent >= i {
+			t.Errorf("%s has parent %d, which is not defined before it", b.Name, b.Parent)
+		}
+		if b.SemiMajor <= 0 {
+			t.Errorf("%s has no orbit", b.Name)
+		}
+		if b.SOI <= 0 || b.SOI > b.SemiMajor {
+			t.Errorf("%s has a sphere of influence of %g m against an orbit of %g", b.Name, b.SOI, b.SemiMajor)
+		}
+	}
+
+	// Years and months, from the rails rather than from a table.
+	period := func(name string) float64 {
+		i := sys.IndexOf(name)
+		b := &sys.Bodies[i]
+		mu := sys.Bodies[b.Parent].Mu
+		return 2 * math.Pi * math.Sqrt(b.SemiMajor*b.SemiMajor*b.SemiMajor/mu) / 86400
+	}
+	close(t, "Earth's year, days", period("earth"), 365.26, 2e-3)
+	close(t, "Mars's year, days", period("mars"), 686.98, 3e-3)
+	close(t, "Jupiter's year, days", period("jupiter"), 4332.6, 3e-3)
+	// The Moon's month is the model month: the rails run on the parent's mu
+	// alone, which puts it 0.47% long against the real 27.32 days.
+	close(t, "the Moon's month, days", period("moon"), 27.44, 2e-3)
+	close(t, "Io's month, days", period("io"), 1.769, 5e-3)
+	close(t, "Titan's month, days", period("titan"), 15.945, 5e-3)
+
+	close(t, "the lunar sphere of influence", sys.Bodies[sys.IndexOf("moon")].SOI, 6.61e7, 0.02)
+}
+
+// The flagship. Apollo's preset is not just an ascent: it has a translunar
+// injection on the plan, and the whole point of the rails, the spheres of
+// influence, the adaptive step and the nodes is that flying it arrives somewhere.
+func TestApolloPresetReachesTheMoon(t *testing.T) {
+	s := New(apolloSaturn().Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+
+	periselene := math.Inf(1)
+	for !s.St.Done && s.St.T < 5*86400 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+		if s.St.Center == moon {
+			periselene = math.Min(periselene, s.Altitude())
+		}
+	}
+
+	var arrived, left float64
+	for _, e := range s.Events {
+		if e.Body != moon {
+			continue
+		}
+		switch e.Kind {
+		case EvSOIEnter:
+			arrived = e.T
+		case EvSOIExit:
+			left = e.T
+		}
+	}
+	if arrived == 0 {
+		t.Fatalf("never reached the Moon: closest approach was in %s's frame",
+			s.Cfg.System.Bodies[s.St.Center].Name)
+	}
+	t.Logf("lunar sphere entered at T+%.2f days, periselene %.0f km, left at T+%.2f days",
+		arrived/86400, periselene/1000, left/86400)
+
+	if arrived/86400 < 2 || arrived/86400 > 4 {
+		t.Errorf("arrived at T+%.2f days; a transfer this size takes two to four", arrived/86400)
+	}
+	// Wide, because a translunar injection is famously sharp: two metres a second
+	// of delta-v moves the closest approach by a couple of thousand kilometres.
+	// The preset aims for 1800 km, well clear of the surface on purpose.
+	if periselene < 300000 || periselene > 6000000 {
+		t.Errorf("periselene %.0f km, expected a pass of a few thousand", periselene/1000)
+	}
+	// It is a flyby, and it has to be: capturing into lunar orbit from here needs
+	// some 670 m/s and the S-IVB has 540 left, which is the historical reason
+	// Apollo carried a service module with its own engine.
+	if left == 0 {
+		t.Error("no exit from the lunar sphere: this vehicle cannot capture and should not appear to")
+	}
+	// And the launch's own verdict is not overwritten by the trip.
+	if s.St.Outcome != OutcomeOrbit {
+		t.Errorf("outcome = %d, want the orbit the launch achieved", s.St.Outcome)
+	}
+}
+
+// A closed orbit around a body that is not the launch body is a capture, and the
+// verdict has to say which body it is about.
+func TestCapturedVerdictNamesTheBody(t *testing.T) {
+	sys := earthMoon()
+	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+
+	moon := &sys.Bodies[1]
+	r := moon.Radius + 100000
+	s.St.Center = 1
+	s.St.Pos = Vec2{0, r}
+	s.St.Vel = Vec2{math.Sqrt(moon.Mu / r), 0}
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	s.Step(FixedStep)
+
+	if s.St.Outcome != OutcomeCaptured {
+		t.Fatalf("outcome = %d, want captured", s.St.Outcome)
+	}
+	if s.St.OutcomeBody != 1 {
+		t.Errorf("captured by body %d, want the Moon", s.St.OutcomeBody)
+	}
+	if !s.Settled() {
+		t.Error("a lunar orbit is not a verdict?")
+	}
+}
+
+// Hitting something that is not home is its own verdict.
+func TestImpactVerdictNamesTheBody(t *testing.T) {
+	sys := earthMoon()
+	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+
+	// A hundred kilometres up over the Moon, falling straight down.
+	s.St.Center = 1
+	s.St.Pos = Vec2{0, sys.Bodies[1].Radius + 100000}
+	s.St.Vel = Vec2{}
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	for i := 0; i < 100000 && !s.St.Done; i++ {
+		s.Step(FixedStep)
+	}
+
+	if s.St.Outcome != OutcomeImpact {
+		t.Fatalf("outcome = %d, want an impact", s.St.Outcome)
+	}
+	if s.St.OutcomeBody != 1 {
+		t.Errorf("hit body %d, want the Moon", s.St.OutcomeBody)
+	}
+}
+
+// Escape means leaving the system. A trajectory that is hyperbolic about a moon
+// is doing nothing more remarkable than leaving the moon, which every flyby does.
+func TestLeavingAMoonIsNotEscape(t *testing.T) {
+	sys := earthMoon()
+	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+
+	moon := &sys.Bodies[1]
+	// Well above lunar escape speed, but nowhere near Earth's.
+	s.St.Center = 1
+	s.St.Pos = Vec2{0, moon.Radius + 500000}
+	s.St.Vel = Vec2{2500, 0}
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	o := ComputeOrbit(s.St.Pos, s.St.Vel, moon.Mu)
+	if o.Bound() {
+		t.Fatal("the test case is not hyperbolic about the Moon")
+	}
+
+	for i := 0; i < 20000 && !s.St.Done; i++ {
+		s.Step(FixedStep)
+	}
+	if s.St.Outcome == OutcomeEscape {
+		t.Error("leaving the Moon was reported as leaving the system")
+	}
+	if s.St.Done {
+		t.Errorf("the flight ended with outcome %d", s.St.Outcome)
+	}
+}

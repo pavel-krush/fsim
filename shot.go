@@ -81,12 +81,13 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "8a-zoom-planet", screen: ScreenFlight, zoom: 0.15},
 			{name: "8b-zoom-system", screen: ScreenFlight, zoom: 0.015},
 			{name: "8c-focus-moon", screen: ScreenFlight, focus: 2},
-			// A translunar injection on the plan, not yet fired: the panel shows
-			// the burn and the prediction shows where it goes.
-			{name: "8d-plan", screen: ScreenFlight, zoom: 0.06,
-				plan: []sim.Node{{T: 12600, Frame: sim.BurnPrograde, DeltaV: 3140}}},
-			{name: "8e-plan-wide", screen: ScreenFlight, zoom: 0.012,
-				plan: []sim.Node{{T: 12600, Frame: sim.BurnPrograde, DeltaV: 3140}}},
+			// The translunar injection the preset ships with, before it fires: the
+			// panel shows the burn and the prediction shows where it goes.
+			{name: "8d-plan", screen: ScreenFlight, zoom: 0.06},
+			{name: "8e-plan-wide", screen: ScreenFlight, zoom: 0.012},
+			// And after it: two and a half days out, in the Moon's own frame.
+			{name: "8f-lunar-approach", screen: ScreenFlight, advance: 227000, focus: 10, zoom: 0.4},
+			{name: "8g-lunar-flyby", screen: ScreenFlight, advance: 232000, focus: 10, zoom: 3},
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
@@ -132,7 +133,12 @@ func (sr *shotRunner) step(a *App) bool {
 			a.flight.zoomBias = st.zoom
 		}
 		a.flight.focus = st.focus - 1
-		a.flight.s.Cfg.Nodes = st.plan
+		// Only when a step brings its own, or every other step would wipe the plan
+		// the preset ships with — which is how the translunar burn quietly failed
+		// to happen and the capture shots came out in low Earth orbit.
+		if st.plan != nil {
+			a.flight.s.Cfg.Nodes = st.plan
+		}
 		a.flight.pred = nil
 		a.flight.cam.Scale = 0 // snap, so the capture is not mid-zoom
 	}

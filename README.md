@@ -40,8 +40,9 @@ usually the most interesting number on the screen.
 take thirteen million fixed steps takes a few hundred and the time warp goes to a million. Anything with
 an engine running or air outside stays on the fixed step, and at ×1 so does everything else.
 
-**The system.** Bodies form a tree — a root that does not move, and moons and planets on Keplerian rails
-about their parents. They all pull on the vehicle at once, and the state is kept relative to whichever
+**The system.** The Sun, eight planets and nine major moons, with real radii, masses and orbits — all in
+one plane, inclinations dropped. Bodies form a tree: a root that does not move, and moons and planets on
+Keplerian rails about their parents. They all pull on the vehicle at once, and the state is kept relative to whichever
 body's sphere of influence it is in, so the numbers stay small near a body and the telemetry stays
 meaningful. The camera can be pulled back from the launch pad to the Moon's orbit, ten orders of magnitude
 of zoom, and pinned to any body with `TAB` to watch an approach from there.
@@ -55,7 +56,7 @@ Five launchers, all of which actually reach orbit:
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
-| Apollo / Saturn V | 192 × 186 km, e = 0.0005 | 8965 m/s | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / Saturn V | 192 × 186 km, then the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -63,12 +64,12 @@ Five launchers, all of which actually reach orbit:
 The Earth figure comes in below the 9.3–9.5 km/s a real launcher spends because this one lifts off from
 the equator and is handed all 465 m/s of the planet's rotation.
 
-Apollo is the one preset that can be checked against a flight that happened, and it stops where the
-simulation stops being able to tell the truth. There is one central body here and no Moon to aim at, so
-what is modelled is the ride to the parking orbit: S-IC, S-II and the S-IVB's first burn, staging at
-T+159 s against the real T+161, insertion at T+604 s into 192 × 186 km against the real T+699 into
-186 × 183. The four fifths of the S-IVB's propellant still in the tank at cutoff are the translunar
-burn this simulation has nowhere to send. The lunar module's ride off the surface is the Moon preset.
+Apollo is the one preset that can be checked against a flight that happened. Staging at T+159 s against
+the real T+161, insertion at T+604 s into 192 × 186 km against the real T+699 into 186 × 183. Then the
+flight plan fires the translunar injection with what the S-IVB kept back, and two and a half days later
+the vehicle is inside the Moon's sphere of influence, 1789 km over the surface. It leaves again: capturing
+into lunar orbit needs 670 m/s and there are 540 left, which is the historical reason Apollo carried a
+service module with an engine of its own. The lunar module's ride off the surface is the Moon preset.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.

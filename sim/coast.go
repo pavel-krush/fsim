@@ -117,6 +117,16 @@ func (s *Sim) plannedStep() float64 {
 	return math.Max(h, FixedStep)
 }
 
+// plannedStepUncapped is plannedStep with no warp cap, which is what an instant
+// run wants: RunToEnd, Predict and the tuners all step as far as the state allows.
+func (s *Sim) plannedStepUncapped() float64 {
+	rate := s.WarpRate
+	s.WarpRate = math.Inf(1)
+	h := s.plannedStep()
+	s.WarpRate = rate
+	return h
+}
+
 // stepCap is how far a single step may reach at the current warp rate. At ×1 it
 // is the fixed step, which is what keeps a real-time flight identical to what
 // the simulator has always produced.

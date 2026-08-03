@@ -79,7 +79,7 @@ func (g *GraphScreen) drawHeader(dst *ebiten.Image, r Rect) {
 	case sim.OutcomeFlying:
 		vc = colTextDim
 	}
-	drawText(dst, outcomeText(st.Outcome), fontBig, r.X+14, r.Y+10, vc, alignLeft)
+	drawText(dst, outcomeText(st.Outcome, bodyName(g.s.Cfg.System.Bodies[st.OutcomeBody].Name)), fontBig, r.X+14, r.Y+10, vc, alignLeft)
 
 	q, qAlt := g.s.MaxQ()
 	cells := [][2]string{
@@ -148,7 +148,7 @@ func (g *GraphScreen) drawEventRuler(dst *ebiten.Image, r Rect, tMax float64) {
 			}
 		}
 		line(dst, x, r.Y, x, r.Bottom(), 1, c)
-		label := eventLabel(e.Kind)
+		label := eventLabel(e, &g.s.Cfg.System)
 		w := textWidth(label, fontMonoSm)
 		ly := r.Y + 3 + float64(row)*(fontMonoSm.Size+4)
 		if x+3+w > plot.Right() {

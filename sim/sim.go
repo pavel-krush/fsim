@@ -28,7 +28,29 @@ const (
 	OutcomeCrashed
 	OutcomeEscape
 	OutcomeTimeout
+	// OutcomeCaptured is a closed orbit around a body other than the one launched
+	// from, and OutcomeImpact is hitting one. Both name the body in
+	// State.OutcomeBody, because "captured" without saying by what is not a
+	// verdict.
+	OutcomeCaptured
+	OutcomeImpact
 )
+
+// outcomeRank orders the verdicts a flight can settle into by how much they say.
+// A later verdict only replaces an earlier one if it says more: reaching orbit
+// and then being captured by a moon is a lunar mission, not a demotion.
+func outcomeRank(o Outcome) int {
+	switch o {
+	case OutcomeDecaying:
+		return 1
+	case OutcomeOrbit:
+		return 2
+	case OutcomeCaptured:
+		return 3
+	default:
+		return 0
+	}
+}
 
 // EventKind marks a notable moment on the timeline.
 type EventKind int
@@ -42,6 +64,10 @@ const (
 	EvApoapsis
 	EvOrbit
 	EvEnd
+	// EvSOIEnter and EvSOIExit are crossings into and out of a body's sphere of
+	// influence, and name the body in Event.Body.
+	EvSOIEnter
+	EvSOIExit
 )
 
 // Event is a timestamped marker used by the trajectory view and the graphs.
@@ -50,6 +76,9 @@ const (
 type Event struct {
 	T    float64
 	Kind EventKind
+	// Body is which body the event is about, for the kinds that are about one.
+	// Zero is the root, which is meaningless for the rest and harmless.
+	Body int
 }
 
 // Config is everything the user typed in on the setup screen.
@@ -112,6 +141,8 @@ type State struct {
 
 	Done    bool
 	Outcome Outcome
+	// OutcomeBody is the body a verdict is about: captured by it, or hit it.
+	OutcomeBody int
 }
 
 // Sample is one recorded point of telemetry.
@@ -210,8 +241,15 @@ func New(cfg Config) *Sim {
 	if cfg.LaunchBody < 0 || cfg.LaunchBody >= len(cfg.System.Bodies) {
 		cfg.LaunchBody = 0
 	}
-	// From here on the system is the truth and Body is its mirror, so that
-	// everything reading Cfg.Body still gets the planet being launched from.
+	// Body is the launch body's editable face: it is what the setup screen binds
+	// its fields to, so it is copied *into* the system rather than out of it.
+	// Without that, editing the planet on a multi-body preset would be a silent
+	// no-op. A caller that filled the system and left Body empty — every test
+	// that builds a system by hand — is left alone.
+	if cfg.Body.Radius > 0 {
+		cfg.System.Bodies[cfg.LaunchBody] = cfg.Body
+		cfg.System.Normalize()
+	}
 	cfg.Body = cfg.System.Bodies[cfg.LaunchBody]
 
 	cfg.Atmo.Prepare(cfg.Body.SurfaceG)
@@ -241,6 +279,7 @@ func (s *Sim) Reset() {
 		// which is a lively way to start a flight.
 		Node: -1,
 	}
+	st.OutcomeBody = s.Cfg.LaunchBody
 	st.Vel = st.Pos.Perp().Scale(w)
 	s.launchAngle = st.Pos.Angle()
 	for i := range s.Cfg.Rocket.Stages {
@@ -283,6 +322,12 @@ func (s *Sim) RootPos() Vec2 {
 	return p.Add(s.St.Pos)
 }
 
+// RootVel is the vehicle's velocity relative to the system's root.
+func (s *Sim) RootVel() Vec2 {
+	_, v := s.Cfg.System.StateAt(s.St.Center, s.St.T)
+	return v.Add(s.St.Vel)
+}
+
 // atmoTop is the top of the air around the body the state is measured from.
 // Only the launch body has an atmosphere for now: air on every body needs the
 // setup screen to be able to describe it first.
@@ -307,6 +352,14 @@ func (s *Sim) refocus() {
 	}
 	dp, dv := sys.RelState(s.St.Center, want, s.St.T)
 	s.St.Pos, s.St.Vel = s.St.Pos.Add(dp), s.St.Vel.Add(dv)
+
+	// Which way the crossing went: into a body's sphere if the one being left is
+	// an ancestor of the one being entered, out of it otherwise.
+	if sys.isAncestor(s.St.Center, want) {
+		s.markBody(EvSOIEnter, want)
+	} else {
+		s.markBody(EvSOIExit, s.St.Center)
+	}
 	s.St.Center = want
 }
 
@@ -748,9 +801,19 @@ func (s *Sim) checkEnd() {
 	// Strictly below the surface: a vehicle still clamped to the pad sits at
 	// exactly zero altitude and must not count as a crash.
 	if !s.St.Landed && alt < 0 {
-		if s.reachedSpace {
+		switch {
+		case s.St.Center != s.Cfg.LaunchBody:
+			// Hitting something that is not home is a different kind of news, and
+			// which body it was is most of the news.
+			s.St.OutcomeBody = s.St.Center
+			s.finish(OutcomeImpact)
+		case outcomeRank(s.St.Outcome) >= outcomeRank(OutcomeOrbit):
+			// It orbited and then came down. Calling that suborbital would be a
+			// claim that it never got there.
+			s.finish(OutcomeCrashed)
+		case s.reachedSpace:
 			s.finish(OutcomeSuborbital)
-		} else {
+		default:
 			s.finish(OutcomeCrashed)
 		}
 		return
@@ -763,19 +826,38 @@ func (s *Sim) checkEnd() {
 		return
 	}
 
-	if s.St.Phase != PhaseCoast || s.Settled() {
+	// Settled is not the end of the story any more: a flight that made orbit can
+	// still go on to be captured somewhere else, and settle only takes a verdict
+	// that says more than the one it has.
+	if s.St.Phase != PhaseCoast {
 		return
+	}
+
+	// Escape is about leaving the system, so it is measured against the root — and
+	// only asked at all when the root is what holds the vehicle. Inside a moon's
+	// sphere of influence the question is meaningless: a craft in low lunar orbit
+	// is moving faster than Earth escape at that distance, and is going nowhere.
+	// The moon is on a rail, and the vehicle is attached to the moon.
+	if s.St.Center == 0 {
+		root := &s.Cfg.System.Bodies[0]
+		if ro := ComputeOrbit(s.RootPos(), s.RootVel(), root.Mu); ro.Energy >= 0 {
+			s.finish(OutcomeEscape)
+			return
+		}
 	}
 
 	o := ComputeOrbit(s.St.Pos, s.St.Vel, b.Mu)
-	if o.Energy >= 0 {
-		s.finish(OutcomeEscape)
-		return
-	}
-
 	top := s.atmoTop()
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
+	case s.St.Center != s.Cfg.LaunchBody:
+		// Around something else entirely. A closed orbit that clears the surface
+		// is a capture; a hyperbolic pass is just a visit, and says nothing until
+		// it is over.
+		if o.Bound() && peri >= 0 {
+			s.St.OutcomeBody = s.St.Center
+			s.settle(OutcomeCaptured)
+		}
 	case peri >= top:
 		s.settle(OutcomeOrbit)
 	case peri >= 0 && alt > top:
@@ -792,6 +874,9 @@ func (s *Sim) Settled() bool { return s.St.Outcome != OutcomeFlying }
 // settle records the verdict and lets the vehicle carry on flying. Watching
 // the thing actually go round is most of the reward for getting it up there.
 func (s *Sim) settle(o Outcome) {
+	if outcomeRank(o) <= outcomeRank(s.St.Outcome) {
+		return
+	}
 	s.St.Outcome = o
 	s.emitMaxQ()
 	s.mark(EvOrbit)
@@ -855,6 +940,17 @@ func (s *Sim) mark(k EventKind) {
 		}
 	}
 	s.Events = append(s.Events, Event{T: s.St.T, Kind: k})
+}
+
+// markBody appends an event about a particular body.
+func (s *Sim) markBody(k EventKind, body int) {
+	for i := range s.Events {
+		if s.Events[i].Kind == k && s.Events[i].Body == body &&
+			math.Abs(s.Events[i].T-s.St.T) < 1e-6 {
+			return
+		}
+	}
+	s.Events = append(s.Events, Event{T: s.St.T, Kind: k, Body: body})
 }
 
 // markAt inserts an event at a time that has already passed, keeping the list

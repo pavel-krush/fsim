@@ -823,7 +823,7 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 		}
 		ring(dst, x, y, 4, 1.5, c)
 
-		label := eventLabel(e.Kind)
+		label := eventLabel(e, &f.s.Cfg.System)
 		if math.Hypot(x-prevX, y-prevY) < textWidth(label, fontUISm) {
 			step++
 		} else {
@@ -906,7 +906,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	}
 	if f.s.Settled() {
 		y += 22
-		verdict := outcomeText(f.s.St.Outcome)
+		verdict := outcomeText(f.s.St.Outcome, bodyName(f.s.Cfg.System.Bodies[f.s.St.OutcomeBody].Name))
 		vc := colBad
 		switch f.s.St.Outcome {
 		case sim.OutcomeOrbit:
