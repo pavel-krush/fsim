@@ -67,7 +67,7 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -124,6 +124,95 @@ func earthFalcon() Preset {
 				{Time: 384, Pitch: 0},
 			}},
 			TargetOrbit: 250000,
+			MaxTime:     3600,
+		},
+	}
+}
+
+// apolloSaturn is Apollo's ride to the parking orbit: Saturn V, three stages,
+// the spacecraft stack as payload.
+//
+// It stops where the simulation stops being able to tell the truth. There is one
+// central body here and no Moon to aim at, so the mission modelled is the first
+// eleven and a half minutes of it — S-IC, S-II and the S-IVB's first burn into a
+// 185 km parking orbit, which is exactly what the vehicle did before it coasted
+// round and relit for translunar injection. The S-IVB is loaded with all of its
+// propellant, so what is still in the tank at insertion — four fifths of it — is
+// what would have gone to the Moon. The LM's ride home is the Moon preset.
+func apolloSaturn() Preset {
+	return Preset{
+		Name: "apollo-saturn",
+		Cfg: Config{
+			Body: Body{
+				Name:           "Earth",
+				Radius:         6371000,
+				MassSource:     FromMass,
+				Mass:           5.97237e24,
+				RotationPeriod: 86164.1,
+			},
+			Atmo: Atmosphere{
+				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
+				Layers:          earthISA(),
+				SurfaceTemp:     288.15,
+				SurfacePressure: 101325,
+				Top:             140000,
+			},
+			Rocket: Rocket{
+				// The spacecraft: command and service module 28.8 t, lunar module
+				// 15.1 t, spacecraft/LM adapter 1.8 t. The escape tower is not
+				// modelled — it went overboard with the interstage anyway.
+				Payload:  45700,
+				Cd:       0.4,
+				Diameter: 10.06,
+				Stages: []Stage{
+					{
+						// S-IC: five F-1s, 33.6 MN off the pad. The vacuum figure
+						// is what the model works from; the sea-level Isp brings
+						// it down to what the pad actually saw.
+						DryMass: 130000, PropMass: 2077000,
+						ThrustVac: 38850000, IspVac: 304, IspSL: 263,
+						Throttle: 1, SepDelay: 1,
+					},
+					{
+						// S-II: five J-2s, burning to depletion.
+						DryMass: 40100, PropMass: 443000,
+						ThrustVac: 5165000, IspVac: 421, IspSL: 421,
+						Throttle: 1, SepDelay: 1,
+						Ignition: IgniteImmediate,
+					},
+					{
+						// S-IVB: one J-2, plus the instrument unit in the dry
+						// mass. The cutoff is orbital insertion; what is left in
+						// the tank is the translunar burn that this simulation
+						// has nowhere to send.
+						DryMass: 15200, PropMass: 106400,
+						ThrustVac: 901000, IspVac: 421, IspSL: 421,
+						Throttle: 1, CutoffTime: 88.9,
+						Ignition: IgniteImmediate,
+					},
+				},
+			},
+			// The programme levels off at nine degrees and stays there rather
+			// than dropping to the horizon. A stack this energetic tolerates
+			// neither extreme: hold more and it lofts to 350 km, where the third
+			// stage circularises at the wrong altitude; let it fall to zero and
+			// the vehicle cannot hold 185 km at four kilometres a second, sinks
+			// back into the air and spends nine kilometres a second of the
+			// budget on drag.
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 12, Pitch: 90},
+				{Time: 53, Pitch: 66},
+				{Time: 94, Pitch: 48},
+				{Time: 135, Pitch: 35},
+				{Time: 176, Pitch: 25},
+				{Time: 217, Pitch: 18},
+				{Time: 257, Pitch: 14},
+				{Time: 298, Pitch: 11},
+				{Time: 339, Pitch: 10},
+				{Time: 380, Pitch: 9},
+			}},
+			TargetOrbit: 185000,
 			MaxTime:     3600,
 		},
 	}

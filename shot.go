@@ -30,6 +30,11 @@ type shotStep struct {
 	openLang bool
 	openMix  bool
 	hover    *struct{ X, Y float64 }
+	// stages rebuilds the vehicle to this many stages, and scrollRocket winds
+	// the vehicle column down, which is the only way a capture can show the
+	// stages a two-stage preset does not have.
+	stages       int
+	scrollRocket float64
 }
 
 type shotRunner struct {
@@ -59,6 +64,11 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "7-orbit", screen: ScreenFlight, advance: 900},
 			{name: "7b-orbiting", screen: ScreenFlight, advance: 12000},
 			{name: "8-graphs", screen: ScreenGraphs, graphs: true},
+			// Last, because they edit the configuration: a four-stage vehicle
+			// assembled out of a two-stage preset is not something the flight
+			// captures above should be flying.
+			{name: "9-setup-4stage", screen: ScreenSetup, stages: 4},
+			{name: "9b-setup-4stage-bottom", screen: ScreenSetup, stages: 4, scrollRocket: 1e5},
 		},
 	}
 }
@@ -89,6 +99,16 @@ func (sr *shotRunner) step(a *App) bool {
 		a.flight.s.Advance(st.advance - a.flight.s.St.T)
 		// Snap the camera instead of easing, so the capture is not mid-zoom.
 		a.flight.cam.Scale = 0
+	}
+
+	for st.stages > 0 && len(a.cfg.Rocket.Stages) > st.stages {
+		removeStage(&a.cfg.Rocket, len(a.cfg.Rocket.Stages)-1)
+	}
+	for st.stages > 0 && len(a.cfg.Rocket.Stages) < st.stages {
+		addStage(&a.cfg.Rocket)
+	}
+	if st.scrollRocket > 0 {
+		a.setup.colRocket.Offset = st.scrollRocket
 	}
 
 	switch {

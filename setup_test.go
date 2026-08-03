@@ -157,6 +157,72 @@ func TestBalanceAlwaysLeavesAValidMixture(t *testing.T) {
 	}
 }
 
+// A stage added to a two-stage preset has to come out flyable rather than
+// blank, and it has to leave the stage below it something to separate from.
+func TestAddStageDerivesTheNewStageFromTheOneBelow(t *testing.T) {
+	rk := sim.DefaultConfig().Rocket
+	lower := rk.Stages[len(rk.Stages)-1]
+
+	addStage(&rk)
+
+	if len(rk.Stages) != 3 {
+		t.Fatalf("stage count = %d, want 3", len(rk.Stages))
+	}
+	st := rk.Stages[2]
+	closeTo(t, "dry mass", st.DryMass, lower.DryMass/4, 1e-12)
+	closeTo(t, "propellant", st.PropMass, lower.PropMass/4, 1e-12)
+	closeTo(t, "thrust", st.ThrustVac, lower.ThrustVac/4, 1e-12)
+	// An upper stage never sees sea level, so both Isp figures are the vacuum
+	// one — inheriting the booster's penalty would be a lie.
+	closeTo(t, "vacuum Isp", st.IspVac, lower.IspVac, 1e-12)
+	closeTo(t, "sea-level Isp", st.IspSL, lower.IspVac, 1e-12)
+	if st.Ignition != sim.IgniteImmediate {
+		t.Errorf("ignition mode = %v, want immediate", st.Ignition)
+	}
+	if rk.Stages[1].SepDelay <= 0 {
+		t.Error("the stage below has nothing to separate with")
+	}
+	if dv := rk.StageDeltaV(2); dv <= 0 {
+		t.Errorf("the new stage produces %g m/s: it cannot fly", dv)
+	}
+}
+
+// The editor must not build a vehicle the physics cannot stage, in either
+// direction: no fifth stage, and never nothing at all.
+func TestStageCountStaysWithinItsBounds(t *testing.T) {
+	rk := sim.DefaultConfig().Rocket
+	for range 6 {
+		addStage(&rk)
+	}
+	if len(rk.Stages) != maxStages {
+		t.Errorf("stage count = %d after piling them on, want %d", len(rk.Stages), maxStages)
+	}
+	for range 6 {
+		removeStage(&rk, len(rk.Stages)-1)
+	}
+	if len(rk.Stages) != minStages {
+		t.Errorf("stage count = %d after stripping them off, want %d", len(rk.Stages), minStages)
+	}
+	if removeStage(&rk, 0); len(rk.Stages) != minStages {
+		t.Error("the last stage was removed")
+	}
+}
+
+// A stage promoted to the bottom lights on the pad, and the editor stops showing
+// its ignition mode — so the mode must not survive to reappear later.
+func TestRemovingTheFirstStageResetsIgnition(t *testing.T) {
+	rk := sim.DefaultConfig().Rocket
+	rk.Stages[1].Ignition = sim.IgniteAtApoapsis
+	rk.Stages[1].IgnitionDelay = 90
+
+	removeStage(&rk, 0)
+
+	if rk.Stages[0].Ignition != sim.IgniteImmediate || rk.Stages[0].IgnitionDelay != 0 {
+		t.Errorf("first stage kept ignition %v after %g s",
+			rk.Stages[0].Ignition, rk.Stages[0].IgnitionDelay)
+	}
+}
+
 // The picker only reports a composition as loaded when it really is, and does
 // not care whether it was written as fractions or as percentages.
 func TestSameMixtureIgnoresScale(t *testing.T) {

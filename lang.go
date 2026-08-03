@@ -173,6 +173,8 @@ func presetName(key string) string {
 	switch key {
 	case "earth-falcon":
 		return T("preset.earthFalcon")
+	case "apollo-saturn":
+		return T("preset.apolloSaturn")
 	case "mars":
 		return T("preset.mars")
 	case "moon":

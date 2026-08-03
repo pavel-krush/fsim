@@ -164,6 +164,10 @@ header and in the bottom bars of the flight and graph screens.
 - **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a
   local variable — the address changes every frame and focus is lost. That is why the diameter field is
   bound straight to `Body.Radius` with `Scale: 500`.
+  **The flip side: anything that reshuffles a slice the fields are bound into must call `UI.cancel()`
+  first.** Removing a stage shifts the ones above it down inside the same backing array, so a focused
+  field would quietly commit its edit to a different stage. Same reason the preset buttons and the
+  mixture picker cancel before replacing their slices.
 - **Overlays paint onto `UI.Overlay`, not onto the `dst` they were handed.** The setup columns draw into
   a clipped sub-image, so a tooltip drawn into `dst` would be sliced off at the column edge.
 - **A parameter gets an explanation by setting `NumOpt.Info` to a locale key.** The mark sits in a fixed
@@ -178,15 +182,53 @@ header and in the bottom bars of the flight and graph screens.
   just-pressed input; Ebiten calls `Draw` less often than `Update`, and clicks would be dropped. `Draw`
   only blits the canvas.
 
+## Stage count
+
+The vehicle takes **one to four stages** — `minStages`/`maxStages` in `screen_setup.go`. The staging
+machine in `sim` never cared how many there were; the editor did, and the bounds are the editor's.
+
+- **Four is where real launchers stop.** Past that, each stage buys less than the one before and pays
+  for it with another full set of engines, tanks and an interstage. One stage is a sounding rocket and a
+  perfectly reasonable thing to fly.
+- **`addStage` derives the new stage from the one below it** — a quarter of its mass and thrust, its
+  vacuum Isp for both Isp figures (an upper stage never sees sea level) — so the button hands you
+  something that flies to edit, not a column of zeroes. It also gives the stage below a separation delay
+  if it had none. The shipped pitch programmes are tuned for two stages, though: a taller stack wants
+  its own programme, and will fly suborbital until it gets one.
+- **`removeStage` resets the ignition mode of whatever ends up at the bottom.** The first stage lights on
+  the pad, the editor only shows the mode for a stage that has something below it, and a hidden value
+  that reappears the moment another stage is added is worse than no value at all.
+- **The footer shares its width out instead of fixing it.** One Δv column per stage on top of the five
+  fixed ones is nine columns; at the old 190 px each they ran under the launch button.
+- The `9-*` steps of `-shot` capture a four-stage vehicle. They come last in the script because they
+  edit the configuration the flight captures fly.
+
 ## Presets
 
-The pitch programmes and the second-stage cutoffs were found by search (a profile generator,
-`pitch = 90·(1-f)^p`, plus a cutoff sweep minimising the deviation from the circular target). The tuner
-lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it again beats
-tuning by hand.
+The pitch programmes and the final cutoffs were found by search (a profile generator,
+`pitch = (90+t)·(1-f)^p − t`, plus a bisection on the last stage's cutoff for a periapsis at the target).
+The tuner lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it
+again beats tuning by hand. Note the tail term: the Apollo profile only works with a **positive**
+asymptote, so a generator that can only decay to zero (as the first one did) cannot express it.
 
 Earth/Falcon-9: a 304/239 km orbit, Δv 8995 m/s, max q 43 kPa at 11 km, peak 5.9 g. The Δv is below the
 real-world 9.3–9.5 km/s because launching from the equator hands over all 465 m/s of rotation.
+
+Apollo/Saturn V is three stages to a 192/186 km parking orbit, Δv 8965 m/s, insertion at T+604 s. It is
+the only preset that can be checked against a flight that happened, so the numbers are worth keeping
+close: real Apollo 11 staged the S-IC at T+161 s (here T+159) and inserted at T+699 s into 186 × 183 km.
+Drag losses come out at 45 m/s against the real 40-ish; the constant-throttle model gives the S-II a
+354 s burn where the real one ran 384 s on a shifting mixture ratio, which is why insertion is a minute
+and a half early. `TestApolloPresetMatchesTheRealAscent` pins all of it.
+
+- **It ends at the parking orbit on purpose.** One central body, no Moon to aim at, so translunar
+  injection is not something the simulation can represent — the S-IVB simply keeps four fifths of its
+  propellant, which is the TLI burn sitting in the tank. Do not "fix" this by burning it: the result
+  would be a 380,000 km ellipse round the Earth, which is not the mission.
+- **The pitch programme levels off at 9° and holds it.** Both extremes fail, and they fail differently:
+  hold more and the ascent lofts to 350 km, where the third stage circularises at the wrong altitude
+  (392 × 185 km); let it fall to zero and the vehicle cannot hold 185 km at 4 km/s, sinks back into the
+  air and spends **9 km/s** of the budget on drag. The tuner found the tail angle, not intuition.
 
 Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet wearing an Earth-thick
 70 km atmosphere does not yield to direct ascent on a single burn.

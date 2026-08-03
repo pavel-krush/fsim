@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"fmt"
 	"math"
 	"testing"
 )
@@ -550,6 +551,115 @@ func TestHistoryStaysBoundedInOrbit(t *testing.T) {
 	}
 	if added == 0 {
 		t.Error("nothing was recorded at all during the coast")
+	}
+}
+
+// The Apollo preset is the one place the simulation can be checked against a
+// flight that actually happened, so it is worth pinning to the real numbers
+// rather than to "it got there". Apollo 11 staged the S-IC at T+161 s, cut the
+// S-IVB at T+11:39 and ended up in a 185.9 x 183.2 km parking orbit.
+func TestApolloPresetMatchesTheRealAscent(t *testing.T) {
+	s := New(apolloSaturn().Cfg)
+	s.RunToEnd()
+	tm := s.Telemetry()
+
+	if s.St.Outcome != OutcomeOrbit {
+		t.Fatalf("outcome = %d at t=%.0fs; apoapsis %.0f km, periapsis %.0f km",
+			s.St.Outcome, s.St.T, tm.ApoAlt/1000, tm.PeriAlt/1000)
+	}
+	// A parking orbit is meant to be round. Within 15 km of the target at both
+	// ends is as close as a time-based pitch programme gets.
+	for _, c := range []struct {
+		name string
+		got  float64
+	}{{"apoapsis", tm.ApoAlt}, {"periapsis", tm.PeriAlt}} {
+		if math.Abs(c.got-185000) > 15000 {
+			t.Errorf("%s = %.1f km, want a 185 km parking orbit", c.name, c.got/1000)
+		}
+	}
+	// Real vehicle: 2,930 t on the pad at a thrust-to-weight of 1.16.
+	r := &s.Cfg.Rocket
+	close(t, "liftoff mass", r.LiftoffMass(), 2857400, 1e-9)
+	if twr := r.LiftoffTWR(101325, s.Cfg.Body.SurfaceG); twr < 1.1 || twr > 1.3 {
+		t.Errorf("liftoff TWR = %.2f, expected roughly 1.2", twr)
+	}
+	// Saturn V lost only about 40 m/s to drag: it is a big vehicle, but a heavy
+	// one, and it leaves the thick air early.
+	if s.St.DragLoss > 150 {
+		t.Errorf("drag losses = %.0f m/s, expected under 150", s.St.DragLoss)
+	}
+	if s.St.T < 480 || s.St.T > 780 {
+		t.Errorf("insertion at T+%.0f s, expected roughly the real T+700", s.St.T)
+	}
+	// The S-IVB keeps what it would have burned for translunar injection: this
+	// simulation has one central body and nowhere to send it.
+	if left := s.St.Prop[2] / r.Stages[2].PropMass; left < 0.6 {
+		t.Errorf("S-IVB has %.0f%% of its propellant left, expected most of it", left*100)
+	}
+}
+
+// stack builds a vehicle of n identical stages in a vacuum, for exercising the
+// staging machine at counts the presets do not cover.
+func stack(n int) Config {
+	b := Body{Radius: 600000, MassSource: FromMass, Mass: 5.2915158e22}
+	b.Normalize()
+
+	stages := make([]Stage, n)
+	for i := range stages {
+		stages[i] = Stage{
+			DryMass: 200, PropMass: 800,
+			ThrustVac: 60000, IspVac: 320, IspSL: 320,
+			Throttle: 1, SepDelay: 2,
+		}
+	}
+	return Config{
+		Body:    b,
+		Atmo:    Atmosphere{Top: 1e9},
+		Rocket:  Rocket{Payload: 100, Cd: 0, Diameter: 1, Stages: stages},
+		Program: Program{Keys: []Keyframe{{Time: 0, Pitch: 90}}},
+		MaxTime: 1e9,
+	}
+}
+
+// The staging machine has to walk any stack, not just the two-stage one the
+// presets ship: one stage means going straight from burnout to coast without
+// looking for a stage that is not there, and four means three separations.
+func TestStagingWalksAnyStageCount(t *testing.T) {
+	for _, n := range []int{1, 2, 3, 4} {
+		t.Run(fmt.Sprintf("%d-stage", n), func(t *testing.T) {
+			s := New(stack(n))
+
+			for i := 0; i < 400000 && s.St.Phase != PhaseCoast && !s.St.Done; i++ {
+				s.Step(FixedStep)
+			}
+			if s.St.Phase != PhaseCoast {
+				t.Fatalf("never reached coast: phase %v at t=%.1f, outcome %d",
+					s.St.Phase, s.St.T, s.St.Outcome)
+			}
+			if s.St.Stage != n-1 {
+				t.Errorf("finished on stage %d, want the top one (%d)", s.St.Stage+1, n)
+			}
+
+			seps := 0
+			for _, e := range s.Events {
+				if e.Kind == EvSeparation {
+					seps++
+				}
+			}
+			if seps != n-1 {
+				t.Errorf("%d separations, want %d", seps, n-1)
+			}
+			// Every stage but the last one has to have been emptied on the way
+			// up, and the ideal delta-v has to account for all of them.
+			for i := 0; i < n-1; i++ {
+				if s.St.Prop[i] > 1e-6 {
+					t.Errorf("stage %d kept %.3f kg of propellant", i+1, s.St.Prop[i])
+				}
+			}
+			if want := s.Cfg.Rocket.TotalDeltaV(); s.St.DeltaV < want*0.99 {
+				t.Errorf("expended delta-v %.0f m/s against an ideal %.0f", s.St.DeltaV, want)
+			}
+		})
 	}
 }
 

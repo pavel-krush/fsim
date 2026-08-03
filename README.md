@@ -1,7 +1,7 @@
 # fsim
 
-A launch simulator. Set up a planet, an atmosphere, a two-stage rocket and a pitch programme, press
-launch, and watch it fly — with live telemetry, and graphs when it is over.
+A launch simulator. Set up a planet, an atmosphere, a rocket of one to four stages and a pitch
+programme, press launch, and watch it fly — with live telemetry, and graphs when it is over.
 
 The physics is real: gravity is integrated, propellant is spent, mass changes as it burns, and the air
 pushes back. Nothing is scripted.
@@ -13,7 +13,7 @@ pushes back. Nothing is scripted.
 ```
 go run .                       # start
 go run . -lang ru              # start in Russian (default is English)
-go run . -preset 2             # start on preset 2 (0..3)
+go run . -preset 2             # start on preset 2 (0..4)
 go test ./...                  # physics and interface checks
 ```
 
@@ -28,9 +28,9 @@ surface conditions up. The gas mixture sets the molar mass and the adiabatic ind
 the scale height and the speed of sound. With Earth's composition and the standard layers, the model
 reproduces the published ISA table to within half a per cent at every altitude.
 
-**The rocket.** Two stages, each with its own dry mass, propellant, thrust, throttle and cutoff.
-Specific impulse is interpolated between sea level and vacuum against ambient pressure, so thrust
-climbs as the air thins. Drag uses a coefficient and a reference area — no CFD, no shape.
+**The rocket.** One to four stages, each with its own dry mass, propellant, thrust, throttle and
+cutoff. Specific impulse is interpolated between sea level and vacuum against ambient pressure, so
+thrust climbs as the air thins. Drag uses a coefficient and a reference area — no CFD, no shape.
 
 **The flight.** Runge-Kutta 4 at a fixed 0.02 s step, shortened to land exactly on staging events. The
 delta-v budget is accounted throughout and split into gravity, drag and steering losses, which is
@@ -40,17 +40,25 @@ usually the most interesting number on the screen.
 
 ## Presets
 
-Four launchers, all of which actually reach orbit:
+Five launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
+| Apollo / Saturn V | 192 × 186 km, e = 0.0005 | 8965 m/s | 43.1 kPa at 11 km | 5.1 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
 
 The Earth figure comes in below the 9.3–9.5 km/s a real launcher spends because this one lifts off from
 the equator and is handed all 465 m/s of the planet's rotation.
+
+Apollo is the one preset that can be checked against a flight that happened, and it stops where the
+simulation stops being able to tell the truth. There is one central body here and no Moon to aim at, so
+what is modelled is the ride to the parking orbit: S-IC, S-II and the S-IVB's first burn, staging at
+T+159 s against the real T+161, insertion at T+604 s into 192 × 186 km against the real T+699 into
+186 × 183. The four fifths of the S-IVB's propellant still in the tank at cutoff are the translunar
+burn this simulation has nowhere to send. The lunar module's ride off the surface is the Moon preset.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.

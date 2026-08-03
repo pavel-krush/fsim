@@ -293,6 +293,15 @@ func gasLabel(name string) string {
 	return b.String()
 }
 
+// minStages and maxStages bound what the vehicle editor will build. One stage
+// is a sounding rocket and a perfectly good thing to fly; four is where the real
+// launchers stop. Every stage after that buys less than the one before it and
+// pays for it with another full set of engines, tanks and an interstage.
+const (
+	minStages = 1
+	maxStages = 4
+)
+
 func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	rk := &a.cfg.Rocket
 	u := a.ui
@@ -302,11 +311,22 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	u.NumField(dst, c.next(rowH), T("setup.bodyDiameter"), &rk.Diameter, NumOpt{Unit: T("unit.m"), Min: 0.1, Max: 100, Info: "setup.bodyDiameter.info"})
 	u.NumField(dst, c.next(rowH), T("setup.cd"), &rk.Cd, NumOpt{Min: 0, Max: 5, Info: "setup.cd.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.referenceArea"), formatNum(rk.Area(), 2), T("unit.m2"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.stageCount"), formatNum(float64(len(rk.Stages)), 0), "")
 
+	remove := -1
 	for i := range rk.Stages {
 		st := &rk.Stages[i]
 		c.gap(10)
-		u.SectionHeader(dst, c.next(20), fmt.Sprintf(T("setup.stageN"), i+1))
+		hdr := c.next(20)
+		// The header keeps its own row so the delete button can sit on it: a
+		// stage is a dozen fields tall, and a × further down would be read as
+		// belonging to whichever field it happened to line up with.
+		u.SectionHeader(dst, Rect{hdr.X, hdr.Y, hdr.W - 24, hdr.H}, fmt.Sprintf(T("setup.stageN"), i+1))
+		if len(rk.Stages) > minStages {
+			if u.Button(dst, Rect{hdr.Right() - 18, hdr.Y + 1, 18, hdr.H - 2}, "×", ButtonDanger) {
+				remove = i
+			}
+		}
 
 		u.NumField(dst, c.next(rowH), T("setup.dryMass"), &st.DryMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 1, Max: 1e9, Info: "setup.dryMass.info"})
 		u.NumField(dst, c.next(rowH), T("setup.propellant"), &st.PropMass, NumOpt{Unit: T("unit.t"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.propellant.info"})
@@ -334,7 +354,73 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 		u.ReadOnly(dst, c.next(rowH), T("setup.burnTime"), formatNum(st.BurnTime(), 1), T("unit.s"))
 		u.ReadOnly(dst, c.next(rowH), T("setup.stageDv"), formatNum(rk.StageDeltaV(i), 0), T("unit.mps"))
 	}
+
+	// Both edits reshuffle the slice the fields above are bound to, so any
+	// pending edit has to be dropped: the focused field holds the address of a
+	// stage that is about to be a different stage.
+	if remove >= 0 {
+		u.cancel()
+		removeStage(rk, remove)
+	}
+
 	c.gap(10)
+	if len(rk.Stages) < maxStages {
+		if u.Button(dst, c.next(rowH+2), T("setup.addStage"), ButtonNormal) {
+			u.cancel()
+			addStage(rk)
+		}
+	} else {
+		drawText(dst, T("setup.stageLimit"), fontUISm, c.x, c.next(rowH).Y+5, colTextFaint, alignLeft)
+	}
+	c.gap(10)
+}
+
+// addStage puts another stage on top, sized off the one currently on top: a
+// quarter of its mass and thrust, its vacuum Isp throughout, lighting straight
+// after separation. Those are roughly a real launcher's proportions, and the
+// result flies — which a row of zeroes would not, and the point of the button is
+// to get something to edit rather than something to fill in.
+func addStage(rk *sim.Rocket) {
+	if len(rk.Stages) >= maxStages {
+		return
+	}
+
+	prev := sim.Stage{DryMass: 4000, PropMass: 40000, ThrustVac: 400000, IspVac: 340, IspSL: 320}
+	if n := len(rk.Stages); n > 0 {
+		prev = rk.Stages[n-1]
+		// The stage below now has something to separate from, and a separation
+		// that takes no time at all reads as a glitch rather than as staging.
+		if rk.Stages[n-1].SepDelay <= 0 {
+			rk.Stages[n-1].SepDelay = 3
+		}
+	}
+
+	rk.Stages = append(rk.Stages, sim.Stage{
+		DryMass:   math.Max(1, prev.DryMass/4),
+		PropMass:  prev.PropMass / 4,
+		ThrustVac: prev.ThrustVac / 4,
+		IspVac:    prev.IspVac,
+		// An upper stage never sees sea level, so the two figures are the same
+		// one. Inheriting the booster's sea-level penalty would be a lie.
+		IspSL:    prev.IspVac,
+		Throttle: 1,
+		SepDelay: 3,
+		Ignition: sim.IgniteImmediate,
+	})
+}
+
+// removeStage drops stage i and repairs what the editor stops showing for it.
+// The ignition mode only exists for a stage that has something below it to
+// separate from, so a stage promoted to the bottom must forget it: the physics
+// ignores the setting there, and a hidden value that comes back the moment
+// another stage is added is worse than no value.
+func removeStage(rk *sim.Rocket, i int) {
+	if i < 0 || i >= len(rk.Stages) || len(rk.Stages) <= minStages {
+		return
+	}
+	rk.Stages = append(rk.Stages[:i], rk.Stages[i+1:]...)
+	rk.Stages[0].Ignition = sim.IgniteImmediate
+	rk.Stages[0].IgnitionDelay = 0
 }
 
 func (s *SetupScreen) programRows(a *App, dst *ebiten.Image, c *rowCursor) {
@@ -500,7 +586,12 @@ func (s *SetupScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 		})
 	}
 
+	// The stage columns grow with the vehicle, so the width is shared out rather
+	// than fixed: nine columns of 190 px would run under the launch button.
 	colW := 190.0
+	if avail := r.W - 28 - 190; avail > 0 {
+		colW = math.Min(colW, avail/float64(len(stats)))
+	}
 	x := r.X + 14
 	for _, st := range stats {
 		drawText(dst, st.label, fontUISm, x, r.Y+14, colTextFaint, alignLeft)
