@@ -92,6 +92,10 @@ nor too late, which spends everything climbing. The Δv losses panel tells you w
 On the flight screen: `SPACE` pauses, `,` and `.` change the time warp, the wheel zooms, `TAB` moves the
 camera's focus from body to body, `C` puts it back on the vehicle.
 
+The graph screen puts the whole flight on one time axis, which for a lunar mission means four days with
+the ascent in the first two pixels — so the axis drags and zooms, and there is a button for the launch on
+its own.
+
 ![Graphs](docs/graphs.png)
 
 ## Notes

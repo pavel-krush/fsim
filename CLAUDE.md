@@ -268,6 +268,29 @@ orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at 
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
   conic and a trajectory.
 
+## The graph screen's time axis
+
+A flight to the Moon is four days long and its ascent is the first ten minutes. On one axis for the whole
+thing the interesting part is two pixels wide, so the axis moves: `GraphScreen.t0`/`t1` are the visible
+slice, dragged with the mouse, zoomed with the wheel about the instant under the cursor, and reset by two
+buttons — the whole flight, or the ascent up to the verdict.
+
+- **The vertical scales follow the visible range, not the whole flight.** Zoomed into the ascent of a
+  lunar mission, an altitude axis sized by four days of orbit draws the entire launch along the bottom
+  edge. `visibleRange` reaches one sample past each edge so a trace crosses the plot instead of starting
+  inside it.
+- **Traces are decimated by pixel column.** Four days at one sample every five seconds is seventy
+  thousand points, fifty to a pixel; each column is drawn as the range its samples covered, so a max-q
+  spike between two pixels is still a spike and not an average of one.
+- **Zooming holds the anchor still** — the instant under the cursor stays under the cursor, which is what
+  makes a wheel over a plot feel like a wheel over a map. `clampAxis` keeps the range inside the flight
+  and refuses to invert it or to go below a second, which is finer than the history is recorded.
+- **`axisTime` labels at the scale the span deserves**: seconds, then mm:ss, then hours, then days. Seven
+  labels of "227318s" tell you nothing.
+- **An event whose label has nowhere to go gets a tick and no label.** Zoomed out to four days, the whole
+  ascent lands inside two pixels and eight labels used to print on top of each other. The first cut fell
+  back to "the row that clears earliest", which is how the pile-up happened.
+
 ## Manoeuvre nodes and the prediction
 
 The pitch programme is a schedule of angles against the clock, and it is the right tool for an ascent —

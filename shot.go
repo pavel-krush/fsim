@@ -47,6 +47,9 @@ type shotStep struct {
 	// plan drops a flight plan onto the running simulation, which is the only
 	// way a script can show the manoeuvre panel and the predicted path.
 	plan []sim.Node
+	// graphAscent zooms the graph screen's time axis onto the launch, which on a
+	// four-day flight is the first two pixels of it.
+	graphAscent bool
 }
 
 type shotRunner struct {
@@ -88,6 +91,11 @@ func newShotRunner(dir string) *shotRunner {
 			// And after it: two and a half days out, in the Moon's own frame.
 			{name: "8f-lunar-approach", screen: ScreenFlight, advance: 227000, focus: 10, zoom: 0.4},
 			{name: "8g-lunar-flyby", screen: ScreenFlight, advance: 232000, focus: 10, zoom: 3},
+			// Four days of flight on one axis, and then the same axis on the ten
+			// minutes of it that the ascent took.
+			{name: "8h-late", screen: ScreenFlight, advance: 360000, zoom: 0.02},
+			{name: "8i-graphs-lunar", screen: ScreenGraphs, graphs: true},
+			{name: "8j-graphs-ascent", screen: ScreenGraphs, graphs: true, graphAscent: true},
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
@@ -151,6 +159,10 @@ func (sr *shotRunner) step(a *App) bool {
 	}
 	if st.scrollRocket > 0 {
 		a.setup.colRocket.Offset = st.scrollRocket
+	}
+
+	if st.graphAscent && a.graphs != nil {
+		a.graphs.showAscent()
 	}
 
 	switch {
