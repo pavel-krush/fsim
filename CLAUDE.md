@@ -42,6 +42,47 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `screen_graphs.go` | Seven plots on a shared time axis, event ruler, scrubber |
 | `shot.go` | Scripted run for screenshots |
 
+## The system of bodies
+
+The world is a `sim.System`: a flat slice of bodies forming a tree, root at index 0. The root does not
+move. Everything else runs on **Keplerian rails** — `StateAt(i, t)` is analytic, so a jump of three days
+costs no more than a jump of a second and nothing drifts. `Config.System` empty means a system of one
+body built from `Config.Body`, which is what every single-planet configuration is.
+
+- **A body's parent always sits at a lower index.** That one invariant makes a cycle impossible to
+  express, makes every walk up the tree terminate by construction, and leaves the slice in topological
+  order. `Normalize` enforces it, clamping bad data to the root rather than trusting the author.
+- **`Config.Body` is a mirror, not an input, once `New` has run.** It is a copy of
+  `System.Bodies[LaunchBody]`, kept so that everything already reading `Cfg.Body` — the whole interface —
+  still gets the planet being launched from. Edit the system, not the mirror.
+- **The state is measured from `State.Center`**, the deepest body whose sphere of influence contains the
+  vehicle, in a frame that does not rotate with it. Not from the root: heliocentric coordinates are
+  ~1.5e11 m, where float64 resolves 3e-5 m, and the ascent tests assert altitudes to 1e-6 m. They would
+  have failed silently. Body-centred keeps the numbers where they were.
+- **The sphere of influence chooses a frame, not a physics.** Every body pulls at all times.
+- **`refocus` runs first in `postStep`**, so a frame change only ever lands on a step boundary and no
+  reading is ever half in one frame and half in another. The transformation is exact: the same point,
+  written from a different centre.
+- **The rail correction runs up the chain of ancestors and no further.** The frame of a body that is
+  itself on rails is not inertial, so the acceleration the rails give it has to come back out of the
+  gravity sum — otherwise its parent drags the whole picture sideways. A true N-body indirect term sums
+  over *every* perturber; that would contradict the rails, under which a body does not respond to its own
+  children. In the root's frame there is no correction at all, because the root does not move.
+- **The rails use the parent's mu alone,** not the sum of the two masses that exact relative motion would
+  use. Consequence: the rails agree exactly with the parent's real pull at the child's centre, so a
+  vehicle in lunar orbit feels only the tidal residual — and the sidereal month comes out 0.47% long
+  (27.44 days against 27.32). Using the sum reverses the trade: the month is right and a phantom
+  3.3e-5 m/s² appears everywhere near the child. Nobody can see the month; everybody sees an orbit drift.
+- **Known lie, from the same bargain:** with the parent nailed in place, the Moon's pull on a low Earth
+  orbit is uncompensated, so it is some 27× the real tidal effect — 3.3e-5 m/s², periodic rather than
+  secular, and invisible next to 9.8. The fix, if it ever matters, is barycentric rails, where a parent
+  wobbles about the barycentre of each link.
+- **A system of one body is the old single-planet model to the last digit.** `Gravity` returns early for
+  it, keeping the same arithmetic shape, and `TestOneBodySystemIsTheOldModel` pins that. All five presets
+  were checked bit-for-bit across the change, all 17 significant digits of the final state.
+- Only the launch body has an atmosphere. Air on every body waits for a setup screen that can describe
+  it; until then `atmoTop` and the drag lookup return vacuum away from the launch body.
+
 ## Physics — what matters
 
 - **The integrator step is fixed, `sim.FixedStep` = 0.02 s.** Time warp runs more steps per frame rather

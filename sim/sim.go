@@ -54,6 +54,16 @@ type Event struct {
 
 // Config is everything the user typed in on the setup screen.
 type Config struct {
+	// System is the world flown in. Leaving it empty means a system of one
+	// body, built from Body — which is what every single-planet configuration
+	// is, and what keeps the setup screen editing one planet.
+	System System
+	// LaunchBody indexes the body launched from, and Body is a copy of it.
+	// New fills Body in from the system, so after construction it is a mirror
+	// and not an input.
+	LaunchBody int
+	LaunchLon  float64 // rad, the launch site's angle on that body at t = 0
+
 	Body    Body
 	Atmo    Atmosphere
 	Rocket  Rocket
@@ -68,9 +78,14 @@ type Config struct {
 
 // State is the integrated state of the vehicle.
 type State struct {
-	T   float64
-	Pos Vec2
-	Vel Vec2
+	T float64
+	// Pos and Vel are measured from Center, the body whose sphere of influence
+	// the vehicle is in, in a frame that does not rotate with it. Integrating
+	// close to the nearest centre rather than out at the root is what keeps the
+	// coordinates six digits shorter than the float they live in.
+	Pos    Vec2
+	Vel    Vec2
+	Center int
 
 	Prop  []float64 // remaining propellant per stage, kg
 	Stage int       // index of the stage currently attached at the bottom
@@ -91,9 +106,12 @@ type State struct {
 
 // Sample is one recorded point of telemetry.
 type Sample struct {
-	T   float64
-	Pos Vec2
-	Alt float64
+	T float64
+	// Pos is measured from Center, as in State: a recorded track only means
+	// something alongside the body it was measured from.
+	Pos    Vec2
+	Center int
+	Alt    float64
 	// Speed is measured in the inertial frame — the one that matters for
 	// orbit. SurfSpeed, VertSpeed and HorizSpeed are relative to the rotating
 	// ground, which is what the vehicle actually feels during the ascent.
@@ -163,7 +181,17 @@ type Sim struct {
 // New builds a simulation ready to run from the given configuration. The
 // configuration is copied, so the caller can keep editing its own.
 func New(cfg Config) *Sim {
-	cfg.Body.Normalize()
+	if len(cfg.System.Bodies) == 0 {
+		cfg.System.Bodies = []Body{cfg.Body}
+	}
+	cfg.System.Normalize()
+	if cfg.LaunchBody < 0 || cfg.LaunchBody >= len(cfg.System.Bodies) {
+		cfg.LaunchBody = 0
+	}
+	// From here on the system is the truth and Body is its mirror, so that
+	// everything reading Cfg.Body still gets the planet being launched from.
+	cfg.Body = cfg.System.Bodies[cfg.LaunchBody]
+
 	cfg.Atmo.Prepare(cfg.Body.SurfaceG)
 	cfg.Program.Sort()
 
@@ -178,11 +206,12 @@ func New(cfg Config) *Sim {
 
 // Reset returns the vehicle to the pad.
 func (s *Sim) Reset() {
-	r := s.Cfg.Body.Radius
-	w := s.Cfg.Body.AngularVelocity()
+	b := &s.Cfg.System.Bodies[s.Cfg.LaunchBody]
+	w := b.AngularVelocity()
 
 	st := State{
-		Pos:    Vec2{r, 0},
+		Pos:    Vec2{math.Cos(s.Cfg.LaunchLon), math.Sin(s.Cfg.LaunchLon)}.Scale(b.Radius),
+		Center: s.Cfg.LaunchBody,
 		Prop:   make([]float64, len(s.Cfg.Rocket.Stages)),
 		Landed: true,
 	}
@@ -217,8 +246,46 @@ func (s *Sim) Mass() float64 {
 	return m
 }
 
-// Altitude above the surface, m.
-func (s *Sim) Altitude() float64 { return s.St.Pos.Len() - s.Cfg.Body.Radius }
+// Center is the body the state is currently measured from.
+func (s *Sim) Center() *Body { return &s.Cfg.System.Bodies[s.St.Center] }
+
+// RootPos is the vehicle's position relative to the system's root. It is the
+// one frame every body agrees on, so anything comparing across bodies goes
+// through it.
+func (s *Sim) RootPos() Vec2 {
+	p, _ := s.Cfg.System.StateAt(s.St.Center, s.St.T)
+	return p.Add(s.St.Pos)
+}
+
+// atmoTop is the top of the air around the body the state is measured from.
+// Only the launch body has an atmosphere for now: air on every body needs the
+// setup screen to be able to describe it first.
+func (s *Sim) atmoTop() float64 {
+	if s.St.Center == s.Cfg.LaunchBody {
+		return s.Cfg.Atmo.Top
+	}
+	return 0
+}
+
+// refocus moves the state into the frame of whichever body now holds it. The
+// transformation is exact — the same point expressed from a different centre —
+// so nothing about the trajectory changes, only the numbers describing it.
+func (s *Sim) refocus() {
+	sys := &s.Cfg.System
+	if len(sys.Bodies) == 1 {
+		return
+	}
+	want := sys.Frame(s.RootPos(), s.St.T)
+	if want == s.St.Center {
+		return
+	}
+	dp, dv := sys.RelState(s.St.Center, want, s.St.T)
+	s.St.Pos, s.St.Vel = s.St.Pos.Add(dp), s.St.Vel.Add(dv)
+	s.St.Center = want
+}
+
+// Altitude above the surface of the body the state is measured from, m.
+func (s *Sim) Altitude() float64 { return s.St.Pos.Len() - s.Center().Radius }
 
 // MaxQ returns the peak dynamic pressure seen so far and the altitude it
 // happened at.
@@ -415,7 +482,7 @@ func (f forceSet) total() Vec2 { return f.Grav.Add(f.Thrust).Add(f.Drag) }
 // forces evaluates gravity, thrust and drag for a trial state inside a step.
 func (s *Sim) forces(t float64, pos, vel Vec2, ctx burnContext) forceSet {
 	var f forceSet
-	b := &s.Cfg.Body
+	b := s.Center()
 
 	r := pos.Len()
 	if r < 1 {
@@ -426,8 +493,10 @@ func (s *Sim) forces(t float64, pos, vel Vec2, ctx burnContext) forceSet {
 	h := r - b.Radius
 
 	f.Mass = ctx.massAt(t)
-	f.Atmo = s.Cfg.Atmo.State(h)
-	f.Grav = up.Scale(-b.Mu / (r * r))
+	if s.St.Center == s.Cfg.LaunchBody {
+		f.Atmo = s.Cfg.Atmo.State(h)
+	}
+	f.Grav = s.Cfg.System.Gravity(s.St.Center, pos, t)
 
 	// Velocity relative to the rotating atmosphere: what the airframe feels,
 	// and the frame the pitch programme is judged against.
@@ -490,7 +559,7 @@ func (s *Sim) accumulate(f forceSet, ctx burnContext, dt float64) {
 		s.maxQAlt = s.Altitude()
 		s.maxQT = s.St.T
 	}
-	if ag := f.total().Sub(f.Grav).Len() / s.Cfg.Body.SurfaceG; ag > s.maxG {
+	if ag := f.total().Sub(f.Grav).Len() / s.Center().SurfaceG; ag > s.maxG {
 		s.maxG = ag
 	}
 }
@@ -568,7 +637,7 @@ func (s *Sim) checkEnd() {
 	if s.St.Done {
 		return
 	}
-	b := &s.Cfg.Body
+	b := s.Center()
 	alt := s.Altitude()
 
 	// Strictly below the surface: a vehicle still clamped to the pad sits at
@@ -599,7 +668,7 @@ func (s *Sim) checkEnd() {
 		return
 	}
 
-	top := s.Cfg.Atmo.Top
+	top := s.atmoTop()
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
 	case peri >= top:
@@ -644,13 +713,19 @@ func (s *Sim) finish(o Outcome) {
 	s.record()
 }
 
-// postStep updates the running maxima, detects apoapsis and records history.
+// postStep hands the state to whichever body now holds it, updates the running
+// maxima, detects apoapsis and records history.
 func (s *Sim) postStep() {
+	// First, because every reading below is relative to the centre. A frame
+	// change only ever happens on a step boundary, so nothing is ever half in
+	// one frame and half in another.
+	s.refocus()
+
 	alt := s.Altitude()
 	if alt > s.maxAlt {
 		s.maxAlt = alt
 	}
-	if !s.reachedSpace && alt > s.Cfg.Atmo.Top {
+	if !s.reachedSpace && alt > s.atmoTop() {
 		s.reachedSpace = true
 	}
 
@@ -747,7 +822,7 @@ func (s *Sim) record() {
 
 // Telemetry snapshots everything worth displaying about the current state.
 func (s *Sim) Telemetry() Telemetry {
-	b := &s.Cfg.Body
+	b := s.Center()
 	var t Telemetry
 
 	ctx := burnContext{m0: s.Mass(), t0: s.St.T}
@@ -764,6 +839,7 @@ func (s *Sim) Telemetry() Telemetry {
 
 	t.T = s.St.T
 	t.Pos = s.St.Pos
+	t.Center = s.St.Center
 	t.Alt = s.Altitude()
 	t.Speed = s.St.Vel.Len()
 	t.SurfSpeed = f.RelSpeed
@@ -810,24 +886,39 @@ func (s *Sim) Telemetry() Telemetry {
 	// Downrange distance along the surface from the launch pad, following the
 	// ground rather than the chord. The pad moves: measuring against its fixed
 	// inertial angle would report the planet's own rotation as downrange, so
-	// the launch site's angle is advanced by omega*t first.
-	ang := s.St.Pos.Angle() - (s.launchAngle + b.AngularVelocity()*s.St.T)
+	// the launch site's angle is advanced by omega*t first. It is measured on
+	// the launch body, which is not necessarily the one the state is centred
+	// on any more.
+	lb := &s.Cfg.System.Bodies[s.Cfg.LaunchBody]
+	rel := s.St.Pos
+	if s.St.Center != s.Cfg.LaunchBody {
+		d, _ := s.Cfg.System.RelState(s.St.Center, s.Cfg.LaunchBody, s.St.T)
+		rel = rel.Add(d)
+	}
+	ang := rel.Angle() - (s.launchAngle + lb.AngularVelocity()*s.St.T)
 	for ang > math.Pi {
 		ang -= 2 * math.Pi
 	}
 	for ang < -math.Pi {
 		ang += 2 * math.Pi
 	}
-	t.Downrange = math.Abs(ang) * b.Radius
+	t.Downrange = math.Abs(ang) * lb.Radius
 
 	return t
 }
 
-// PadPos is where the launch site is right now, in inertial coordinates. It
-// rides around with the planet, so it is only under the vehicle at T+0.
+// PadPos is where the launch site is right now, in the same frame as the state:
+// measured from whichever body currently holds the vehicle. It rides around with
+// its planet, so it is only under the vehicle at T+0.
 func (s *Sim) PadPos() Vec2 {
-	a := s.launchAngle + s.Cfg.Body.AngularVelocity()*s.St.T
-	return Vec2{math.Cos(a), math.Sin(a)}.Scale(s.Cfg.Body.Radius)
+	lb := &s.Cfg.System.Bodies[s.Cfg.LaunchBody]
+	a := s.launchAngle + lb.AngularVelocity()*s.St.T
+	pad := Vec2{math.Cos(a), math.Sin(a)}.Scale(lb.Radius)
+	if s.St.Center != s.Cfg.LaunchBody {
+		d, _ := s.Cfg.System.RelState(s.Cfg.LaunchBody, s.St.Center, s.St.T)
+		pad = pad.Add(d)
+	}
+	return pad
 }
 
 // GroundFrame maps an inertial position recorded at time t into the frame that
@@ -836,7 +927,7 @@ func (s *Sim) PadPos() Vec2 {
 // straight off the pad instead of a 6 km sideways drift — the vehicle carries
 // the launch site's eastward velocity, which is real but unhelpful to look at.
 func (s *Sim) GroundFrame(p Vec2, t float64) Vec2 {
-	w := s.Cfg.Body.AngularVelocity()
+	w := s.Cfg.System.Bodies[s.Cfg.LaunchBody].AngularVelocity()
 	if w == 0 {
 		return p
 	}

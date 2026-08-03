@@ -1,0 +1,339 @@
+package sim
+
+import (
+	"math"
+	"testing"
+)
+
+// earthMoon is the smallest system that exercises everything a tree has to do:
+// a root with a satellite heavy enough — 1/81 of it — that ignoring the details
+// shows up in the numbers.
+func earthMoon() System {
+	sys := System{Bodies: []Body{
+		{
+			Name: "Earth", Radius: 6371000,
+			MassSource: FromMass, Mass: 5.97237e24, RotationPeriod: 86164.1,
+		},
+		{
+			Name: "Moon", Radius: 1737400,
+			MassSource: FromMass, Mass: 7.342e22, RotationPeriod: 2360591,
+			Parent: 0, SemiMajor: 3.844e8,
+		},
+	}}
+	sys.Normalize()
+	return sys
+}
+
+// A circular rail must produce exactly circular motion: constant radius, the
+// circular speed at that radius, and a position that comes back to where it
+// started after one period.
+func TestCircularRailsStayCircular(t *testing.T) {
+	sys := earthMoon()
+	moon := &sys.Bodies[1]
+	mu := sys.Bodies[0].Mu
+	a := moon.SemiMajor
+	period := 2 * math.Pi * math.Sqrt(a*a*a/mu)
+
+	for _, f := range []float64{0, 0.1, 0.25, 0.5, 0.75, 0.999} {
+		p, v := sys.StateAt(1, f*period)
+		close(t, "radius", p.Len(), a, 1e-12)
+		close(t, "speed", v.Len(), math.Sqrt(mu/a), 1e-12)
+		// Circular motion has velocity square to the radius throughout.
+		close(t, "radial velocity", p.Unit().Dot(v), 0, 1e-6)
+	}
+
+	p0, v0 := sys.StateAt(1, 0)
+	p1, v1 := sys.StateAt(1, period)
+	close(t, "position after one period", p1.Sub(p0).Len(), 0, 1e-3)
+	close(t, "velocity after one period", v1.Sub(v0).Len(), 0, 1e-9)
+}
+
+// The Moon's month comes out of the rails, and it comes out 0.47% long on
+// purpose: the rails run on the parent's mu alone, which is the price of the
+// frame agreeing exactly with the parent's pull at the Moon's centre. The real
+// sidereal month is 27.32 days.
+func TestMoonRailsRunTheModelMonth(t *testing.T) {
+	sys := earthMoon()
+	a := sys.Bodies[1].SemiMajor
+	period := 2 * math.Pi * math.Sqrt(a*a*a/sys.Bodies[0].Mu)
+
+	close(t, "sidereal month", period/86400, 27.44, 1e-3)
+	if real := 27.321661; math.Abs(period/86400-real)/real > 0.006 {
+		t.Errorf("month = %.3f days, further than 0.6%% from the real %.3f",
+			period/86400, real)
+	}
+	// The sphere of influence follows from the mass ratio: 66,100 km in the
+	// tables, and the tables are using the same formula.
+	close(t, "lunar sphere of influence", sys.Bodies[1].SOI, 6.61e7, 0.02)
+	if !math.IsInf(sys.Bodies[0].SOI, 1) {
+		t.Errorf("the root's sphere of influence is %g, want unbounded", sys.Bodies[0].SOI)
+	}
+}
+
+// An eccentric rail has to conserve what a two-body orbit conserves. This is
+// what catches a wrong velocity formula, which a circular test cannot: at e = 0
+// several wrong expressions agree with the right one.
+func TestEccentricRailsConserveEnergyAndMomentum(t *testing.T) {
+	sys := earthMoon()
+	sys.Bodies[1].Ecc = 0.5
+	sys.Bodies[1].ArgPeri = 0.7
+	sys.Normalize()
+
+	mu := sys.Bodies[0].Mu
+	a, e := sys.Bodies[1].SemiMajor, sys.Bodies[1].Ecc
+	period := 2 * math.Pi * math.Sqrt(a*a*a/mu)
+
+	wantEnergy := -mu / (2 * a)
+	wantMomentum := math.Sqrt(mu * a * (1 - e*e))
+	var rMin, rMax float64 = math.Inf(1), 0
+
+	for i := 0; i <= 400; i++ {
+		p, v := sys.StateAt(1, period*float64(i)/400)
+		r, s := p.Len(), v.Len()
+		close(t, "specific energy", s*s/2-mu/r, wantEnergy, 1e-9)
+		close(t, "specific angular momentum", math.Abs(p.Cross(v)), wantMomentum, 1e-9)
+		rMin, rMax = math.Min(rMin, r), math.Max(rMax, r)
+	}
+	close(t, "periapsis", rMin, a*(1-e), 1e-4)
+	close(t, "apoapsis", rMax, a*(1+e), 1e-4)
+
+	// Periapsis has to point where ArgPeri says it does.
+	p, _ := sys.StateAt(1, 0)
+	close(t, "periapsis direction", p.Angle(), 0.7, 1e-9)
+}
+
+// The sphere of influence decides which body the state is measured from, and
+// nothing else. Deepest containing body wins.
+func TestFrameFollowsTheSpheresOfInfluence(t *testing.T) {
+	sys := earthMoon()
+	moonPos, _ := sys.StateAt(1, 0)
+	soi := sys.Bodies[1].SOI
+
+	cases := []struct {
+		name string
+		pos  Vec2
+		want int
+	}{
+		{"on the pad", Vec2{6371000, 0}, 0},
+		{"in low orbit", Vec2{6871000, 0}, 0},
+		{"most of the way to the Moon", moonPos.Scale(0.8), 0},
+		{"just outside the lunar sphere", moonPos.Scale(1 - 1.01*soi/moonPos.Len()), 0},
+		{"just inside it", moonPos.Scale(1 - 0.99*soi/moonPos.Len()), 1},
+		{"in low lunar orbit", moonPos.Add(Vec2{0, 1.9e6}), 1},
+		{"beyond the Moon entirely", moonPos.Scale(4), 0},
+	}
+	for _, c := range cases {
+		if got := sys.Frame(c.pos, 0); got != c.want {
+			t.Errorf("%s: frame = %d (%s), want %d (%s)",
+				c.name, got, sys.Bodies[got].Name, c.want, sys.Bodies[c.want].Name)
+		}
+	}
+}
+
+// Changing frame must not move the vehicle. The state is the same point and the
+// same velocity, written down from a different centre.
+func TestRefocusIsExact(t *testing.T) {
+	cfg := Config{
+		System: earthMoon(),
+		Rocket: Rocket{Payload: 1000, Diameter: 1},
+	}
+	s := New(cfg)
+
+	moonPos, moonVel := s.Cfg.System.StateAt(1, 0)
+	// A hundred kilometres inside the lunar sphere, drifting past the Moon.
+	s.St.Pos = moonPos.Sub(moonPos.Unit().Scale(s.Cfg.System.Bodies[1].SOI - 1e5))
+	s.St.Vel = Vec2{200, 900}
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	beforePos := s.RootPos()
+	_, cv := s.Cfg.System.StateAt(s.St.Center, s.St.T)
+	beforeVel := cv.Add(s.St.Vel)
+
+	s.refocus()
+	if s.St.Center != 1 {
+		t.Fatalf("still centred on %s", s.Center().Name)
+	}
+	afterPos := s.RootPos()
+	_, cv = s.Cfg.System.StateAt(s.St.Center, s.St.T)
+	afterVel := cv.Add(s.St.Vel)
+
+	close(t, "root position across the change", afterPos.Sub(beforePos).Len(), 0, 1e-6)
+	close(t, "root velocity across the change", afterVel.Sub(beforeVel).Len(), 0, 1e-9)
+	// And the new numbers are the ones the Moon would give.
+	close(t, "distance from the Moon", s.St.Pos.Len(), s.Cfg.System.Bodies[1].SOI-1e5, 1e-9)
+	close(t, "speed relative to the Moon", s.St.Vel.Len(), Vec2{200, 900}.Sub(moonVel).Len(), 1e-9)
+}
+
+// In a moon's frame the parent's pull is nearly all cancelled by the frame's own
+// acceleration, leaving the tidal difference. Without the rail correction the
+// Earth's raw 2.7 mm/s^2 would stand there in full and quietly drag every lunar
+// orbit sideways.
+func TestMoonFrameLeavesOnlyTheTide(t *testing.T) {
+	sys := earthMoon()
+	earthPullAtTheMoon := sys.Bodies[0].Mu / (3.844e8 * 3.844e8)
+
+	// The Moon sits on the +X axis at t = 0, so these two offsets are along the
+	// Earth-Moon line and across it. The tide is twice as strong along the line
+	// as across it, and the two signs differ: that is the whole shape of the
+	// tidal field, and getting it out of one formula is what pins the correction.
+	const r = 1.8374e6 // a low lunar orbit, 100 km up
+	tide := sys.Bodies[0].Mu * r / math.Pow(3.844e8, 3)
+
+	for _, c := range []struct {
+		name string
+		rel  Vec2
+		want float64
+	}{
+		{"along the Earth-Moon line", Vec2{r, 0}, 2 * tide},
+		{"across it", Vec2{0, r}, tide},
+	} {
+		acc := sys.Gravity(1, c.rel, 0)
+		central := c.rel.Unit().Scale(-sys.Bodies[1].Mu / c.rel.Dot(c.rel))
+		residual := acc.Sub(central).Len()
+
+		close(t, "tidal residual "+c.name, residual, c.want, 0.02)
+		if residual > earthPullAtTheMoon/50 {
+			t.Errorf("%s: residual %g m/s^2 is a sizeable part of the Earth's %g, so the rail correction is not doing its job",
+				c.name, residual, earthPullAtTheMoon)
+		}
+	}
+}
+
+// The root does not move, so in its frame there is no correction to make and
+// gravity is the plain sum of what every body pulls with.
+func TestRootFrameGravityIsThePlainSum(t *testing.T) {
+	sys := earthMoon()
+	pos := Vec2{3e7, 1e7}
+	moonPos, _ := sys.StateAt(1, 1e5)
+
+	got := sys.Gravity(0, pos, 1e5)
+
+	r := pos.Len()
+	want := pos.Scale(1 / r).Scale(-sys.Bodies[0].Mu / (r * r))
+	d := moonPos.Sub(pos)
+	dl := d.Len()
+	want = want.Add(d.Scale(sys.Bodies[1].Mu / (dl * dl * dl)))
+
+	close(t, "acceleration in the root frame", got.Sub(want).Len(), 0, 1e-12)
+}
+
+// A system of one body has to be the single-planet model to the last digit, or
+// every ascent in the presets quietly changes.
+func TestOneBodySystemIsTheOldModel(t *testing.T) {
+	b := Body{Radius: 6371000, MassSource: FromMass, Mass: 5.97237e24}
+	sys := System{Bodies: []Body{b}}
+	sys.Normalize()
+
+	for _, pos := range []Vec2{{6371000, 0}, {7e6, 3e6}, {-1e8, 4e7}} {
+		r := pos.Len()
+		want := pos.Scale(1 / r).Scale(-sys.Bodies[0].Mu / (r * r))
+		got := sys.Gravity(0, pos, 12345)
+		if got != want {
+			t.Errorf("gravity at %v = %v, want exactly %v", pos, got, want)
+		}
+	}
+}
+
+// The parent invariant is what makes a cycle impossible, so Normalize has to
+// enforce it rather than trust the data.
+func TestNormalizeRepairsTheParentInvariant(t *testing.T) {
+	sys := System{Bodies: []Body{
+		{Name: "Sun", Radius: 7e8, MassSource: FromMass, Mass: 1.989e30, Parent: 3},
+		{Name: "forward reference", Radius: 1e6, MassSource: FromMass, Mass: 1e22, Parent: 2, SemiMajor: 1e9},
+		{Name: "self reference", Radius: 1e6, MassSource: FromMass, Mass: 1e22, Parent: 2, SemiMajor: 1e9},
+		{Name: "fine", Radius: 1e6, MassSource: FromMass, Mass: 1e22, Parent: 1, SemiMajor: 1e8},
+	}}
+	sys.Normalize()
+
+	if sys.Bodies[0].Parent != -1 {
+		t.Errorf("root parent = %d, want -1", sys.Bodies[0].Parent)
+	}
+	for i, want := range []int{-1, 0, 0, 1} {
+		if got := sys.Bodies[i].Parent; got != want {
+			t.Errorf("body %d (%s) parent = %d, want %d", i, sys.Bodies[i].Name, got, want)
+		}
+	}
+	// Every walk up the tree now terminates, which is the whole point.
+	for i := range sys.Bodies {
+		p, _ := sys.StateAt(i, 1000)
+		if math.IsNaN(p.X) || math.IsNaN(p.Y) {
+			t.Errorf("body %d has no finite position", i)
+		}
+	}
+}
+
+// Kepler's equation has to be inverted for every eccentricity the rails allow,
+// and the answer is only right if it puts E back where M came from.
+func TestSolveKeplerInverts(t *testing.T) {
+	for _, e := range []float64{0, 0.01, 0.2, 0.5, 0.8, 0.95} {
+		for i := range 32 {
+			m := -math.Pi + 2*math.Pi*float64(i)/31
+			E := solveKepler(m, e)
+			if got := E - e*math.Sin(E); math.Abs(got-m) > 1e-9 {
+				t.Errorf("e=%g, M=%g: E=%g gives M=%g back", e, m, E, got)
+			}
+		}
+	}
+}
+
+// The frame change has to happen inside the step loop, not just when asked for
+// by hand: a coast that crosses into the Moon's sphere must come out the other
+// side measured from the Moon, with the crossing marked by nothing at all.
+func TestCoastCrossesIntoTheLunarSphere(t *testing.T) {
+	sys := earthMoon()
+	s := New(Config{System: sys, Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+
+	moonPos, moonVel := sys.StateAt(1, 0)
+	// Five thousand kilometres short of the sphere, drifting inwards along the
+	// Earth-Moon line at the Moon's own pace plus a little.
+	toMoon := moonPos.Unit()
+	s.St.Pos = moonPos.Sub(toMoon.Scale(sys.Bodies[1].SOI + 5e6))
+	s.St.Vel = moonVel.Add(toMoon.Scale(500))
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	if s.St.Center != 0 {
+		t.Fatalf("started centred on %s", s.Center().Name)
+	}
+	for s.St.Center == 0 && s.St.T < 40000 && !s.St.Done {
+		s.Step(FixedStep)
+	}
+	if s.St.Center != 1 {
+		t.Fatalf("never entered the lunar sphere: centred on %s at T+%.0f s",
+			s.Center().Name, s.St.T)
+	}
+	// It crossed the boundary, so it is at the boundary — the frame change is a
+	// change of description, not a jump.
+	close(t, "distance from the Moon at the crossing", s.St.Pos.Len(), sys.Bodies[1].SOI, 1e-4)
+}
+
+// A low lunar orbit has to stay one. This is the dynamic version of the tidal
+// test: without the rail correction the Earth's 2.7 mm/s^2 would add 19 m/s over
+// a single revolution and the orbit would visibly walk away.
+func TestLowLunarOrbitHolds(t *testing.T) {
+	sys := earthMoon()
+	s := New(Config{System: sys, Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+
+	moon := &sys.Bodies[1]
+	r := moon.Radius + 100000
+	s.St.Center = 1
+	s.St.Pos = Vec2{0, r}
+	s.St.Vel = Vec2{math.Sqrt(moon.Mu / r), 0}
+	s.St.Landed = false
+	s.St.Phase = PhaseCoast
+
+	o0 := ComputeOrbit(s.St.Pos, s.St.Vel, moon.Mu)
+	for n := int(o0.Period / FixedStep); n > 0 && !s.St.Done; n-- {
+		s.Step(FixedStep)
+	}
+	if s.St.Center != 1 {
+		t.Fatalf("lost the Moon: centred on %s", s.Center().Name)
+	}
+
+	o1 := ComputeOrbit(s.St.Pos, s.St.Vel, moon.Mu)
+	close(t, "semi-major axis after one lunar revolution", o1.SemiMajor, o0.SemiMajor, 1e-4)
+	if o1.Eccentricity > 0.002 {
+		t.Errorf("eccentricity walked to %g over one revolution", o1.Eccentricity)
+	}
+}

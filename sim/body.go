@@ -25,8 +25,9 @@ const (
 	FromSurfaceG
 )
 
-// Body is the planet we launch from. Only Radius plus one of Mass/Density/
-// SurfaceG is meaningful input; call Normalize to fill in the rest.
+// Body is one body of a System: a planet, a moon, or the star at the root. Only
+// Radius plus one of Mass/Density/SurfaceG is meaningful input; call Normalize
+// to fill in the rest.
 type Body struct {
 	Name   string
 	Radius float64 // m
@@ -38,7 +39,18 @@ type Body struct {
 
 	RotationPeriod float64 // s, sidereal; 0 means non-rotating
 
-	Mu float64 // m^3/s^2, standard gravitational parameter, derived
+	// Parent is the index of the body this one orbits, and is always lower than
+	// this body's own index. The root has -1, which System.Normalize sets.
+	Parent int
+	// The orbit about the parent, in the one plane everything shares. A body
+	// with no semi-major axis sits on its parent's centre and stays there.
+	SemiMajor float64 // m
+	Ecc       float64
+	ArgPeri   float64 // rad, where periapsis points
+	MeanAnom0 float64 // rad, mean anomaly at t = 0
+
+	Mu  float64 // m^3/s^2, standard gravitational parameter, derived
+	SOI float64 // m, radius of the sphere of influence, derived
 }
 
 // Normalize derives the dependent quantities from Radius and MassSource.
