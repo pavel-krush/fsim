@@ -78,7 +78,7 @@ func earthFalcon() Preset {
 		Name: "earth-falcon",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Earth",
+				Name:           "earth",
 				Radius:         6371000,
 				MassSource:     FromMass,
 				Mass:           5.97237e24,
@@ -144,7 +144,7 @@ func apolloSaturn() Preset {
 		Name: "apollo-saturn",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Earth",
+				Name:           "earth",
 				Radius:         6371000,
 				MassSource:     FromMass,
 				Mass:           5.97237e24,
@@ -157,6 +157,23 @@ func apolloSaturn() Preset {
 				SurfacePressure: 101325,
 				Top:             140000,
 			},
+			// The Moon is in this system because the mission was going there. It
+			// pulls on the ascent as well as sitting in the picture — some
+			// 3.3e-5 m/s^2, which moves the insertion by centimetres — and its
+			// phase at liftoff puts it off to one side rather than dead ahead
+			// when the camera pulls back.
+			System: System{Bodies: []Body{
+				{
+					Name: "earth", Radius: 6371000,
+					MassSource: FromMass, Mass: 5.97237e24, RotationPeriod: 86164.1,
+				},
+				{
+					Name: "moon", Radius: 1737400,
+					MassSource: FromMass, Mass: 7.342e22, RotationPeriod: 2360591,
+					Parent: 0, SemiMajor: 3.844e8, Ecc: 0.0549,
+					ArgPeri: 0.5, MeanAnom0: 0.9,
+				},
+			}},
 			Rocket: Rocket{
 				// The spacecraft: command and service module 28.8 t, lunar module
 				// 15.1 t, spacecraft/LM adapter 1.8 t. The escape tower is not
@@ -223,7 +240,7 @@ func marsAscent() Preset {
 		Name: "mars",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Mars",
+				Name:           "mars",
 				Radius:         3389500,
 				MassSource:     FromMass,
 				Mass:           6.4171e23,
@@ -281,7 +298,7 @@ func moonAscent() Preset {
 		Name: "moon",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Moon",
+				Name:           "moon",
 				Radius:         1737400,
 				MassSource:     FromMass,
 				Mass:           7.342e22,
@@ -338,7 +355,7 @@ func kerbin() Preset {
 		Name: "kerbin",
 		Cfg: Config{
 			Body: Body{
-				Name:           "Kerbin",
+				Name:           "kerbin",
 				Radius:         600000,
 				MassSource:     FromMass,
 				Mass:           5.2915158e22,

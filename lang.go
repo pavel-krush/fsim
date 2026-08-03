@@ -168,6 +168,23 @@ func phaseText(p sim.Phase) string {
 	}
 }
 
+// bodyName turns a body identifier into display text. Like preset names, what a
+// body is called is a presentation decision: sim only carries the identifier.
+func bodyName(key string) string {
+	switch key {
+	case "earth":
+		return T("body.earth")
+	case "moon":
+		return T("body.moon")
+	case "mars":
+		return T("body.mars")
+	case "kerbin":
+		return T("body.kerbin")
+	default:
+		return key
+	}
+}
+
 // presetName turns a preset identifier into display text.
 func presetName(key string) string {
 	switch key {

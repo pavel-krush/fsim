@@ -35,6 +35,13 @@ type shotStep struct {
 	// stages a two-stage preset does not have.
 	stages       int
 	scrollRocket float64
+	// zoom multiplies the camera's automatic scale and focus pins a body, which
+	// is how the ladder from the pad out to the Moon gets captured: neither is
+	// reachable without a mouse and a Tab key. focus is one-based, because the
+	// zero value has to mean "leave it on the vehicle" and body zero is a
+	// perfectly good thing to look at.
+	zoom  float64
+	focus int
 }
 
 type shotRunner struct {
@@ -64,6 +71,11 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "7-orbit", screen: ScreenFlight, advance: 900},
 			{name: "7b-orbiting", screen: ScreenFlight, advance: 12000},
 			{name: "8-graphs", screen: ScreenGraphs, graphs: true},
+			// The ladder of scales, all of the same instant in the same flight:
+			// the pad, the planet, the Moon's orbit, and the Moon itself.
+			{name: "8a-zoom-planet", screen: ScreenFlight, zoom: 0.15},
+			{name: "8b-zoom-system", screen: ScreenFlight, zoom: 0.015},
+			{name: "8c-focus-moon", screen: ScreenFlight, focus: 2},
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
@@ -101,6 +113,15 @@ func (sr *shotRunner) step(a *App) bool {
 		a.flight.s.FastForward(st.advance)
 		// Snap the camera instead of easing, so the capture is not mid-zoom.
 		a.flight.cam.Scale = 0
+	}
+
+	if a.flight != nil {
+		a.flight.zoomBias = 1
+		if st.zoom > 0 {
+			a.flight.zoomBias = st.zoom
+		}
+		a.flight.focus = st.focus - 1
+		a.flight.cam.Scale = 0 // snap, so the capture is not mid-zoom
 	}
 
 	for st.stages > 0 && len(a.cfg.Rocket.Stages) > st.stages {

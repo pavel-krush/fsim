@@ -981,16 +981,3 @@ func (s *Sim) PadPos() Vec2 {
 	}
 	return pad
 }
-
-// GroundFrame maps an inertial position recorded at time t into the frame that
-// rotates with the planet, expressed as of the current instant. The trajectory
-// view draws the flown path through this so that a launch reads as a climb
-// straight off the pad instead of a 6 km sideways drift — the vehicle carries
-// the launch site's eastward velocity, which is real but unhelpful to look at.
-func (s *Sim) GroundFrame(p Vec2, t float64) Vec2 {
-	w := s.Cfg.System.Bodies[s.Cfg.LaunchBody].AngularVelocity()
-	if w == 0 {
-		return p
-	}
-	return p.Rotate(w * (s.St.T - t))
-}

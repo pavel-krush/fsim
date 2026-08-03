@@ -40,6 +40,12 @@ usually the most interesting number on the screen.
 take thirteen million fixed steps takes a few hundred and the time warp goes to a million. Anything with
 an engine running or air outside stays on the fixed step, and at ×1 so does everything else.
 
+**The system.** Bodies form a tree — a root that does not move, and moons and planets on Keplerian rails
+about their parents. They all pull on the vehicle at once, and the state is kept relative to whichever
+body's sphere of influence it is in, so the numbers stay small near a body and the telemetry stays
+meaningful. The camera can be pulled back from the launch pad to the Moon's orbit, ten orders of magnitude
+of zoom, and pinned to any body with `TAB` to watch an approach from there.
+
 ![Flight screen](docs/flight.png)
 
 ## Presets

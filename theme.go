@@ -39,6 +39,13 @@ var (
 	colOrbit    = color.NRGBA{0x8a, 0x6f, 0xd0, 0xff}
 	colTarget   = color.NRGBA{0x4f, 0x45, 0x77, 0xff}
 	colGrid     = color.NRGBA{0x1e, 0x27, 0x33, 0xff}
+
+	// Bodies other than the one being flown at: a moon is grey rock at any
+	// distance, and its rail is faint enough not to compete with the trajectory.
+	colBody     = color.NRGBA{0x5a, 0x5f, 0x6b, 0xff}
+	colBodyHi   = color.NRGBA{0x8b, 0x92, 0xa1, 0xff}
+	colRail     = color.NRGBA{0x2e, 0x3a, 0x4c, 0xff}
+	colBodyText = color.NRGBA{0x93, 0x9c, 0xab, 0xff}
 )
 
 // The plot series colours, kept distinguishable in the graph screen.

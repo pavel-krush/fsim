@@ -179,8 +179,8 @@ first 15 seconds while climbing 400 m. Physically correct, reads as the rocket b
 
 - **Downrange** is measured from the pad in the frame rotating with the planet: the launch site's angle
   is advanced by `ω·t`. Without that the field reported the planet's own rotation as distance flown.
-- **The trail and the event markers** are drawn through `Sim.GroundFrame` — a sample taken at time `t`
-  is rotated forward by `ω·(T−t)`. The current point does not move, so the orbit ellipse and the rings,
+- **The trail and the event markers** are drawn through `FlightScreen.trackPoint` — a sample taken at
+  time `t` is shifted into the frame being drawn *as of its own time*, then rotated forward by `ω·(T−t)`. The current point does not move, so the orbit ellipse and the rings,
   which all refer to instant `T`, stay consistent. In orbit the trail lags the ellipse by `ω·T` (2° over
   500 s) — that is the ground track, and it should.
 - **`Telemetry.Speed` is inertial; `SurfSpeed`/`VertSpeed`/`HorizSpeed` are relative to the ground.**
@@ -194,7 +194,7 @@ binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A picker
 header and in the bottom bars of the flight and graph screens.
 
 - **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
-  presets an identifier (`earth-falcon`). Labels come from `lang.go`. The physics must not know about
+  presets an identifier (`earth-falcon`), bodies likewise (`earth`, `moon` — `bodyName` translates them). Labels come from `lang.go`. The physics must not know about
   language.
 - **A missing key renders as the key itself, not as nothing**, so a typo shows up the moment the screen
   is opened. The same goes for a format string that lost a verb: `Sprintf` does not panic, it writes
@@ -218,10 +218,45 @@ header and in the bottom bars of the flight and graph screens.
 - A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
   every key it is missing.
 
+## Looking at it — frames, focus and scale
+
+The picture is built around one body: `FlightScreen.frameBody()`, which follows the vehicle's own sphere
+of influence by default and can be pinned to any body with Tab. Everything drawn goes through
+`framePoint(p, from, t)`, which shifts a position measured from one body into the frame of another **at
+the time it was measured**.
+
+- **A moon has to be drawn in its own frame or it cannot be looked at.** In the launch body's frame the
+  Moon crosses the screen at a kilometre a second; centring on it makes the approach readable, and it is
+  the same reason the trail's shape depends on the frame — a transfer looks different around the Earth
+  and around the Moon, and both are true.
+- **The shift is taken at the sample's own time**, not the current one. A track relative to a moving body
+  is a sequence of "where was it relative to the body *then*", which is what "in the Moon's frame" means.
+- **The camera lets go of the local vertical as it pulls back**, on the same ramp that slides the focus
+  from the vehicle to the planet's centre — standing on a planet becomes looking at one over the same
+  stretch. Held all the way out the picture would spin with the orbit, a full turn every five seconds at
+  ×1000. It is written as `Rot += (1-u)·angleDelta(Rot, want)`, so at `u = 0` it is still exactly "point
+  the vertical at the top of the screen", and the shortest-path delta is what stops the wrap through π
+  from flipping the world over. Multiplying an accumulated angle by `(1-u)` does not work: with a few
+  hundred radians on the clock, a 0.01 change in `u` is a full revolution of jolt.
+- **The zoom ladder is ten orders of magnitude**, from a 1.5 km view of the pad to the whole system, so
+  `zoomBias` runs from 1e-7. The automatic scale is still vehicle-driven; the wheel is what reaches the
+  ends.
+- **Every body draws at the detail its pixel radius earns**: under 1.5 px a labelled dot, up to
+  `maxRingPx` a disc, beyond that the flat-band mode. A moon you cannot see is a moon you cannot aim at,
+  so the dot has a floor of 2 px and a name under it — under, not beside, because beside is where the
+  launch pad puts its own label.
+- **Only the launch body has air to draw**, which is the same limitation the physics has.
+- **Rails are drawn before bodies**, so a body sits on top of its own orbit, and only when the orbit is
+  between 24 px and `maxRingPx` across — smaller is unreadable, larger is a straight line.
+- **Event labels stop stacking after `maxStackedLabels`.** Zoomed out to the Moon's orbit every event of
+  the flight lands on the same pixel, and the old stepping turned into a wall of text down the screen.
+- **A body focus centres on the body, not on the vehicle**, and frames it by its sphere of influence
+  rather than its radius: the sphere is what an approach is aiming at.
+
 ## Rendering — traps
 
 - **The camera is rotated:** `Camera.Rot` is the angle of the local vertical, so "up" on screen points
-  away from the planet. The launch site sits on the +X axis, and without the rotation the ascent would
+  away from the planet — but only while zoomed in; see the frames section below for how it lets go. The launch site sits on the +X axis, and without the rotation the ascent would
   look like sideways flight. Push directions (thrust vector, surface tangent) through `Camera.Dir`, not
   through `(v.X, -v.Y)`.
 - **Two world modes.** While the planet's radius in pixels is under `maxRingPx`, the ground and the

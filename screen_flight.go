@@ -27,10 +27,59 @@ type FlightScreen struct {
 	cam       Camera
 	manualCam bool
 	zoomBias  float64 // user zoom multiplier on top of the automatic scale
+
+	// focus is the body the picture is built around: -1 follows the vehicle and
+	// whatever body currently holds it, which is the default and what the
+	// simulator has always done. Anything else pins a body from the system and
+	// draws the world from there, which is the only way to watch a moon at all —
+	// in the launch body's frame it crosses the screen at a kilometre a second.
+	focus int
+}
+
+// frameBody is the body at the origin of the drawn world.
+func (f *FlightScreen) frameBody() int {
+	if f.focus < 0 || f.focus >= len(f.s.Cfg.System.Bodies) {
+		return f.s.St.Center
+	}
+	return f.focus
+}
+
+// framePoint maps a position measured from body `from` at time t into the frame
+// the picture is drawn in. The shift is taken at the sample's own time, because
+// that is where the bodies were then: a track relative to a moving body is what
+// "in the Moon's frame" means, and it is a different shape from the same track
+// drawn around the Earth.
+func (f *FlightScreen) framePoint(p sim.Vec2, from int, t float64) sim.Vec2 {
+	center := f.frameBody()
+	if from == center {
+		return p
+	}
+	d, _ := f.s.Cfg.System.RelState(from, center, t)
+	return p.Add(d)
+}
+
+// trackPoint maps a recorded sample into the drawn frame and turns it forward
+// with the frame body's rotation, so that a launch reads as a climb off the pad
+// instead of the 6 km sideways drift the inertial frame shows: the vehicle
+// carries the launch site's eastward velocity, which is real but unhelpful to
+// look at. In orbit the track lags the ellipse by omega*T — that is the ground
+// track, and it should.
+func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
+	p := f.framePoint(sm.Pos, sm.Center, sm.T)
+	w := f.s.Cfg.System.Bodies[f.frameBody()].AngularVelocity()
+	if w == 0 {
+		return p
+	}
+	return p.Rotate(w * (f.s.St.T - sm.T))
+}
+
+// vehiclePos is where the vehicle is in the drawn frame, now.
+func (f *FlightScreen) vehiclePos() sim.Vec2 {
+	return f.framePoint(f.s.St.Pos, f.s.St.Center, f.s.St.T)
 }
 
 func NewFlightScreen(s *sim.Sim) *FlightScreen {
-	f := &FlightScreen{s: s, zoomBias: 1}
+	f := &FlightScreen{s: s, zoomBias: 1, focus: -1}
 	f.cam.Scale = 0
 	return f
 }
@@ -76,13 +125,29 @@ func (f *FlightScreen) handleKeys(u *UI) {
 	if u.keyPressed(ebiten.KeyC) {
 		f.manualCam = false
 		f.zoomBias = 1
+		f.focus = -1
+	}
+	if u.keyPressed(ebiten.KeyTab) {
+		// Round the bodies and back to the vehicle. With one body in the system
+		// there is nothing to cycle to and the key does nothing.
+		f.focus++
+		if f.focus >= len(f.s.Cfg.System.Bodies) || len(f.s.Cfg.System.Bodies) < 2 {
+			f.focus = -1
+		}
 	}
 }
 
 // updateCamera picks a scale that keeps both the vehicle and the ground below
 // it in frame, then eases towards it so the zoom never jumps.
 func (f *FlightScreen) updateCamera(a *App, view Rect) {
-	b := &f.s.Cfg.Body
+	f.cam.View = view
+
+	if f.focus >= 0 {
+		f.focusCamera(a, view)
+		return
+	}
+
+	b := f.s.Center()
 	pos := f.s.St.Pos
 	r := pos.Len()
 	alt := f.s.Altitude()
@@ -130,11 +195,50 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 	u = u * u * (3 - 2*u)
 	// Close in, sit the vehicle a little below centre so it has sky to climb
 	// into rather than staring at the ground.
-	f.cam.Center = pos.Unit().Scale((b.Radius + alt + 0.16*effSpan) * (1 - u))
+	drawn := f.vehiclePos()
+	f.cam.Center = drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u))
 
-	// Keep the vehicle's local vertical pointing at the top of the screen.
-	f.cam.Rot = pos.Angle()
-	f.cam.View = view
+	// And the same ramp lets go of the local vertical. Held all the way out, the
+	// picture would spin with the orbit — a full turn every five seconds at
+	// ×1000 — and standing on a planet turns into looking at one somewhere
+	// around here anyway. At u = 0 this is exactly "point the vertical at the
+	// top of the screen", the way it has always been; the shortest-path delta is
+	// what keeps the wrap through pi from flipping the world over.
+	f.cam.Rot += (1 - u) * angleDelta(f.cam.Rot, drawn.Angle())
+}
+
+// focusCamera looks at a body instead of at the vehicle: the body sits at the
+// centre, the picture holds still, and only the manual zoom decides how much of
+// it is in frame.
+func (f *FlightScreen) focusCamera(a *App, view Rect) {
+	b := &f.s.Cfg.System.Bodies[f.focus]
+
+	span := b.Radius * 6
+	if b.SOI > 0 && !math.IsInf(b.SOI, 1) {
+		// A moon is worth seeing with its sphere of influence around it, which
+		// is the thing an approach is actually aiming at.
+		span = math.Min(b.SOI*2.6, b.Radius*400)
+	}
+	wantScale := math.Min(view.W, view.H) / span * f.zoomBias
+
+	if f.cam.Scale == 0 {
+		f.cam.Scale = wantScale
+	} else if !f.manualCam {
+		f.cam.Scale = math.Exp(expLerp(math.Log(f.cam.Scale), math.Log(wantScale), 2.5, a.ui.DT))
+	}
+	f.cam.Center = sim.Vec2{}
+	f.cam.Rot += angleDelta(f.cam.Rot, math.Pi/2)
+}
+
+// angleDelta is the shortest way round from a to b, in radians.
+func angleDelta(a, b float64) float64 {
+	d := math.Mod(b-a, 2*math.Pi)
+	if d > math.Pi {
+		d -= 2 * math.Pi
+	} else if d < -math.Pi {
+		d += 2 * math.Pi
+	}
+	return d
 }
 
 func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
@@ -142,7 +246,7 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	panel(dst, view, colBG)
 
 	if u.hover(view) && u.Wheel != 0 {
-		f.zoomBias = clamp(f.zoomBias*math.Exp(u.Wheel*0.18), 0.02, 200)
+		f.zoomBias = clamp(f.zoomBias*math.Exp(u.Wheel*0.18), 1e-7, 200)
 	}
 	f.updateCamera(a, view)
 
@@ -151,15 +255,16 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 		return
 	}
 	cam := &f.cam
-	b := &f.s.Cfg.Body
-	cx, cy := cam.Project(sim.Vec2{})
 
-	f.drawWorld(clip, view, cam)
+	f.drawBodies(clip, view, cam)
 
-	// The target orbit and the current osculating one.
+	// The target orbit, drawn around the body it refers to — the one launched
+	// from, which is not necessarily the one currently in the middle.
 	tm := f.s.Telemetry()
 	if a.cfg.TargetOrbit > 0 {
-		if rr := cam.Len(b.Radius + a.cfg.TargetOrbit); rr < maxRingPx {
+		lb := &f.s.Cfg.System.Bodies[f.s.Cfg.LaunchBody]
+		if rr := cam.Len(lb.Radius + a.cfg.TargetOrbit); rr < maxRingPx && rr > 4 {
+			cx, cy := cam.Project(f.framePoint(sim.Vec2{}, f.s.Cfg.LaunchBody, f.s.St.T))
 			dashedRing(clip, cx, cy, rr, colTarget)
 		}
 	}
@@ -178,65 +283,174 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 // way up; in orbit it becomes an arc that follows the craft round.
 const trailWindow = 900
 
+// maxStackedLabels is how many event labels may pile up on one spot before the
+// rest go unlabelled.
+const maxStackedLabels = 3
+
 // maxRingPx is the largest circle worth tessellating. Beyond this the arc is
 // indistinguishable from a straight line anyway, and the vector rasteriser
 // would be asked to emit an absurd number of segments.
 const maxRingPx = 20000
 
-// drawWorld paints the ground and the atmosphere. Zoomed out, both are
-// concentric rings around the planet's centre; zoomed in far enough that the
-// curvature is sub-pixel, they become horizontal bands under the vehicle,
-// which is both faster and what the view actually looks like from there.
-func (f *FlightScreen) drawWorld(dst *ebiten.Image, view Rect, cam *Camera) {
-	b := &f.s.Cfg.Body
-	at := &f.s.Cfg.Atmo
+// drawBodies paints every body in the system, each at whatever detail its size
+// on screen deserves. The ladder runs from a labelled dot through a disc to
+// concentric rings, and finally — once the curvature is sub-pixel — to
+// horizontal bands under the vehicle, which is both faster and what the view
+// actually looks like from there.
+func (f *FlightScreen) drawBodies(dst *ebiten.Image, view Rect, cam *Camera) {
+	sys := &f.s.Cfg.System
 
-	// Use as many bands as the atmosphere is thick on screen. Zoomed out to
-	// the whole planet the air is only a few pixels deep, and sixteen
-	// sub-pixel rings would just vanish.
-	bands := int(clamp(cam.Len(at.Top)/4, 1, 16))
-	rho0 := 0.0
-	if !at.IsVacuum() {
-		rho0 = at.State(0).Density
+	// Rails first, so that a body always sits on top of its own orbit.
+	for i := range sys.Bodies {
+		f.drawRail(dst, cam, i)
 	}
-
-	// Alpha of the air band whose lower edge is at altitude h.
-	airAlpha := func(h float64) uint8 {
-		if rho0 <= 0 {
-			return 0
+	// Then the bodies, with the one in the middle last: it is the one that can
+	// fill the screen, and it should cover everything drawn behind it.
+	center := f.frameBody()
+	for i := range sys.Bodies {
+		if i != center {
+			f.drawBody(dst, view, cam, i)
 		}
-		frac := at.State(h).Density / rho0
-		return uint8(clamp(math.Pow(frac, 0.4)*90, 0, 90))
 	}
+	f.drawBody(dst, view, cam, center)
+}
 
-	if cam.Len(b.Radius) <= maxRingPx {
-		cx, cy := cam.Project(sim.Vec2{})
-		if rho0 > 0 {
-			for i := bands - 1; i >= 0; i-- {
-				lo := at.Top * float64(i) / float64(bands)
-				hi := at.Top * float64(i+1) / float64(bands)
-				mid := cam.Len(b.Radius + (lo+hi)/2)
-				w := cam.Len(hi - lo)
-				if mid < 1 || w < 0.4 {
-					continue
-				}
-				ring(dst, cx, cy, mid, w, color.NRGBA{0x4d, 0x9a, 0xff, airAlpha(lo)})
-			}
-		}
-		rp := cam.Len(b.Radius)
-		circle(dst, cx, cy, rp, colPlanet)
-		ring(dst, cx, cy, rp, 1.5, colPlanetHi)
+// drawRail traces the orbit a body runs on, around wherever its parent is drawn.
+func (f *FlightScreen) drawRail(dst *ebiten.Image, cam *Camera, i int) {
+	b := &f.s.Cfg.System.Bodies[i]
+	if b.Parent < 0 || b.SemiMajor <= 0 {
+		return
+	}
+	// Too small to read, or too big to tessellate.
+	if rr := cam.Len(b.SemiMajor); rr < 24 || rr > maxRingPx {
 		return
 	}
 
-	// Flat mode. The camera keeps the local vertical pointing at the top of
-	// the screen, so the ground and every air layer are horizontal lines.
+	parent := f.framePoint(sim.Vec2{}, b.Parent, f.s.St.T)
+	a, e := b.SemiMajor, b.Ecc
+	minor := a * math.Sqrt(1-e*e)
+
+	const steps = 160
+	px, py := 0.0, 0.0
+	for k := 0; k <= steps; k++ {
+		th := 2 * math.Pi * float64(k) / steps
+		p := sim.Vec2{X: a * (math.Cos(th) - e), Y: minor * math.Sin(th)}.Rotate(b.ArgPeri)
+		x, y := cam.Project(parent.Add(p))
+		if k > 0 {
+			line(dst, px, py, x, y, 1, colRail)
+		}
+		px, py = x, y
+	}
+}
+
+// drawBody paints one body at the detail its pixel radius allows.
+func (f *FlightScreen) drawBody(dst *ebiten.Image, view Rect, cam *Camera, i int) {
+	b := &f.s.Cfg.System.Bodies[i]
+	pos := f.framePoint(sim.Vec2{}, i, f.s.St.T)
+	x, y := cam.Project(pos)
+	rpx := cam.Len(b.Radius)
+
+	surface, highlight := colBody, colBodyHi
+	if i == f.s.Cfg.LaunchBody {
+		surface, highlight = colPlanet, colPlanetHi
+	}
+
+	switch {
+	case rpx > maxRingPx:
+		// Beyond this the rasteriser would be asked for an absurd number of
+		// segments for an arc indistinguishable from a straight line. Only the
+		// body the vehicle is at can get this big, and only from close up.
+		f.drawFlatWorld(dst, view, cam, i)
+		return
+
+	case rpx >= 1.5:
+		f.drawAir(dst, cam, i, x, y)
+		circle(dst, x, y, rpx, surface)
+		ring(dst, x, y, rpx, 1.5, highlight)
+
+	default:
+		// A dot. Anything smaller than a couple of pixels would otherwise
+		// vanish, and a moon you cannot see is a moon you cannot aim at.
+		if !view.Inset(-8).Contains(x, y) {
+			return
+		}
+		circle(dst, x, y, 2, highlight)
+	}
+
+	// Label anything that is not filling the screen. On the body underfoot the
+	// name would just sit in the middle of the ground.
+	if rpx >= math.Min(view.W, view.H)/3 || !view.Inset(-8).Contains(x, y) {
+		return
+	}
+	if rpx < 4 {
+		// A dot shares its patch of screen with the launch pad's own label,
+		// which is drawn above it. Go underneath.
+		drawText(dst, bodyName(b.Name), fontUISm, x, y+7, colBodyText, alignCenter)
+		return
+	}
+	drawText(dst, bodyName(b.Name), fontUISm, x+rpx+6, y-7, colBodyText, alignLeft)
+}
+
+// drawAir paints the atmosphere as concentric rings above a body's surface.
+// Only the launch body has air to draw: describing it for every body needs a
+// setup screen that can, which is not this one yet.
+func (f *FlightScreen) drawAir(dst *ebiten.Image, cam *Camera, i int, x, y float64) {
+	if i != f.s.Cfg.LaunchBody {
+		return
+	}
+	at := &f.s.Cfg.Atmo
+	if at.IsVacuum() {
+		return
+	}
+	b := &f.s.Cfg.System.Bodies[i]
+	rho0 := at.State(0).Density
+	if rho0 <= 0 {
+		return
+	}
+
+	// Use as many bands as the atmosphere is thick on screen. Zoomed out to the
+	// whole planet the air is only a few pixels deep, and sixteen sub-pixel
+	// rings would just vanish.
+	bands := int(clamp(cam.Len(at.Top)/4, 1, 16))
+	for k := bands - 1; k >= 0; k-- {
+		lo := at.Top * float64(k) / float64(bands)
+		hi := at.Top * float64(k+1) / float64(bands)
+		mid := cam.Len(b.Radius + (lo+hi)/2)
+		w := cam.Len(hi - lo)
+		if mid < 1 || w < 0.4 {
+			continue
+		}
+		ring(dst, x, y, mid, w, color.NRGBA{0x4d, 0x9a, 0xff, airAlpha(at, lo, rho0)})
+	}
+}
+
+// airAlpha is how solid the air band starting at altitude h should look.
+func airAlpha(at *sim.Atmosphere, h, rho0 float64) uint8 {
+	if rho0 <= 0 {
+		return 0
+	}
+	return uint8(clamp(math.Pow(at.State(h).Density/rho0, 0.4)*90, 0, 90))
+}
+
+// drawFlatWorld is the close-up mode: the camera keeps the local vertical
+// pointing at the top of the screen, so the ground and every air layer are
+// horizontal lines rather than arcs of a circle a million pixels across.
+func (f *FlightScreen) drawFlatWorld(dst *ebiten.Image, view Rect, cam *Camera, i int) {
+	b := &f.s.Cfg.System.Bodies[i]
+	at := &f.s.Cfg.Atmo
+	hasAir := i == f.s.Cfg.LaunchBody && !at.IsVacuum()
+
+	surface, highlight := colBody, colBodyHi
+	if i == f.s.Cfg.LaunchBody {
+		surface, highlight = colPlanet, colPlanetHi
+	}
+
+	// Up is the vertical under the vehicle: this mode is only ever reached from
+	// close up, where the vehicle and the body in the middle are the same one.
 	up := f.s.St.Pos.Unit()
 	tx, ty := cam.Dir(up.Perp())
 	long := (view.W + view.H) * 3
 
-	// band draws a stripe of the given screen thickness whose centre sits at
-	// world altitude h along the local vertical.
 	band := func(h, thickness float64, c color.NRGBA) {
 		if thickness < 0.4 {
 			return
@@ -245,16 +459,18 @@ func (f *FlightScreen) drawWorld(dst *ebiten.Image, view Rect, cam *Camera) {
 		line(dst, px-tx*long, py-ty*long, px+tx*long, py+ty*long, thickness, c)
 	}
 
-	if rho0 > 0 {
-		for i := bands - 1; i >= 0; i-- {
-			lo := at.Top * float64(i) / float64(bands)
-			hi := at.Top * float64(i+1) / float64(bands)
-			band((lo+hi)/2, cam.Len(hi-lo), color.NRGBA{0x4d, 0x9a, 0xff, airAlpha(lo)})
+	if hasAir {
+		rho0 := at.State(0).Density
+		bands := int(clamp(cam.Len(at.Top)/4, 1, 16))
+		for k := bands - 1; k >= 0; k-- {
+			lo := at.Top * float64(k) / float64(bands)
+			hi := at.Top * float64(k+1) / float64(bands)
+			band((lo+hi)/2, cam.Len(hi-lo), color.NRGBA{0x4d, 0x9a, 0xff, airAlpha(at, lo, rho0)})
 		}
 	}
 	// The ground is one very deep stripe hanging below the surface.
-	band(-long/cam.Scale/2, long, colPlanet)
-	band(0, 1.5, colPlanetHi)
+	band(-long/cam.Scale/2, long, surface)
+	band(0, 1.5, highlight)
 }
 
 // drawPad marks the launch site. Close in it is drawn as an actual structure
@@ -264,11 +480,19 @@ func (f *FlightScreen) drawWorld(dst *ebiten.Image, view Rect, cam *Camera) {
 // It returns the anchor of its own label, if it drew one, so the staging
 // markers can space themselves away from it.
 func (f *FlightScreen) drawPad(dst *ebiten.Image, cam *Camera) (float64, float64, bool) {
-	pad := f.s.PadPos()
-	up := pad.Unit()
+	local := f.s.PadPos()
+	pad := f.framePoint(local, f.s.St.Center, f.s.St.T)
+	// The pad is a structure on its own planet, so its vertical and its eastward
+	// direction are measured there, not in whatever frame it is being drawn in.
+	up := local.Unit()
 	east := up.Perp()
 
 	x0, y0 := cam.Project(pad)
+	// Nothing to draw once it is off the edge, and from another body's frame it
+	// is a third of a million kilometres off the edge.
+	if !cam.View.Inset(-40).Contains(x0, y0) {
+		return 0, 0, false
+	}
 	ux, uy := cam.Dir(up)
 
 	// A pad a couple of dozen rocket diameters across, with a tower twice as tall.
@@ -276,9 +500,6 @@ func (f *FlightScreen) drawPad(dst *ebiten.Image, cam *Camera) (float64, float64
 	height := width * 1.8
 
 	if cam.Len(width) < 7 {
-		if !cam.View.Inset(-40).Contains(x0, y0) {
-			return 0, 0, false
-		}
 		mx, my := x0+ux*11, y0+uy*11
 		line(dst, x0, y0, x0+ux*9, y0+uy*9, 1.5, colPad)
 		circle(dst, mx, my, 2.5, colPad)
@@ -322,8 +543,9 @@ func (f *FlightScreen) drawOsculating(dst *ebiten.Image, cam *Camera, o sim.Orbi
 	if !o.Bound() || o.SemiMajor <= 0 || cam.Len(o.Apoapsis) > maxRingPx {
 		return
 	}
-	mu := f.s.Cfg.Body.Mu
+	mu := f.s.Center().Mu
 	pos, vel := f.s.St.Pos, f.s.St.Vel
+	off := f.framePoint(sim.Vec2{}, f.s.St.Center, f.s.St.T)
 
 	// The apsis line direction is the eccentricity vector.
 	h := pos.Cross(vel)
@@ -345,7 +567,7 @@ func (f *FlightScreen) drawOsculating(dst *ebiten.Image, cam *Camera, o sim.Orbi
 	for i := 0; i <= steps; i++ {
 		th := 2 * math.Pi * float64(i) / steps
 		p := sim.Vec2{X: focus + aa*math.Cos(th), Y: bb * math.Sin(th)}.Rotate(rot)
-		x, y := cam.Project(p)
+		x, y := cam.Project(off.Add(p))
 		if i > 0 {
 			line(dst, px, py, x, y, 1, colOrbit)
 		}
@@ -382,9 +604,9 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 		return
 	}
 
-	px, py := cam.Project(f.s.GroundFrame(h[first].Pos, h[first].T))
+	px, py := cam.Project(f.trackPoint(h[first]))
 	for i := first + 1; i < n; i++ {
-		x, y := cam.Project(f.s.GroundFrame(h[i].Pos, h[i].T))
+		x, y := cam.Project(f.trackPoint(h[i]))
 		if i < n-1 && math.Abs(x-px)+math.Abs(y-py) < minSeg {
 			continue
 		}
@@ -424,7 +646,7 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 		if i < 0 {
 			continue
 		}
-		x, y := cam.Project(f.s.GroundFrame(hist[i].Pos, hist[i].T))
+		x, y := cam.Project(f.trackPoint(hist[i]))
 		if !cam.View.Contains(x, y) {
 			continue
 		}
@@ -443,14 +665,19 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 		} else {
 			step = 0
 		}
-		drawText(dst, label, fontUISm, x+7, y-6+float64(step)*(fontUISm.Size+3), c, alignLeft)
+		// Zoomed out far enough, every event of the flight lands on the same
+		// pixel and the stepping turns into a wall of text down the screen. Past
+		// a few, the ring is the whole of what a marker can usefully say.
+		if step <= maxStackedLabels {
+			drawText(dst, label, fontUISm, x+7, y-6+float64(step)*(fontUISm.Size+3), c, alignLeft)
+		}
 		prevX, prevY = x, y
 	}
 }
 
 // drawVehicle marks the current position with its thrust direction.
 func (f *FlightScreen) drawVehicle(dst *ebiten.Image, cam *Camera, tm sim.Telemetry) {
-	x, y := cam.Project(f.s.St.Pos)
+	x, y := cam.Project(f.vehiclePos())
 
 	up := f.s.St.Pos.Unit()
 	east := up.Perp()
@@ -508,6 +735,11 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	drawText(dst, fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
 		fontUISm, x, y, c, alignLeft)
 
+	if f.focus >= 0 && f.focus < len(f.s.Cfg.System.Bodies) {
+		y += 20
+		name := bodyName(f.s.Cfg.System.Bodies[f.focus].Name)
+		drawText(dst, fmt.Sprintf(T("flight.focusOn"), name), fontUISm, x, y, colBodyText, alignLeft)
+	}
 	if f.s.Settled() {
 		y += 22
 		verdict := outcomeText(f.s.St.Outcome)
@@ -523,6 +755,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	if f.manualCam || f.zoomBias != 1 {
 		drawText(dst, T("flight.manualCamera"), fontUISm, view.Right()-14, view.Y+12, colTextFaint, alignRight)
 	}
+
 	// A warp the current regime cannot deliver is worth saying out loud, or the
 	// setting looks broken: inside the atmosphere the step cannot grow, so a
 	// million times real time is not on offer at any price.
@@ -667,6 +900,9 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, by, langPickerW, bh})
 
 	hint := T("flight.hint")
+	if len(f.s.Cfg.System.Bodies) > 1 {
+		hint = T("flight.hintBodies")
+	}
 	drawText(dst, hint, fontUISm, r.Right()-20-langPickerW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 }
 
