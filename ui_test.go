@@ -16,8 +16,14 @@ func TestClockCarries(t *testing.T) {
 		{59.98, "T+01:00.0"},
 		{60, "T+01:00.0"},
 		{480.5, "T+08:00.5"},
-		{3599.97, "T+60:00.0"},
-		{11999.98, "T+200:00.0"},
+		{3599.94, "T+59:59.9"},
+		// An hour in, tenths give way to hours: the clock has to carry there too.
+		{3599.97, "T+1:00:00"},
+		{11999.98, "T+3:20:00"},
+		{86399.4, "T+23:59:59"},
+		{86399.6, "T+1d 00:00:00"},
+		{86400, "T+1d 00:00:00"},
+		{260000, "T+3d 00:13:20"},
 	}
 	for _, c := range cases {
 		if got := fmtClock(c.in); got != c.want {

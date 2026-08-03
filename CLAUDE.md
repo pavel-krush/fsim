@@ -85,8 +85,10 @@ body built from `Config.Body`, which is what every single-planet configuration i
 
 ## Physics — what matters
 
-- **The integrator step is fixed, `sim.FixedStep` = 0.02 s.** Time warp runs more steps per frame rather
-  than a longer step, so the trajectory depends on neither the frame rate nor the ×500 setting.
+- **The integrator step is fixed at `sim.FixedStep` = 0.02 s wherever anything is happening** — engine
+  running, air outside, wheels on the ground. A vehicle that is only falling gets the adaptive step
+  instead; see the section below, and note that the old promise of a trajectory independent of the warp
+  setting survives only for the powered and atmospheric parts of a flight.
 - **`Advance` carries the remainder** in `Sim.accum`. Ragged frame times give exactly the same
   trajectory as an even `Step(FixedStep)` loop. `TestAdvanceMatchesFixedSteps` guards this.
 - **The step is only ever shortened to a positive value.** `Step` used to treat a collapsed step as
@@ -123,6 +125,51 @@ body built from `Config.Body`, which is what every single-planet configuration i
   mid-ascent, and that call used to pin the marker to whatever the running maximum was — permanently,
   because the `maxQMarked` flag silences the automatic detection. The forced placement lives in
   `emitMaxQ`, called only by `checkMaxQPassed` and `finish`.
+
+## Coasting, and the time warp
+
+Three days to the Moon is thirteen million fixed steps, which no warp setting can chew through. So
+`sim/coast.go` gives a vehicle that is *only falling* — `PhaseCoast`, above the air, off the ground — an
+error-controlled Cash-Karp step, and leaves everything else on the 0.02 s the ascent was tuned on. A day
+of coasting comes out 1 mm from the fixed-step answer in 1265 steps instead of 4.3 million; the transfer
+to the Moon takes 846.
+
+- **The trajectory now depends on the warp setting during a coast**, because `stepCap` limits how far one
+  step may reach — a step longer than a frame's worth of simulated time would jump instead of playing. It
+  is bounded by `coastTol`, not free, and **at ×1 the cap is exactly the fixed step, so a real-time flight
+  is bit-for-bit what the simulator has always produced.** `TestWarpRateOneIsTheOldFixedStep` pins that,
+  and all five presets were checked bit-for-bit across the whole change.
+- **Frame rate still cannot matter.** The step is a pure function of the state; the accumulator decides
+  where a frame stops, never how far a step goes.
+- **`coastTarget` deliberately carries nothing between steps.** A textbook controller remembers the step
+  it settled on, which makes the trajectory depend on the controller's history as well as on the state.
+  Here the target is a fixed fraction of the local timescale — `min(√(r³/μ), r/v)` — so it can only be
+  shrunk by a rejection inside one step, never grown across steps. The `r/v` term is what stops a fast
+  flyby from proposing a step it will only have to reject.
+- **Routing is decided on the requested step, not on the cap** (`h <= FixedStep` goes to the old
+  integrator). The first cut tested the cap instead and deadlocked: with a controller that only learns by
+  taking a step, a rule of "only long steps go through the propagator" leaves it at 0.02 s for ever. The
+  target being state-derived is what makes the simple test work.
+- **A long step may not reach the air.** The decision to take one is made at the start of it, so
+  `plannedStep` shortens to half the time to the atmosphere boundary whenever the vehicle is descending.
+  Without it a ten-minute step ends underground and reports a crash from a place the vehicle never flew
+  through. On an airless body the same guard measures to the surface.
+- **`PhaseSepWait` and `PhaseIgnitionWait` are not coasting** even with the engine off: both have a timer
+  that has to land on its exact instant. `PhaseCoast` is the only phase nothing can turn back into a burn.
+- **Gravity losses over a coast step are integrated as a trapezoid.** Over ten minutes the flight path
+  angle turns through too much for the left-hand rectangle the fixed path gets away with.
+- **`Advance` has a step budget and drops the debt when it runs out.** Some regimes cannot be bought at
+  any warp: ×1e6 inside the atmosphere is fifty million fixed steps a second. Past `maxStepsPerAdvance`
+  the call gives up, sets `WarpLimited`, and the flight screen says so in the corner — otherwise the
+  setting looks broken.
+- **A scripted jump wants `FastForward`, not `Advance`.** No cap, no budget, lands exactly on the time
+  asked for. `-shot` advances that way; using `Advance` truncated a four-hour jump to 400 s and the
+  screenshots quietly came out at the wrong time.
+- The warp ladder is geometric to ×1e6 (`warpSteps`), which is eight buttons — as many as the bottom bar
+  has room for at 46 px each. `warpLabel` writes ×1000 as "×1k".
+- **The mission clock switches format twice**, at an hour and at a day, and rounds *before* choosing the
+  format. Picking the format from the raw seconds printed 3599.97 s as "T+60:00.0" — the same carry trap
+  the clock already had one level down.
 
 ## Frames of reference — easy to get lost in
 

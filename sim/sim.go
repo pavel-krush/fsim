@@ -163,6 +163,18 @@ type Sim struct {
 	// HistInterval is the recording period in seconds of simulated time.
 	HistInterval float64
 
+	// WarpRate is the playback rate the caller is advancing at, and it caps how
+	// far one coast step may reach: a step longer than a frame's worth of
+	// simulated time would stutter instead of playing. At 1 the cap is the fixed
+	// step, which is what keeps a real-time flight identical to a fixed-step run.
+	WarpRate float64
+	// WarpLimited says the last Advance ran out of its step budget before it
+	// delivered the time asked for, so the flight is going slower than the warp
+	// setting claims.
+	WarpLimited bool
+
+	coastH float64 // step the adaptive propagator wants next, s
+
 	accum        float64 // leftover real time not yet turned into a fixed step
 	surfaceP     float64
 	launchAngle  float64
@@ -198,6 +210,7 @@ func New(cfg Config) *Sim {
 	s := &Sim{
 		Cfg:          cfg,
 		HistInterval: 0.1,
+		WarpRate:     1,
 		surfaceP:     cfg.Atmo.SurfacePressure,
 	}
 	s.Reset()
@@ -301,16 +314,55 @@ func (s *Sim) MaxG() float64 { return s.maxG }
 func (s *Sim) MaxAlt() float64 { return s.maxAlt }
 
 // Advance runs the simulation forward by dt seconds of simulated time. The
-// leftover is carried into the next call, so a caller feeding it irregular
-// frame times still gets exactly the same trajectory as a fixed-step run.
+// leftover is carried into the next call, so a caller feeding it irregular frame
+// times still gets exactly the same trajectory as an even one: the step is
+// chosen from the state, and the accumulator only decides where a frame stops.
 func (s *Sim) Advance(dt float64) {
 	if dt <= 0 {
 		return
 	}
 	s.accum += dt
-	for s.accum >= FixedStep && !s.St.Done {
-		s.Step(FixedStep)
-		s.accum -= FixedStep
+	s.WarpLimited = false
+
+	for n := 0; !s.St.Done; n++ {
+		if n >= maxStepsPerAdvance {
+			// Out of budget. Drop the debt rather than queue it: catching up
+			// later would spend the next frames replaying this one.
+			s.WarpLimited = true
+			s.accum = 0
+			return
+		}
+		h := s.plannedStep()
+		if s.accum < h {
+			return
+		}
+		took := s.advanceOne(h)
+		if took <= 0 {
+			return
+		}
+		s.accum -= took
+	}
+}
+
+// FastForward runs the simulation up to time target with no regard for playback:
+// no warp cap on the step and no budget on the work, so it takes as long as it
+// takes and lands exactly on the time asked for.
+//
+// This is what a scripted jump wants. Advance is the interactive path and gives
+// up when a frame's worth of work runs out, which is right for a frame and wrong
+// for "show me the state four hours in".
+func (s *Sim) FastForward(target float64) {
+	for !s.St.Done && s.St.T < target {
+		h := FixedStep
+		if s.coasting() {
+			h = s.coastTarget()
+		}
+		if h > target-s.St.T {
+			h = target - s.St.T
+		}
+		if s.advanceOne(h) <= 0 {
+			break
+		}
 	}
 }
 
@@ -322,8 +374,17 @@ func (s *Sim) RunToEnd() {
 	if limit <= 0 {
 		limit = 6 * 3600
 	}
+	// No warp cap here: an instant run has no playback to keep smooth, so the
+	// step is whatever the state can carry. That is what makes a three-day
+	// mission finish in the time it takes to ask for it.
 	for !s.St.Done && !s.Settled() && s.St.T < limit {
-		s.Step(FixedStep)
+		h := FixedStep
+		if s.coasting() {
+			h = s.coastTarget()
+		}
+		if s.advanceOne(h) <= 0 {
+			break
+		}
 	}
 	if !s.St.Done && !s.Settled() {
 		s.stop(OutcomeTimeout)

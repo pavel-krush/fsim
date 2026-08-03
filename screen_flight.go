@@ -10,8 +10,12 @@ import (
 	"fsim/sim"
 )
 
-// warpSteps are the time-warp settings offered on the flight screen.
-var warpSteps = []float64{1, 2, 5, 20, 100, 500}
+// warpSteps are the time-warp settings offered on the flight screen. The ladder
+// runs to a million because that is what an interplanetary coast costs: three
+// days to the Moon is a quarter of a million seconds, and nobody is watching it
+// at ×500. It is geometric rather than fine-grained because eight buttons is
+// what the bar has room for.
+var warpSteps = []float64{1, 5, 20, 100, 1000, 10000, 100000, 1000000}
 
 // FlightScreen flies the simulation and draws the trajectory, the telemetry
 // panel and the time controls.
@@ -39,6 +43,10 @@ func (f *FlightScreen) Update(a *App, dst *ebiten.Image) {
 	f.handleKeys(u)
 
 	if !f.paused && !f.s.St.Done {
+		// The rate goes in as well as the amount: it caps how far one coast step
+		// may reach, which is what keeps the picture moving at ×1 instead of
+		// jumping ten minutes at a time.
+		f.s.WarpRate = warpSteps[f.warp]
 		f.s.Advance(u.DT * warpSteps[f.warp])
 	}
 
@@ -515,6 +523,12 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	if f.manualCam || f.zoomBias != 1 {
 		drawText(dst, T("flight.manualCamera"), fontUISm, view.Right()-14, view.Y+12, colTextFaint, alignRight)
 	}
+	// A warp the current regime cannot deliver is worth saying out loud, or the
+	// setting looks broken: inside the atmosphere the step cannot grow, so a
+	// million times real time is not on offer at any price.
+	if f.s.WarpLimited && !f.paused {
+		drawText(dst, T("flight.warpLimited"), fontUISm, view.Right()-14, view.Y+30, colWarn, alignRight)
+	}
 }
 
 // drawTelemetry is the numeric readout column.
@@ -620,10 +634,10 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 		if i == f.warp {
 			style = ButtonActive
 		}
-		if u.Button(dst, Rect{x, by, 52, bh}, fmt.Sprintf("×%.0f", w), style) {
+		if u.Button(dst, Rect{x, by, 46, bh}, warpLabel(w), style) {
 			f.warp = i
 		}
-		x += 56
+		x += 50
 	}
 
 	x += 16
@@ -654,6 +668,19 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 
 	hint := T("flight.hint")
 	drawText(dst, hint, fontUISm, r.Right()-20-langPickerW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
+}
+
+// warpLabel writes a warp factor the short way: ×1000 has no business taking
+// five characters in a button 46 pixels wide.
+func warpLabel(w float64) string {
+	switch {
+	case w >= 1e6:
+		return fmt.Sprintf("×%.0fM", w/1e6)
+	case w >= 1000:
+		return fmt.Sprintf("×%.0fk", w/1000)
+	default:
+		return fmt.Sprintf("×%.0f", w)
+	}
 }
 
 // sampleAt finds the recorded sample closest to time t.

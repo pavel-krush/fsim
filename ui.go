@@ -704,16 +704,32 @@ func fmtEng(v float64, unit string) string {
 	}
 }
 
-// fmtClock renders seconds as T+MM:SS.S.
+// fmtClock renders the mission clock. Under an hour it keeps tenths of a second,
+// which is the resolution an ascent is read at; past that it switches to whole
+// seconds, then to days, because a flight to the Moon on a T+MM:SS clock reads
+// "T+4752:00.0" and means nothing to anybody.
 //
-// Rounding happens before the split, not after: 11999.98 s split first gives
-// 199 minutes and 59.98 seconds, which prints as "T+199:60.0".
+// Rounding happens before the split, not after: 11999.98 s split first gives 199
+// minutes and 59.98 seconds, which prints as "T+199:60.0", and 86399.6 s split
+// first gives day zero, hour 24.
 func fmtClock(t float64) string {
 	if t < 0 {
 		t = 0
 	}
+	// Rounded first, then the format is chosen from the rounded value — the same
+	// trap one level up: 3599.97 s rounds to a flat hour, and picking the format
+	// from the raw seconds would print that hour as "T+60:00.0".
 	tenths := int64(math.Round(t * 10))
-	return fmt.Sprintf("T+%02d:%04.1f", tenths/600, float64(tenths%600)/10)
+	if tenths < 36000 {
+		return fmt.Sprintf("T+%02d:%04.1f", tenths/600, float64(tenths%600)/10)
+	}
+	secs := (tenths + 5) / 10
+	days, rem := secs/86400, secs%86400
+	h, m, sec := rem/3600, rem%3600/60, rem%60
+	if days == 0 {
+		return fmt.Sprintf("T+%d:%02d:%02d", h, m, sec)
+	}
+	return fmt.Sprintf("T+%dd %02d:%02d:%02d", days, h, m, sec)
 }
 
 // measureRows is the standard height of one form row.

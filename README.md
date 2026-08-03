@@ -36,6 +36,10 @@ thrust climbs as the air thins. Drag uses a coefficient and a reference area —
 delta-v budget is accounted throughout and split into gravity, drag and steering losses, which is
 usually the most interesting number on the screen.
 
+**Coasting.** A vehicle that is only falling switches to an error-controlled step, so a coast that would
+take thirteen million fixed steps takes a few hundred and the time warp goes to a million. Anything with
+an engine running or air outside stays on the fixed step, and at ×1 so does everything else.
+
 ![Flight screen](docs/flight.png)
 
 ## Presets

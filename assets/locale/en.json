@@ -53,6 +53,7 @@
   "flight.thrust": "thrust",
   "flight.twr": "thrust/weight",
   "flight.vertical": "vertical",
+  "flight.warpLimited": "warp limited by the current flight regime",
   "graph.atAltitude": "at altitude",
   "graph.dragLoss": "drag loss",
   "graph.duration": "duration",

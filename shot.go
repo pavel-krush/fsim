@@ -96,7 +96,9 @@ func (sr *shotRunner) step(a *App) bool {
 		a.screen = st.screen
 	}
 	if st.advance > 0 && a.flight != nil {
-		a.flight.s.Advance(st.advance - a.flight.s.St.T)
+		// FastForward, not Advance: a scripted jump of four hours is not a frame,
+		// and Advance would give up after one frame's worth of steps.
+		a.flight.s.FastForward(st.advance)
 		// Snap the camera instead of easing, so the capture is not mid-zoom.
 		a.flight.cam.Scale = 0
 	}
