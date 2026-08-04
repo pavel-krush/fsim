@@ -219,6 +219,33 @@ header and in the bottom bars of the flight and graph screens.
 - A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
   every key it is missing.
 
+## Editing the system
+
+The setup screen's first column edits **one body of the tree**, chosen by a picker at the top with the
+launch body marked `(pad)`. Radius, mass, rotation and — for anything that is not the root — the orbital
+elements, with the period and the sphere of influence read back as derived figures. `+ moon` gives the
+body on screen a satellite; `× body` deletes one.
+
+- **`Config.EnsureSystem` is called at the top of every frame**, so a single-planet configuration is a
+  system of one and the editor never has to care which kind it is looking at. It is idempotent, and it is
+  called a second time before the footer so the derived numbers include the frame's own edits instead of
+  lagging them.
+- **The parent dropdown offers only bodies defined earlier**, which is the tree's invariant stated as a
+  widget. Moving a body under a *later* parent would mean reordering the slice; nothing needs that, and
+  the restriction makes a cycle impossible to express rather than merely unlikely.
+- **`System.Remove` takes the whole subtree** and returns an old-to-new remap, because everything pointing
+  into the numbering — the launch body, the selection, a state's centre — has to be repaired. Deleting
+  Mars deletes Phobos and Deimos; leaving orphans pointing at a slot that now holds Jupiter would be worse
+  than any error message. The root cannot be removed: it is the frame everything else is measured in.
+- **`System.AddChild` appends.** A body at the end of the slice is after every possible parent, so the
+  invariant holds without anyone having to think about indices.
+- **Switching the selected body cancels the pending edit.** Every field in the column is bound to an
+  address inside the body being left.
+- **Unticking "launch from this body" does nothing.** The pad has to be somewhere; the way to move it is
+  to tick the box on another body.
+- **The atmosphere column is still the launch body's air, whatever body that is.** Move the pad to the
+  Moon and Earth's atmosphere goes with it. Per-body air is the next thing this editor wants.
+
 ## The solar system, and the verdicts
 
 `sim/solar.go` is the real thing: the Sun, eight planets and nine major moons, with real radii, masses,

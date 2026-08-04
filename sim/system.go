@@ -39,6 +39,75 @@ func (s *System) Normalize() {
 	}
 }
 
+// AddChild appends b as a child of parent and returns its index. Appending is
+// always safe: a new body at the end of the slice is after every possible parent,
+// so the parent-before-child invariant holds without anyone having to think.
+func (s *System) AddChild(parent int, b Body) int {
+	if parent < 0 || parent >= len(s.Bodies) {
+		parent = 0
+	}
+	b.Parent = parent
+	s.Bodies = append(s.Bodies, b)
+	s.Normalize()
+	return len(s.Bodies) - 1
+}
+
+// Remove deletes body i along with everything orbiting it, and renumbers what is
+// left. It returns the mapping from old index to new, with -1 for what went, so
+// that a caller can repair whatever it was pointing at — a launch body, a
+// selection, a state's centre. The root cannot be removed.
+func (s *System) Remove(i int) []int {
+	remap := make([]int, len(s.Bodies))
+	for j := range remap {
+		remap[j] = j
+	}
+	if i <= 0 || i >= len(s.Bodies) {
+		return remap
+	}
+
+	// One forward pass is enough to find the whole subtree: a child is always
+	// after its parent, so by the time this reaches a body its parent's fate is
+	// already known.
+	doomed := make([]bool, len(s.Bodies))
+	doomed[i] = true
+	for j := i + 1; j < len(s.Bodies); j++ {
+		if p := s.Bodies[j].Parent; p >= 0 && doomed[p] {
+			doomed[j] = true
+		}
+	}
+
+	kept := make([]Body, 0, len(s.Bodies))
+	for j := range s.Bodies {
+		if doomed[j] {
+			remap[j] = -1
+			continue
+		}
+		remap[j] = len(kept)
+		kept = append(kept, s.Bodies[j])
+	}
+	for j := range kept {
+		if kept[j].Parent > 0 {
+			kept[j].Parent = remap[kept[j].Parent]
+		}
+	}
+	s.Bodies = kept
+	s.Normalize()
+	return remap
+}
+
+// Period is body i's orbital period about its parent, s, or zero for the root.
+func (s *System) Period(i int) float64 {
+	b := &s.Bodies[i]
+	if b.Parent < 0 || b.SemiMajor <= 0 {
+		return 0
+	}
+	mu := s.Bodies[b.Parent].Mu
+	if mu <= 0 {
+		return 0
+	}
+	return 2 * math.Pi * math.Sqrt(b.SemiMajor*b.SemiMajor*b.SemiMajor/mu)
+}
+
 // StateAt returns body i's position and velocity relative to the root, m and
 // m/s. The root itself is always at rest at the origin.
 func (s *System) StateAt(i int, t float64) (pos, vel Vec2) {

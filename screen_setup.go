@@ -18,6 +18,11 @@ type SetupScreen struct {
 	colAtmo   Scroll
 	colRocket Scroll
 	colProg   Scroll
+
+	// selBody is which body of the system the first column is editing. The
+	// launch body is a separate choice: a system is worth looking at whether or
+	// not the pad is on the body being looked at.
+	selBody int
 }
 
 func NewSetupScreen() *SetupScreen { return &SetupScreen{} }
@@ -26,8 +31,13 @@ func NewSetupScreen() *SetupScreen { return &SetupScreen{} }
 func (s *SetupScreen) Update(a *App, dst *ebiten.Image) {
 	b := a.Bounds()
 
-	// Keep the derived planet quantities in step with whatever was typed.
-	a.cfg.Body.Normalize()
+	// Keep the system's derived quantities in step with whatever was typed, and
+	// make sure there is a system at all: a single-planet configuration is one
+	// body, and the editor works on the tree either way.
+	a.cfg.EnsureSystem()
+	if s.selBody < 0 || s.selBody >= len(a.cfg.System.Bodies) {
+		s.selBody = a.cfg.LaunchBody
+	}
 
 	const pad = 12
 	headH := 44.0
@@ -43,6 +53,9 @@ func (s *SetupScreen) Update(a *App, dst *ebiten.Image) {
 	s.column(a, dst, Rect{body.X + 2*(colW+pad), body.Y, colW, body.H}, T("common.vehicle"), &s.colRocket, s.rocketRows)
 	s.column(a, dst, Rect{body.X + 3*(colW+pad), body.Y, colW, body.H}, T("setup.secPitch"), &s.colProg, s.programRows)
 
+	// Again, so that the footer's derived numbers include this frame's edits
+	// rather than lagging them by one.
+	a.cfg.EnsureSystem()
 	s.drawFooter(a, dst, Rect{pad, b.H - footH - pad, b.W - 2*pad, footH})
 }
 
@@ -80,8 +93,24 @@ func (s *SetupScreen) column(a *App, dst *ebiten.Image, r Rect, title string, sc
 }
 
 func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
-	b := &a.cfg.Body
 	u := a.ui
+	sys := &a.cfg.System
+	b := &sys.Bodies[s.selBody]
+
+	s.bodyPicker(a, dst, c.next(rowH+2), sys)
+	c.gap(4)
+
+	// Which body the pad is on. Everything else about a body can be edited from
+	// here whether or not it is the one being launched from.
+	launch := s.selBody == a.cfg.LaunchBody
+	if u.Checkbox(dst, c.next(20), T("setup.launchHere"), &launch) && launch {
+		a.cfg.LaunchBody = s.selBody
+	} else if !launch && s.selBody == a.cfg.LaunchBody {
+		// Unticking the box would leave the vehicle nowhere. The way to move the
+		// pad is to tick it on another body.
+		launch = true
+	}
+	c.gap(6)
 
 	// Bound to the radius with a halved scale, so the widget keeps a stable
 	// identity across frames: the field edits the very value it displays.
@@ -114,15 +143,124 @@ func (s *SetupScreen) planetRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	}
 
 	c.gap(8)
-	u.NumField(dst, c.next(rowH), T("setup.rotationPeriod"), &b.RotationPeriod, NumOpt{Unit: T("unit.h"), Scale: 3600, Min: 0, Max: 1e9, Info: "setup.rotationPeriod.info"})
+	u.NumField(dst, c.next(rowH), T("setup.rotationPeriod"), &b.RotationPeriod, NumOpt{Unit: T("unit.h"), Scale: 3600, Min: -1e9, Max: 1e9, Info: "setup.rotationPeriod.info"})
 	u.ReadOnly(dst, c.next(rowH), T("setup.equatorialSpeed"), formatNum(b.EquatorialSpeed(), 1), T("unit.mps"))
+
+	s.orbitRows(a, dst, c, sys)
+	s.bodyButtons(a, dst, c, sys)
 
 	c.gap(10)
 	u.SectionHeader(dst, c.next(20), T("setup.secTarget"))
+	lb := &sys.Bodies[a.cfg.LaunchBody]
 	u.NumField(dst, c.next(rowH), T("setup.orbitAltitude"), &a.cfg.TargetOrbit, NumOpt{Unit: T("unit.km"), Scale: 1000, Min: 0, Max: 1e9, Info: "setup.orbitAltitude.info"})
-	u.ReadOnly(dst, c.next(rowH), T("setup.circularSpeed"), formatNum(b.CircularSpeed(a.cfg.TargetOrbit), 0), T("unit.mps"))
-	u.ReadOnly(dst, c.next(rowH), T("setup.escapeSpeed"), formatNum(b.EscapeSpeed(0), 0), T("unit.mps"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.circularSpeed"), formatNum(lb.CircularSpeed(a.cfg.TargetOrbit), 0), T("unit.mps"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.escapeSpeed"), formatNum(lb.EscapeSpeed(0), 0), T("unit.mps"))
 	u.NumField(dst, c.next(rowH), T("setup.timeLimit"), &a.cfg.MaxTime, NumOpt{Unit: T("unit.min"), Scale: 60, Min: 60, Max: 1e6, Info: "setup.timeLimit.info"})
+}
+
+// bodyPicker chooses which body the column edits. The launch body is marked, so
+// that a system of seventeen does not need counting through to find the pad.
+func (s *SetupScreen) bodyPicker(a *App, dst *ebiten.Image, r Rect, sys *sim.System) {
+	items := make([]string, len(sys.Bodies))
+	for i := range sys.Bodies {
+		items[i] = bodyName(sys.Bodies[i].Name)
+		if i == a.cfg.LaunchBody {
+			items[i] += " " + T("setup.padMark")
+		}
+	}
+
+	labelW := textWidth(T("setup.bodyLabel"), fontUISm) + 6
+	drawText(dst, T("setup.bodyLabel"), fontUISm, r.X, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+
+	box := Rect{r.X + labelW, r.Y, r.W - labelW, r.H}
+	if picked := a.ui.Dropdown(dst, box, "body", items, s.selBody); picked != s.selBody {
+		// Every field in this column is bound to an address inside the body being
+		// left, so a pending edit has to go with it.
+		a.ui.cancel()
+		s.selBody = picked
+	}
+}
+
+// orbitRows edits where the selected body goes. The root does not go anywhere.
+func (s *SetupScreen) orbitRows(a *App, dst *ebiten.Image, c *rowCursor, sys *sim.System) {
+	u := a.ui
+	b := &sys.Bodies[s.selBody]
+	if b.Parent < 0 {
+		c.gap(10)
+		drawText(dst, T("setup.rootNote"), fontUISm, c.x, c.next(16).Y+2, colTextFaint, alignLeft)
+		return
+	}
+
+	c.gap(10)
+	u.SectionHeader(dst, c.next(20), T("setup.secOrbit"))
+
+	// Only bodies defined earlier are offered as a parent, which is exactly the
+	// invariant the tree rests on: a child always sits at a higher index than its
+	// parent, so a cycle cannot be expressed. Moving a body to a *later* parent
+	// would mean reordering the slice, and nothing here needs that.
+	items := make([]string, s.selBody)
+	for i := range items {
+		items[i] = bodyName(sys.Bodies[i].Name)
+	}
+	row := c.next(rowH + 2)
+	labelW := textWidth(T("setup.parentLabel"), fontUISm) + 6
+	drawText(dst, T("setup.parentLabel"), fontUISm, row.X, row.Y+(row.H-fontUISm.Size)/2, colTextFaint, alignLeft)
+	if picked := u.Dropdown(dst, Rect{row.X + labelW, row.Y, row.W - labelW, row.H},
+		"parent", items, b.Parent); picked != b.Parent {
+		b.Parent = picked
+	}
+	c.gap(4)
+
+	u.NumField(dst, c.next(rowH), T("setup.semiMajor"), &b.SemiMajor,
+		NumOpt{Unit: T("unit.gm"), Scale: 1e9, Min: 1000, Max: 1e14, Info: "setup.semiMajor.info"})
+	u.NumField(dst, c.next(rowH), T("setup.ecc"), &b.Ecc,
+		NumOpt{Min: 0, Max: 0.95, Info: "setup.ecc.info"})
+	u.NumField(dst, c.next(rowH), T("setup.argPeri"), &b.ArgPeri,
+		NumOpt{Unit: "°", Scale: math.Pi / 180, Min: 0, Max: 2 * math.Pi, Info: "setup.argPeri.info"})
+	u.NumField(dst, c.next(rowH), T("setup.meanAnom"), &b.MeanAnom0,
+		NumOpt{Unit: "°", Scale: math.Pi / 180, Min: 0, Max: 2 * math.Pi, Info: "setup.meanAnom.info"})
+
+	period := sys.Period(s.selBody)
+	u.ReadOnly(dst, c.next(rowH), T("setup.period"), formatNum(period/86400, 3), T("unit.d"))
+	u.ReadOnly(dst, c.next(rowH), T("setup.soi"), formatNum(b.SOI/1e6, 1), T("unit.thousandKm"))
+}
+
+// bodyButtons adds and removes bodies.
+func (s *SetupScreen) bodyButtons(a *App, dst *ebiten.Image, c *rowCursor, sys *sim.System) {
+	u := a.ui
+	c.gap(8)
+	r := c.next(rowH + 2)
+
+	if u.Button(dst, Rect{r.X, r.Y, r.W/2 - 3, r.H}, T("setup.addMoon"), ButtonNormal) {
+		// A new body always joins as a child of the one on screen, which is the
+		// useful case: giving the planet you are looking at a moon. Ten radii out
+		// puts it clear of the surface at any size.
+		u.cancel()
+		parent := &sys.Bodies[s.selBody]
+		s.selBody = sys.AddChild(s.selBody, sim.Body{
+			Name:       fmt.Sprintf("custom-%d", len(sys.Bodies)),
+			Radius:     math.Max(parent.Radius/4, 100000),
+			MassSource: sim.FromDensity,
+			Density:    3000,
+			SemiMajor:  parent.Radius * 10,
+		})
+	}
+	if len(sys.Bodies) > 1 && s.selBody > 0 {
+		if u.Button(dst, Rect{r.X + r.W/2 + 3, r.Y, r.W/2 - 3, r.H}, T("setup.removeBody"), ButtonDanger) {
+			u.cancel()
+			remap := sys.Remove(s.selBody)
+			// Everything that pointed into the old numbering has to be repaired,
+			// and the pad has to land somewhere: the root will do.
+			if a.cfg.LaunchBody < len(remap) {
+				if n := remap[a.cfg.LaunchBody]; n >= 0 {
+					a.cfg.LaunchBody = n
+				} else {
+					a.cfg.LaunchBody = 0
+				}
+			}
+			s.selBody = a.cfg.LaunchBody
+		}
+	}
 }
 
 func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {

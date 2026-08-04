@@ -337,3 +337,113 @@ func TestLowLunarOrbitHolds(t *testing.T) {
 		t.Errorf("eccentricity walked to %g over one revolution", o1.Eccentricity)
 	}
 }
+
+// Removing a body takes everything orbiting it with it. Leaving orphans pointing
+// at a slot that now holds something else would be worse than any error message.
+func TestRemoveTakesTheSubtreeWithIt(t *testing.T) {
+	sys := SolarSystem()
+	mars := sys.IndexOf("mars")
+	before := len(sys.Bodies)
+
+	remap := sys.Remove(mars)
+
+	if len(sys.Bodies) != before-3 {
+		t.Errorf("%d bodies left, want %d: Mars and its two moons should have gone",
+			len(sys.Bodies), before-3)
+	}
+	for _, gone := range []string{"mars", "phobos", "deimos"} {
+		if sys.IndexOf(gone) >= 0 {
+			t.Errorf("%s survived", gone)
+		}
+	}
+	if remap[mars] != -1 {
+		t.Errorf("remap says Mars moved to %d, want -1", remap[mars])
+	}
+	// What is left has to still be pointing at what it was pointing at.
+	for _, pair := range [][2]string{{"moon", "earth"}, {"io", "jupiter"}, {"titan", "saturn"}} {
+		i := sys.IndexOf(pair[0])
+		if i < 0 {
+			t.Fatalf("%s went missing", pair[0])
+		}
+		if got := sys.Bodies[sys.Bodies[i].Parent].Name; got != pair[1] {
+			t.Errorf("%s now orbits %s, want %s", pair[0], got, pair[1])
+		}
+	}
+	// And the invariant that makes the whole tree work still holds.
+	for i := range sys.Bodies {
+		if i > 0 && sys.Bodies[i].Parent >= i {
+			t.Errorf("%s has parent %d at index %d", sys.Bodies[i].Name, sys.Bodies[i].Parent, i)
+		}
+	}
+}
+
+// The root is the frame everything is measured in. It does not go anywhere.
+func TestRemoveRefusesTheRoot(t *testing.T) {
+	sys := earthMoon()
+	remap := sys.Remove(0)
+
+	if len(sys.Bodies) != 2 {
+		t.Errorf("%d bodies left, want both", len(sys.Bodies))
+	}
+	for i, m := range remap {
+		if m != i {
+			t.Errorf("remap[%d] = %d, want an unchanged system", i, m)
+		}
+	}
+}
+
+// A body added to the end of the slice is after every possible parent, which is
+// how the invariant is kept without anyone having to think about it.
+func TestAddChildKeepsTheInvariant(t *testing.T) {
+	sys := earthMoon()
+	i := sys.AddChild(1, Body{
+		Name: "custom", Radius: 200000,
+		MassSource: FromDensity, Density: 3000, SemiMajor: 2e7,
+	})
+
+	if i != 2 || sys.Bodies[i].Parent != 1 {
+		t.Fatalf("added at %d with parent %d, want 2 orbiting the Moon", i, sys.Bodies[i].Parent)
+	}
+	if sys.Bodies[i].Mu <= 0 || sys.Bodies[i].SOI <= 0 {
+		t.Error("the new body has no derived quantities: AddChild has to normalize")
+	}
+	p, _ := sys.StateAt(i, 1000)
+	if p.Len() == 0 {
+		t.Error("a moon of the Moon sits on the Earth")
+	}
+}
+
+// A configuration that describes one planet and nothing else has to come out as a
+// system of one, because everything downstream now works on the tree.
+func TestEnsureSystemFromASinglePlanet(t *testing.T) {
+	cfg := Config{Body: Body{Radius: 6371000, MassSource: FromMass, Mass: 5.97237e24}}
+	cfg.EnsureSystem()
+
+	if len(cfg.System.Bodies) != 1 {
+		t.Fatalf("%d bodies, want one", len(cfg.System.Bodies))
+	}
+	if cfg.LaunchBody != 0 || cfg.Body.Mu <= 0 {
+		t.Errorf("launch body %d, mu %g: the mirror was not filled in", cfg.LaunchBody, cfg.Body.Mu)
+	}
+	if !math.IsInf(cfg.System.Bodies[0].SOI, 1) {
+		t.Error("the only body in a system is its root")
+	}
+}
+
+// Body is the launch body's editable face: what the setup screen types into it has
+// to reach the system, or editing the planet on a multi-body preset does nothing.
+func TestEnsureSystemCopiesTheEditableFace(t *testing.T) {
+	cfg := Config{System: earthMoon(), LaunchBody: 0}
+	cfg.EnsureSystem()
+
+	cfg.Body.Radius = 3000000 // as if typed into the diameter field
+	cfg.EnsureSystem()
+
+	if got := cfg.System.Bodies[0].Radius; got != 3000000 {
+		t.Errorf("the system's launch body has radius %g, want the edited 3e6", got)
+	}
+	// And the Moon, which nobody touched, is still where it was.
+	if got := cfg.System.Bodies[1].SemiMajor; got != 3.844e8 {
+		t.Errorf("the Moon's orbit changed to %g", got)
+	}
+}

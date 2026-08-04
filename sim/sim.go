@@ -108,6 +108,30 @@ type Config struct {
 	MaxTime float64
 }
 
+// EnsureSystem fills in whatever the configuration left out, so that everything
+// downstream has a tree to work with: a single-planet configuration becomes a
+// system of one body, the launch index is brought into range, and the derived
+// quantities are filled in.
+//
+// Body is the launch body's editable face: it is copied *into* the system when it
+// has a radius, then mirrored back. Copying the other way made editing the planet
+// on a multi-body preset a silent no-op. A caller that fills the system and
+// leaves Body empty — every test that builds one by hand — is left alone.
+func (c *Config) EnsureSystem() {
+	if len(c.System.Bodies) == 0 {
+		c.System.Bodies = []Body{c.Body}
+	}
+	c.System.Normalize()
+	if c.LaunchBody < 0 || c.LaunchBody >= len(c.System.Bodies) {
+		c.LaunchBody = 0
+	}
+	if c.Body.Radius > 0 {
+		c.System.Bodies[c.LaunchBody] = c.Body
+		c.System.Normalize()
+	}
+	c.Body = c.System.Bodies[c.LaunchBody]
+}
+
 // State is the integrated state of the vehicle.
 type State struct {
 	T float64
@@ -234,23 +258,7 @@ type Sim struct {
 // New builds a simulation ready to run from the given configuration. The
 // configuration is copied, so the caller can keep editing its own.
 func New(cfg Config) *Sim {
-	if len(cfg.System.Bodies) == 0 {
-		cfg.System.Bodies = []Body{cfg.Body}
-	}
-	cfg.System.Normalize()
-	if cfg.LaunchBody < 0 || cfg.LaunchBody >= len(cfg.System.Bodies) {
-		cfg.LaunchBody = 0
-	}
-	// Body is the launch body's editable face: it is what the setup screen binds
-	// its fields to, so it is copied *into* the system rather than out of it.
-	// Without that, editing the planet on a multi-body preset would be a silent
-	// no-op. A caller that filled the system and left Body empty — every test
-	// that builds a system by hand — is left alone.
-	if cfg.Body.Radius > 0 {
-		cfg.System.Bodies[cfg.LaunchBody] = cfg.Body
-		cfg.System.Normalize()
-	}
-	cfg.Body = cfg.System.Bodies[cfg.LaunchBody]
+	cfg.EnsureSystem()
 
 	cfg.Atmo.Prepare(cfg.Body.SurfaceG)
 	cfg.Program.Sort()

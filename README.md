@@ -21,7 +21,8 @@ go test ./...                  # physics and interface checks
 
 **The planet.** Radius plus one of {mass, mean density, surface gravity} — the other two are derived.
 Rotation gives the launch site its own eastward velocity, which the rocket carries away with it, and
-the atmosphere turns along with the ground.
+the atmosphere turns along with the ground. Any body of the system can be edited the same way, orbital
+elements included, and you can give one a moon of its own or take one away.
 
 **The atmosphere.** Layers with their own temperature gradients, integrated barometrically from the
 surface conditions up. The gas mixture sets the molar mass and the adiabatic index, and through them

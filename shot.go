@@ -31,12 +31,16 @@ type shotStep struct {
 	// there is no mouse.
 	openLang bool
 	openMix  bool
+	openBody bool
 	hover    *struct{ X, Y float64 }
 	// stages rebuilds the vehicle to this many stages, and scrollRocket winds
 	// the vehicle column down, which is the only way a capture can show the
 	// stages a two-stage preset does not have.
 	stages       int
 	scrollRocket float64
+	// selBody picks which body the setup screen's first column is editing, again
+	// one-based so that zero means "leave it alone".
+	selBody int
 	// zoom multiplies the camera's automatic scale and focus pins a body, which
 	// is how the ladder from the pad out to the Moon gets captured: neither is
 	// reachable without a mouse and a Tab key. focus is one-based, because the
@@ -99,6 +103,10 @@ func newShotRunner(dir string) *shotRunner {
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
+			// The body editor, on a moon rather than on the launch body: that is
+			// where the orbital elements are.
+			{name: "9c-setup-body", screen: ScreenSetup, selBody: 10},
+			{name: "9d-setup-bodylist", screen: ScreenSetup, selBody: 10, openBody: true},
 			{name: "9-setup-4stage", screen: ScreenSetup, stages: 4},
 			{name: "9b-setup-4stage-bottom", screen: ScreenSetup, stages: 4, scrollRocket: 1e5},
 		},
@@ -161,6 +169,9 @@ func (sr *shotRunner) step(a *App) bool {
 		a.setup.colRocket.Offset = st.scrollRocket
 	}
 
+	if st.selBody > 0 {
+		a.setup.selBody = st.selBody - 1
+	}
 	if st.graphAscent && a.graphs != nil {
 		a.graphs.showAscent()
 	}
@@ -170,6 +181,8 @@ func (sr *shotRunner) step(a *App) bool {
 		a.ui.openList = "language"
 	case st.openMix:
 		a.ui.openList = "mixture"
+	case st.openBody:
+		a.ui.openList = "body"
 	default:
 		a.ui.openList = nil
 	}
