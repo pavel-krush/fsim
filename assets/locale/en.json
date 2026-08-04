@@ -122,6 +122,7 @@
   "preset.kerbin": "Kerbin / KSP-like",
   "preset.mars": "Mars / light launcher",
   "preset.moon": "Moon / no atmosphere",
+  "preset.protonGeo": "Proton-K / Blok DM to geostationary",
   "preset.protonZvezda": "Proton-K / Zvezda to the ISS",
   "setup.addLayer": "+ layer",
   "setup.addMoon": "+ moon",

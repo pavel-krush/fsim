@@ -67,7 +67,7 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), protonGeo(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -384,6 +384,74 @@ func protonZvezda() Preset {
 			},
 			TargetOrbit: 408000,
 			MaxTime:     6 * 3600,
+		},
+	}
+}
+
+// protonGeo is the other thing Proton-K did for thirty years: a communications
+// satellite to the geostationary belt, with a Blok DM upper stage doing the work
+// above the atmosphere.
+//
+// Three burns, which is what it takes. The launcher's third stage cuts off in a low
+// parking orbit with propellant to spare; at the first periapsis it burns that dry
+// and goes overboard; Blok DM raises the far side to 35,786 km, coasts five and a
+// half hours to get there, and rounds the orbit off. What comes out has a period of
+// 23.96 hours against the sidereal day's 23.93 — nine hundredths of a per cent,
+// which for a satellite is a slow drift east and a station-keeping budget.
+func protonGeo() Preset {
+	sys, earth := earthSystem()
+	return Preset{
+		Name: "proton-geo",
+		Cfg: Config{
+			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
+			Atmo: Atmosphere{
+				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
+				Layers:          earthISA(),
+				SurfaceTemp:     288.15,
+				SurfacePressure: 101325,
+				Top:             140000,
+			},
+			Rocket: Rocket{
+				// Two and a half tonnes of comsat, which is what the belt was worth
+				// in the seventies.
+				Payload:  2500,
+				Cd:       0.4,
+				Diameter: 7.4,
+				Stages: append(protonInsertion(225), Stage{
+					// Blok DM: one 11D58M, restartable, which is the whole reason this
+					// mission is possible at all.
+					DryMass: 2140, PropMass: 15050,
+					ThrustVac: 84900, IspVac: 361, IspSL: 361,
+					Throttle: 1,
+					Ignition: IgniteOnNode,
+				}),
+			},
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 12, Pitch: 90},
+				{Time: 68, Pitch: 68},
+				{Time: 125, Pitch: 49},
+				{Time: 181, Pitch: 35},
+				{Time: 237, Pitch: 23},
+				{Time: 294, Pitch: 15},
+				{Time: 350, Pitch: 8},
+				{Time: 407, Pitch: 4},
+				{Time: 463, Pitch: 2},
+				{Time: 519, Pitch: 1},
+				{Time: 576, Pitch: 0},
+			}},
+			Nodes: []Node{
+				// Everything the third stage has left, at the first periapsis, and then
+				// it is dropped. 422 m/s is exactly what 3.3 t buys at this mass, so the
+				// tank runs dry as the burn ends either way.
+				{T: 3630, Frame: BurnPrograde, DeltaV: 422, Separate: true},
+				// Blok DM takes the far side up to the belt...
+				{T: 3750, Frame: BurnPrograde, DeltaV: 2016},
+				// ...and five and a half hours later, rounds the orbit off up there.
+				{T: 22711, Frame: BurnPrograde, DeltaV: 1472},
+			},
+			TargetOrbit: 35786000,
+			MaxTime:     6 * 86400,
 		},
 	}
 }

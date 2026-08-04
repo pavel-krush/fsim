@@ -269,6 +269,26 @@ in the first thirty seconds of every flight.
   the first cut left 250 s in the shared vehicle — a number the stage never reaches, so it burned dry and
   the insertion came out 2235 x 325 km instead of 461 x 308. `protonInsertion(cutoff)` is the fix.
 
+### Proton to the belt
+
+`proton-geo` is the same launcher with a Blok DM on top, and it is the preset that needed the most from the
+node machinery: three burns, a stage jettisoned mid-plan and five and a half hours of coasting between the
+second and the third.
+
+- **A node cannot light an empty stage, and used to be silently marked spent for trying.** The third stage
+  empties itself at the first periapsis and the plan then needs the engine above it, so `checkNodes` drops
+  any spent stage it is sitting on before looking for propellant. Carrying a dead stage into a burn is not
+  something a flight does; blocking the whole mission over it is not something this should do.
+- **The measure of geostationary is the period, not the altitude.** The tuner scored candidates on
+  |period − sidereal day| rather than on eccentricity, which moved the last burn by 2 m/s and the answer
+  from 0.11% off to 0.09%. `TestProtonGeoPresetReachesTheBelt` asserts half a per cent.
+- **"Burn what is left" is written as the number, not as a huge one.** The first node asks for 422 m/s
+  because that is exactly what 3.3 t buys at that mass, so the tank runs dry as the burn ends either way.
+  The tuner used 9999 to find it; a preset should not ship with a magic number standing in for a
+  measurement.
+- **The audit's target check does not apply to a preset with a plan.** Its verdict comes in a parking orbit
+  and the mission goes on from there, so all the ascent owes is an orbit that clears the air.
+
 ### The flyby preset
 
 The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking

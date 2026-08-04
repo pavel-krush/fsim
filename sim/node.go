@@ -122,6 +122,17 @@ func (s *Sim) checkNodes() {
 		return
 	}
 
+	// A burn needs an engine, and an empty stage is not one. This only ever
+	// happens to a stage the sequence declined to hand over — one carrying an
+	// IgniteOnNode stage above it — and carrying a dead stage into a burn is not
+	// something any flight does, so it goes overboard here rather than blocking
+	// the plan. Without this the node was quietly marked spent and the mission
+	// simply stopped.
+	for s.St.Stage < len(s.Cfg.Rocket.Stages)-1 && s.St.Prop[s.St.Stage] <= 1e-9 {
+		s.St.Stage++
+		s.mark(EvSeparation)
+	}
+
 	s.St.NodesDone |= 1 << uint(i)
 	if s.Cfg.Nodes[i].DeltaV <= 0 || s.St.Stage >= len(s.Cfg.Rocket.Stages) ||
 		s.St.Prop[s.St.Stage] <= 1e-9 {

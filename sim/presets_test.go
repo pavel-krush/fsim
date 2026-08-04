@@ -90,7 +90,16 @@ func TestPresetsAreValid(t *testing.T) {
 			if s.St.Outcome != OutcomeOrbit {
 				t.Fatalf("outcome %d at T+%.0f s", s.St.Outcome, s.St.T)
 			}
-			if apo := s.Telemetry().ApoAlt; math.Abs(apo-cfg.TargetOrbit) > cfg.TargetOrbit/2 {
+			apo := s.Telemetry().ApoAlt
+			switch {
+			case len(cfg.Nodes) > 0:
+				// The target belongs to the mission, not to the ascent: a preset with
+				// a plan reaches its verdict in a parking orbit and goes on from
+				// there. All the ascent owes is an orbit that clears the air.
+				if apo <= cfg.Atmo.Top {
+					t.Errorf("apoapsis %.0f km is inside the atmosphere", apo/1000)
+				}
+			case math.Abs(apo-cfg.TargetOrbit) > cfg.TargetOrbit/2:
 				t.Errorf("apoapsis %.0f km against a target of %.0f km",
 					apo/1000, cfg.TargetOrbit/1000)
 			}

@@ -357,3 +357,36 @@ func TestProtonPresetDeliversToTheStationsAltitude(t *testing.T) {
 		t.Errorf("mass in orbit %.0f kg, want the module's nineteen tonnes", m)
 	}
 }
+
+// The geostationary preset: three burns, five and a half hours of coasting, and the
+// measure of success is the period rather than the altitude — a belt satellite is
+// one whose day matches the planet's.
+func TestProtonGeoPresetReachesTheBelt(t *testing.T) {
+	s := New(protonGeo().Cfg)
+	s.FastForward(30000)
+
+	tm := s.Telemetry()
+	const sidereal = 23.9345 * 3600
+	t.Logf("%.0f x %.0f km, e %.4f, period %.3f h against the sidereal day's 23.934",
+		tm.ApoAlt/1000, tm.PeriAlt/1000, tm.Ecc, tm.Orbit.Period/3600)
+
+	if !tm.Orbit.Bound() {
+		t.Fatal("nothing closed")
+	}
+	// Half a per cent of a day is a drift a satellite can be nudged back from; a
+	// preset that misses by more has stopped being geostationary.
+	if d := math.Abs(tm.Orbit.Period-sidereal) / sidereal; d > 0.005 {
+		t.Errorf("period is %.2f%% off the sidereal day", d*100)
+	}
+	if tm.Ecc > 0.02 {
+		t.Errorf("eccentricity %.4f: the belt is a circle", tm.Ecc)
+	}
+	// The launcher's third stage went overboard at the first periapsis, and Blok DM
+	// did the rest with propellant to spare.
+	if s.St.Stage != 3 {
+		t.Errorf("flying stage %d, want Blok DM", s.St.Stage+1)
+	}
+	if left := s.St.Prop[3]; left < 1000 {
+		t.Errorf("Blok DM has %.0f kg left: no margin at all", left)
+	}
+}

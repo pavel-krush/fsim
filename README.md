@@ -71,7 +71,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Seven launchers, all of which actually reach orbit:
+Eight launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -79,6 +79,7 @@ Seven launchers, all of which actually reach orbit:
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
+| Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -106,6 +107,12 @@ up: nineteen tonnes, and the launcher only gets it as far as an ellipse, because
 nineteen tonnes are to a couple of hundred kilometres and not to the station's four hundred. The third
 stage cuts off with 3.3 t still in the tank, 43 m/s of it at the first apoapsis makes the orbit round, and
 then it goes overboard and leaves the module with its own propellant untouched.
+
+The same launcher with a Blok DM on top is the other thing Proton did for thirty years: a comsat to the
+geostationary belt. Three burns — the third stage empties itself at the first periapsis and is dropped,
+Blok DM lifts the far side to 35,786 km, and five and a half hours later it rounds the orbit off up there.
+The measure of success is not the altitude but the period: 23.95 hours against the sidereal day's 23.93,
+which for a real satellite is a slow drift east and a station-keeping budget.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.
