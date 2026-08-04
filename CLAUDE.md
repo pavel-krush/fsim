@@ -1,18 +1,22 @@
 # fsim
 
-A launch simulator: a two-stage rocket flown to orbit around an arbitrary planet. Set up the planet, the
-atmosphere, the vehicle and the pitch programme → "Launch" → live ascent with telemetry → graphs.
+A launch simulator that grew a solar system. Set up a planet — or any body of a system of eighteen — its
+atmosphere, a vehicle of one to four stages, a pitch programme and a plan of burns → "Launch" → live
+ascent with telemetry → the camera pulls back from the launch pad to the Moon's orbit → graphs.
 Go + Ebiten, and the physics is real.
+
+The Apollo preset flies the whole thing: Saturn V off the pad, a 192 × 186 km parking orbit at T+604 s,
+translunar injection at T+15325 s, and the Moon's sphere of influence two and a half days later.
 
 ## Build & run
 
 ```
 go run .                       # start
-go run . -preset 2             # start on preset 2 (0..3)
+go run . -preset 1             # start on preset 1 (0..4; 1 is Apollo)
 go run . -shot ./shots         # run the capture script and save a PNG of every screen
 go run . -camtrace 700         # print the vehicle's screen coordinates per frame (catches camera shake)
 go run . -lang ru              # start with the interface in Russian (default is English)
-go test ./sim/                 # physics
+go test ./...                  # physics and interface
 go build ./... && go vet ./...
 ```
 
@@ -24,22 +28,26 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 
 | File | Contents |
 |------|----------|
-| `sim/body.go` | Planet: radius plus one of {mass, density, g} derives the rest. `Normalize()` is mandatory before using `Mu` |
+| `sim/body.go` | One body: radius plus one of {mass, density, g} derives the rest, plus its orbit about its parent. `Normalize()` is mandatory before using `Mu` |
+| `sim/system.go` | The tree: Keplerian rails, spheres of influence, gravity with the rail correction, add/remove |
+| `sim/solar.go` | The Sun, eight planets and nine major moons, with the real numbers |
 | `sim/atmosphere.go` | Gas composition → molar mass and γ; layers with lapse rates → barometric T/P/ρ/a profile |
 | `sim/rocket.go` | Stages: mass, propellant, thrust, Isp(p), ṁ, cutoff, ignition mode. Tsiolkovsky, TWR |
 | `sim/program.go` | Pitch keyframes, interpolation, prograde-hold mode |
+| `sim/node.go` | Manoeuvre nodes: a time, a direction, a Δv — and `Predict`, which flies a copy of the plan |
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
-| `sim/sim.go` | State, RK4 step, staging state machine, Δv loss accounting, telemetry, history |
-| `sim/presets.go` | Earth/Falcon-9, Mars, Moon, Kerbin — all four actually reach orbit |
+| `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
+| `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
+| `sim/presets.go` | Earth/Falcon-9, Apollo/Saturn V, Mars, Moon, Kerbin — all five reach orbit, and Apollo goes further |
 | `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
-| `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk) |
+| `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
-| `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets |
+| `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets, bodies |
 | `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
-| `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) |
-| `screen_setup.go` | Four-column parameter form, keyframe editor, derived figures, presets |
-| `screen_flight.go` | Trajectory, launch pad, automatic camera, telemetry panel, time controls |
-| `screen_graphs.go` | Seven plots on a shared time axis, event ruler, scrubber |
+| `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
+| `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
+| `screen_flight.go` | Trajectory, bodies, rails, prediction, launch pad, camera, flight plan, telemetry, time controls |
+| `screen_graphs.go` | Seven plots on a movable time axis, event ruler, scrubber |
 | `shot.go` | Scripted run for screenshots |
 
 ## The system of bodies
@@ -188,112 +196,6 @@ first 15 seconds while climbing 400 m. Physically correct, reads as the rocket b
   The panel shows both. Mixing them in one column produces 475 m/s next to a vertical 65 and a
   horizontal 6.
 
-## Interface language
-
-All interface text lives in `assets/locale/ru.json` and `assets/locale/en.json`, embedded into the
-binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A picker sits in the setup
-header and in the bottom bars of the flight and graph screens.
-
-- **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
-  presets an identifier (`earth-falcon`), bodies likewise (`earth`, `moon` — `bodyName` translates them). Labels come from `lang.go`. The physics must not know about
-  language.
-- **A missing key renders as the key itself, not as nothing**, so a typo shows up the moment the screen
-  is opened. The same goes for a format string that lost a verb: `Sprintf` does not panic, it writes
-  `%!(EXTRA string=11.0)` into the text. Both mistakes announce themselves on screen, which is why
-  `lang_test.go` no longer tries to catch them ahead of time — that took a source scanner that could
-  not tell code from comments, and a second pass over every format string, to buy very little.
-- **`lang_test.go` checks the locale files against each other and nothing else**: the same key set in
-  every language, no blank values, and **the same substitutions per key** — a format string that loses a
-  verb in translation prints `%!(EXTRA string=11.0)` into the interface, and only in the language nobody
-  was testing in. Orphaned keys are left to be noticed in passing.
-- **Anything that reaches the screen goes through `T`, including the ones that look like symbols.**
-  "MAX Q" sat in `eventLabel` as a literal and "max q" was a hardcoded row label in two panels; they read
-  as notation rather than as prose, which is exactly how they stayed untranslated. Keyboard names
-  (`SPACE`, `TAB`, `ESC`) and `Isp` are the real exceptions.
-- **Text assembled from fragments must be a whole format string.** Word order differs between
-  languages, so the max-q readout is `"%s на %s км"` / `"%s at %s km"` rather than a label glued to a
-  unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.
-- **Cache nothing at screen construction.** The plot captions used to be computed in `NewGraphScreen`,
-  and switching language did not relabel them. `plotSeries()` is now called every frame.
-- The picker lists each language written in its own script (`English`, `Русский`), which is the one
-  piece of display text deliberately kept out of the locale files: a picker that translated its own
-  options would be useless to whoever cannot read the language currently selected. `langOrder` decides
-  the order and starts with the default.
-- CLI flags and log messages stay in English: that is a machine-facing surface, not the interface.
-- The program starts in English (`defaultLang`), and that is also where a key missing from the selected
-  language falls back to. `-lang ru` starts in Russian.
-- A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
-  every key it is missing.
-
-## What it costs to run
-
-Measured, because all four of these were guesses that turned out wrong in one
-direction or another. A hitch appeared once the vehicle left the atmosphere: the
-numbers said the prediction was taking **658 ms** and running twice a second.
-
-| | before | after |
-|---|---|---|
-| one step, solar system | 17.2 µs | **3.1 µs** |
-| one step, single body | 1.08 µs | 0.88 µs |
-| one prediction from the parking orbit | 658 ms | **9.5 ms** |
-
-- **A prediction only runs while coasting.** During an ascent the pitch programme
-  is flying and a preview of it says nothing — and it is the expensive case,
-  because a burn is integrated at the fixed step. The old altitude test let
-  predictions through the moment the vehicle passed the top of the atmosphere,
-  which is exactly where the stutter appeared.
-- **A predicted burn steps at one second, not 0.02.** A translunar injection is
-  five hundred seconds of smooth vacuum thrust; at the fixed step that is
-  twenty-five thousand steps of work several times a second, and the drawn path
-  moves by centimetres for it.
-- **`Predict` must not force the step up to the sampling interval.** "No point
-  integrating finer than the drawing" cost four times what it saved: the error
-  control rejected the oversized step and halved it two or three times, at six
-  gravity evaluations a try. Recording is decoupled from stepping already.
-- **The ephemeris is cached on four instants** (`Sim.ephemeris`). A Runge-Kutta
-  step asks for gravity at three distinct times and evaluates four stages, and
-  every answer costs a Kepler solve per body. The cache is keyed on time alone, so
-  it has to be dropped when the frame changes: which bodies are in it depends on
-  the centre.
-- **`System.Contributes` drops the bodies off the frame's own chain, and that is a
-  correction as much as a saving.** The rails give a body the two-body motion of
-  its chain and nothing else, so a distant planet pulls the vehicle without
-  pulling the centre it is measured from. Jupiter's true differential effect on a
-  vehicle near the Earth is about 1e-11 m/s²; its uncompensated pull in this model
-  was 3e-7, which is twenty kilometres of error over four days bought by including
-  it. In the root's own frame nothing is dropped — the root does not move, so every
-  pull is honest. `TestDistantPlanetsAreLeftOut` pins both halves.
-- The pruning moved the Apollo ascent by **three centimetres** and its periselene
-  from 1789 to 1791 km. The other four presets are bit-for-bit unchanged, as they
-  have been through every phase of this.
-
-## Editing the system
-
-The setup screen's first column edits **one body of the tree**, chosen by a picker at the top with the
-launch body marked `(pad)`. Radius, mass, rotation and — for anything that is not the root — the orbital
-elements, with the period and the sphere of influence read back as derived figures. `+ moon` gives the
-body on screen a satellite; `× body` deletes one.
-
-- **`Config.EnsureSystem` is called at the top of every frame**, so a single-planet configuration is a
-  system of one and the editor never has to care which kind it is looking at. It is idempotent, and it is
-  called a second time before the footer so the derived numbers include the frame's own edits instead of
-  lagging them.
-- **The parent dropdown offers only bodies defined earlier**, which is the tree's invariant stated as a
-  widget. Moving a body under a *later* parent would mean reordering the slice; nothing needs that, and
-  the restriction makes a cycle impossible to express rather than merely unlikely.
-- **`System.Remove` takes the whole subtree** and returns an old-to-new remap, because everything pointing
-  into the numbering — the launch body, the selection, a state's centre — has to be repaired. Deleting
-  Mars deletes Phobos and Deimos; leaving orphans pointing at a slot that now holds Jupiter would be worse
-  than any error message. The root cannot be removed: it is the frame everything else is measured in.
-- **`System.AddChild` appends.** A body at the end of the slice is after every possible parent, so the
-  invariant holds without anyone having to think about indices.
-- **Switching the selected body cancels the pending edit.** Every field in the column is bound to an
-  address inside the body being left.
-- **Unticking "launch from this body" does nothing.** The pad has to be somewhere; the way to move it is
-  to tick the box on another body.
-- **The atmosphere column is still the launch body's air, whatever body that is.** Move the pad to the
-  Moon and Earth's atmosphere goes with it. Per-body air is the next thing this editor wants.
-
 ## The solar system, and the verdicts
 
 `sim/solar.go` is the real thing: the Sun, eight planets and nine major moons, with real radii, masses,
@@ -343,29 +245,6 @@ orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at 
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
   conic and a trajectory.
 
-## The graph screen's time axis
-
-A flight to the Moon is four days long and its ascent is the first ten minutes. On one axis for the whole
-thing the interesting part is two pixels wide, so the axis moves: `GraphScreen.t0`/`t1` are the visible
-slice, dragged with the mouse, zoomed with the wheel about the instant under the cursor, and reset by two
-buttons — the whole flight, or the ascent up to the verdict.
-
-- **The vertical scales follow the visible range, not the whole flight.** Zoomed into the ascent of a
-  lunar mission, an altitude axis sized by four days of orbit draws the entire launch along the bottom
-  edge. `visibleRange` reaches one sample past each edge so a trace crosses the plot instead of starting
-  inside it.
-- **Traces are decimated by pixel column.** Four days at one sample every five seconds is seventy
-  thousand points, fifty to a pixel; each column is drawn as the range its samples covered, so a max-q
-  spike between two pixels is still a spike and not an average of one.
-- **Zooming holds the anchor still** — the instant under the cursor stays under the cursor, which is what
-  makes a wheel over a plot feel like a wheel over a map. `clampAxis` keeps the range inside the flight
-  and refuses to invert it or to go below a second, which is finer than the history is recorded.
-- **`axisTime` labels at the scale the span deserves**: seconds, then mm:ss, then hours, then days. Seven
-  labels of "227318s" tell you nothing.
-- **An event whose label has nowhere to go gets a tick and no label.** Zoomed out to four days, the whole
-  ascent lands inside two pixels and eight labels used to print on top of each other. The first cut fell
-  back to "the row that clears earliest", which is how the pile-up happened.
-
 ## Manoeuvre nodes and the prediction
 
 The pitch programme is a schedule of angles against the clock, and it is the right tool for an ascent —
@@ -402,6 +281,94 @@ a delta-v to spend. `sim/node.go`, edited on the flight screen, drawn as the pat
   out of the air.
 - **The prediction is cached for half a second.** A long plan is tens of thousands of steps, and
   `maxPredSteps` caps what one recompute may cost.
+
+## Presets
+
+The pitch programmes and the final cutoffs were found by search (a profile generator,
+`pitch = (90+t)·(1-f)^p − t`, plus a bisection on the last stage's cutoff for a periapsis at the target).
+The tuner lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it
+again beats tuning by hand. Note the tail term: the Apollo profile only works with a **positive**
+asymptote, so a generator that can only decay to zero (as the first one did) cannot express it.
+
+Earth/Falcon-9: a 304/239 km orbit, Δv 8995 m/s, max q 43 kPa at 11 km, peak 5.9 g. The Δv is below the
+real-world 9.3–9.5 km/s because launching from the equator hands over all 465 m/s of rotation.
+
+Apollo/Saturn V is three stages to a 192/186 km parking orbit, Δv 8965 m/s, insertion at T+604 s. It is
+the only preset that can be checked against a flight that happened, so the numbers are worth keeping
+close: real Apollo 11 staged the S-IC at T+161 s (here T+159) and inserted at T+699 s into 186 × 183 km.
+Drag losses come out at 45 m/s against the real 40-ish; the constant-throttle model gives the S-II a
+354 s burn where the real one ran 384 s on a shifting mixture ratio, which is why insertion is a minute
+and a half early. `TestApolloPresetMatchesTheRealAscent` pins all of it.
+
+- **It ends at the parking orbit on purpose.** One central body, no Moon to aim at, so translunar
+  injection is not something the simulation can represent — the S-IVB simply keeps four fifths of its
+  propellant, which is the TLI burn sitting in the tank. Do not "fix" this by burning it: the result
+  would be a 380,000 km ellipse round the Earth, which is not the mission.
+- **The pitch programme levels off at 9° and holds it.** Both extremes fail, and they fail differently:
+  hold more and the ascent lofts to 350 km, where the third stage circularises at the wrong altitude
+  (392 × 185 km); let it fall to zero and the vehicle cannot hold 185 km at 4 km/s, sinks back into the
+  air and spends **9 km/s** of the budget on drag. The tuner found the tail angle, not intuition.
+
+Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet wearing an Earth-thick
+70 km atmosphere does not yield to direct ascent on a single burn.
+
+## Stage count
+
+The vehicle takes **one to four stages** — `minStages`/`maxStages` in `screen_setup.go`. The staging
+machine in `sim` never cared how many there were; the editor did, and the bounds are the editor's.
+
+- **Four is where real launchers stop.** Past that, each stage buys less than the one before and pays
+  for it with another full set of engines, tanks and an interstage. One stage is a sounding rocket and a
+  perfectly reasonable thing to fly.
+- **`addStage` derives the new stage from the one below it** — a quarter of its mass and thrust, its
+  vacuum Isp for both Isp figures (an upper stage never sees sea level) — so the button hands you
+  something that flies to edit, not a column of zeroes. It also gives the stage below a separation delay
+  if it had none. The shipped pitch programmes are tuned for two stages, though: a taller stack wants
+  its own programme, and will fly suborbital until it gets one.
+- **`removeStage` resets the ignition mode of whatever ends up at the bottom.** The first stage lights on
+  the pad, the editor only shows the mode for a stage that has something below it, and a hidden value
+  that reappears the moment another stage is added is worse than no value at all.
+- **The footer shares its width out instead of fixing it.** One Δv column per stage on top of the five
+  fixed ones is nine columns; at the old 190 px each they ran under the launch button.
+- The `9-*` steps of `-shot` capture a four-stage vehicle. They come last in the script because they
+  edit the configuration the flight captures fly.
+
+## Interface language
+
+All interface text lives in `assets/locale/ru.json` and `assets/locale/en.json`, embedded into the
+binary with `go:embed`, and is fetched by key: `T("flight.downrange")`. A picker sits in the setup
+header and in the bottom bars of the flight and graph screens.
+
+- **The `sim` package holds no text at all.** Events carry only a `Kind`, verdicts only an `Outcome`,
+  presets an identifier (`earth-falcon`), bodies likewise (`earth`, `moon` — `bodyName` translates them). Labels come from `lang.go`. The physics must not know about
+  language.
+- **A missing key renders as the key itself, not as nothing**, so a typo shows up the moment the screen
+  is opened. The same goes for a format string that lost a verb: `Sprintf` does not panic, it writes
+  `%!(EXTRA string=11.0)` into the text. Both mistakes announce themselves on screen, which is why
+  `lang_test.go` no longer tries to catch them ahead of time — that took a source scanner that could
+  not tell code from comments, and a second pass over every format string, to buy very little.
+- **`lang_test.go` checks the locale files against each other and nothing else**: the same key set in
+  every language, no blank values, and **the same substitutions per key** — a format string that loses a
+  verb in translation prints `%!(EXTRA string=11.0)` into the interface, and only in the language nobody
+  was testing in. Orphaned keys are left to be noticed in passing.
+- **Anything that reaches the screen goes through `T`, including the ones that look like symbols.**
+  "MAX Q" sat in `eventLabel` as a literal and "max q" was a hardcoded row label in two panels; they read
+  as notation rather than as prose, which is exactly how they stayed untranslated. Keyboard names
+  (`SPACE`, `TAB`, `ESC`) and `Isp` are the real exceptions.
+- **Text assembled from fragments must be a whole format string.** Word order differs between
+  languages, so the max-q readout is `"%s на %s км"` / `"%s at %s km"` rather than a label glued to a
+  unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.
+- **Cache nothing at screen construction.** The plot captions used to be computed in `NewGraphScreen`,
+  and switching language did not relabel them. `plotSeries()` is now called every frame.
+- The picker lists each language written in its own script (`English`, `Русский`), which is the one
+  piece of display text deliberately kept out of the locale files: a picker that translated its own
+  options would be useless to whoever cannot read the language currently selected. `langOrder` decides
+  the order and starts with the default.
+- CLI flags and log messages stay in English: that is a machine-facing surface, not the interface.
+- The program starts in English (`defaultLang`), and that is also where a key missing from the selected
+  language falls back to. `-lang ru` starts in Russian.
+- A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
+  every key it is missing.
 
 ## Looking at it — frames, focus and scale
 
@@ -534,26 +501,55 @@ the time it was measured**.
   just-pressed input; Ebiten calls `Draw` less often than `Update`, and clicks would be dropped. `Draw`
   only blits the canvas.
 
-## Stage count
+## The graph screen's time axis
 
-The vehicle takes **one to four stages** — `minStages`/`maxStages` in `screen_setup.go`. The staging
-machine in `sim` never cared how many there were; the editor did, and the bounds are the editor's.
+A flight to the Moon is four days long and its ascent is the first ten minutes. On one axis for the whole
+thing the interesting part is two pixels wide, so the axis moves: `GraphScreen.t0`/`t1` are the visible
+slice, dragged with the mouse, zoomed with the wheel about the instant under the cursor, and reset by two
+buttons — the whole flight, or the ascent up to the verdict.
 
-- **Four is where real launchers stop.** Past that, each stage buys less than the one before and pays
-  for it with another full set of engines, tanks and an interstage. One stage is a sounding rocket and a
-  perfectly reasonable thing to fly.
-- **`addStage` derives the new stage from the one below it** — a quarter of its mass and thrust, its
-  vacuum Isp for both Isp figures (an upper stage never sees sea level) — so the button hands you
-  something that flies to edit, not a column of zeroes. It also gives the stage below a separation delay
-  if it had none. The shipped pitch programmes are tuned for two stages, though: a taller stack wants
-  its own programme, and will fly suborbital until it gets one.
-- **`removeStage` resets the ignition mode of whatever ends up at the bottom.** The first stage lights on
-  the pad, the editor only shows the mode for a stage that has something below it, and a hidden value
-  that reappears the moment another stage is added is worse than no value at all.
-- **The footer shares its width out instead of fixing it.** One Δv column per stage on top of the five
-  fixed ones is nine columns; at the old 190 px each they ran under the launch button.
-- The `9-*` steps of `-shot` capture a four-stage vehicle. They come last in the script because they
-  edit the configuration the flight captures fly.
+- **The vertical scales follow the visible range, not the whole flight.** Zoomed into the ascent of a
+  lunar mission, an altitude axis sized by four days of orbit draws the entire launch along the bottom
+  edge. `visibleRange` reaches one sample past each edge so a trace crosses the plot instead of starting
+  inside it.
+- **Traces are decimated by pixel column.** Four days at one sample every five seconds is seventy
+  thousand points, fifty to a pixel; each column is drawn as the range its samples covered, so a max-q
+  spike between two pixels is still a spike and not an average of one.
+- **Zooming holds the anchor still** — the instant under the cursor stays under the cursor, which is what
+  makes a wheel over a plot feel like a wheel over a map. `clampAxis` keeps the range inside the flight
+  and refuses to invert it or to go below a second, which is finer than the history is recorded.
+- **`axisTime` labels at the scale the span deserves**: seconds, then mm:ss, then hours, then days. Seven
+  labels of "227318s" tell you nothing.
+- **An event whose label has nowhere to go gets a tick and no label.** Zoomed out to four days, the whole
+  ascent lands inside two pixels and eight labels used to print on top of each other. The first cut fell
+  back to "the row that clears earliest", which is how the pile-up happened.
+
+## Editing the system
+
+The setup screen's first column edits **one body of the tree**, chosen by a picker at the top with the
+launch body marked `(pad)`. Radius, mass, rotation and — for anything that is not the root — the orbital
+elements, with the period and the sphere of influence read back as derived figures. `+ moon` gives the
+body on screen a satellite; `× body` deletes one.
+
+- **`Config.EnsureSystem` is called at the top of every frame**, so a single-planet configuration is a
+  system of one and the editor never has to care which kind it is looking at. It is idempotent, and it is
+  called a second time before the footer so the derived numbers include the frame's own edits instead of
+  lagging them.
+- **The parent dropdown offers only bodies defined earlier**, which is the tree's invariant stated as a
+  widget. Moving a body under a *later* parent would mean reordering the slice; nothing needs that, and
+  the restriction makes a cycle impossible to express rather than merely unlikely.
+- **`System.Remove` takes the whole subtree** and returns an old-to-new remap, because everything pointing
+  into the numbering — the launch body, the selection, a state's centre — has to be repaired. Deleting
+  Mars deletes Phobos and Deimos; leaving orphans pointing at a slot that now holds Jupiter would be worse
+  than any error message. The root cannot be removed: it is the frame everything else is measured in.
+- **`System.AddChild` appends.** A body at the end of the slice is after every possible parent, so the
+  invariant holds without anyone having to think about indices.
+- **Switching the selected body cancels the pending edit.** Every field in the column is bound to an
+  address inside the body being left.
+- **Unticking "launch from this body" does nothing.** The pad has to be somewhere; the way to move it is
+  to tick the box on another body.
+- **The atmosphere column is still the launch body's air, whatever body that is.** Move the pad to the
+  Moon and Earth's atmosphere goes with it. Per-body air is the next thing this editor wants.
 
 ## Stale indices, which is how this thing crashes
 
@@ -582,32 +578,44 @@ the slice it pointed into — so `TestPresetsAreValid`, `TestRemoveRunningNode`,
   relying on an accident, so the limit is now six days — the length of the mission
   it ships with.
 
-## Presets
+## What it costs to run
 
-The pitch programmes and the final cutoffs were found by search (a profile generator,
-`pitch = (90+t)·(1-f)^p − t`, plus a bisection on the last stage's cutoff for a periapsis at the target).
-The tuner lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it
-again beats tuning by hand. Note the tail term: the Apollo profile only works with a **positive**
-asymptote, so a generator that can only decay to zero (as the first one did) cannot express it.
+Measured, because all four of these were guesses that turned out wrong in one
+direction or another. A hitch appeared once the vehicle left the atmosphere: the
+numbers said the prediction was taking **658 ms** and running twice a second.
 
-Earth/Falcon-9: a 304/239 km orbit, Δv 8995 m/s, max q 43 kPa at 11 km, peak 5.9 g. The Δv is below the
-real-world 9.3–9.5 km/s because launching from the equator hands over all 465 m/s of rotation.
+| | before | after |
+|---|---|---|
+| one step, solar system | 17.2 µs | **3.1 µs** |
+| one step, single body | 1.08 µs | 0.88 µs |
+| one prediction from the parking orbit | 658 ms | **9.5 ms** |
 
-Apollo/Saturn V is three stages to a 192/186 km parking orbit, Δv 8965 m/s, insertion at T+604 s. It is
-the only preset that can be checked against a flight that happened, so the numbers are worth keeping
-close: real Apollo 11 staged the S-IC at T+161 s (here T+159) and inserted at T+699 s into 186 × 183 km.
-Drag losses come out at 45 m/s against the real 40-ish; the constant-throttle model gives the S-II a
-354 s burn where the real one ran 384 s on a shifting mixture ratio, which is why insertion is a minute
-and a half early. `TestApolloPresetMatchesTheRealAscent` pins all of it.
-
-- **It ends at the parking orbit on purpose.** One central body, no Moon to aim at, so translunar
-  injection is not something the simulation can represent — the S-IVB simply keeps four fifths of its
-  propellant, which is the TLI burn sitting in the tank. Do not "fix" this by burning it: the result
-  would be a 380,000 km ellipse round the Earth, which is not the mission.
-- **The pitch programme levels off at 9° and holds it.** Both extremes fail, and they fail differently:
-  hold more and the ascent lofts to 350 km, where the third stage circularises at the wrong altitude
-  (392 × 185 km); let it fall to zero and the vehicle cannot hold 185 km at 4 km/s, sinks back into the
-  air and spends **9 km/s** of the budget on drag. The tuner found the tail angle, not intuition.
-
-Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet wearing an Earth-thick
-70 km atmosphere does not yield to direct ascent on a single burn.
+- **A prediction only runs while coasting.** During an ascent the pitch programme
+  is flying and a preview of it says nothing — and it is the expensive case,
+  because a burn is integrated at the fixed step. The old altitude test let
+  predictions through the moment the vehicle passed the top of the atmosphere,
+  which is exactly where the stutter appeared.
+- **A predicted burn steps at one second, not 0.02.** A translunar injection is
+  five hundred seconds of smooth vacuum thrust; at the fixed step that is
+  twenty-five thousand steps of work several times a second, and the drawn path
+  moves by centimetres for it.
+- **`Predict` must not force the step up to the sampling interval.** "No point
+  integrating finer than the drawing" cost four times what it saved: the error
+  control rejected the oversized step and halved it two or three times, at six
+  gravity evaluations a try. Recording is decoupled from stepping already.
+- **The ephemeris is cached on four instants** (`Sim.ephemeris`). A Runge-Kutta
+  step asks for gravity at three distinct times and evaluates four stages, and
+  every answer costs a Kepler solve per body. The cache is keyed on time alone, so
+  it has to be dropped when the frame changes: which bodies are in it depends on
+  the centre.
+- **`System.Contributes` drops the bodies off the frame's own chain, and that is a
+  correction as much as a saving.** The rails give a body the two-body motion of
+  its chain and nothing else, so a distant planet pulls the vehicle without
+  pulling the centre it is measured from. Jupiter's true differential effect on a
+  vehicle near the Earth is about 1e-11 m/s²; its uncompensated pull in this model
+  was 3e-7, which is twenty kilometres of error over four days bought by including
+  it. In the root's own frame nothing is dropped — the root does not move, so every
+  pull is honest. `TestDistantPlanetsAreLeftOut` pins both halves.
+- The pruning moved the Apollo ascent by **three centimetres** and its periselene
+  from 1789 to 1791 km. The other four presets are bit-for-bit unchanged, as they
+  have been through every phase of this.

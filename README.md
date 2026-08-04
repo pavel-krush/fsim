@@ -1,10 +1,13 @@
 # fsim
 
-A launch simulator. Set up a planet, an atmosphere, a rocket of one to four stages and a pitch
-programme, press launch, and watch it fly — with live telemetry, and graphs when it is over.
+A launch simulator that grew a solar system. Set up a planet — or any body of a system of eighteen — its
+atmosphere, a vehicle of one to four stages, a pitch programme and a plan of burns. Press launch, watch it
+fly with live telemetry, pull the camera back from the launch pad to the Moon's orbit, and read the graphs
+when it is over.
 
-The physics is real: gravity is integrated, propellant is spent, mass changes as it burns, and the air
-pushes back. Nothing is scripted.
+The physics is real: gravity is integrated, propellant is spent, mass changes as it burns, the air pushes
+back, and every body in the system pulls on the vehicle at once. Nothing is scripted, and nothing is on
+rails except the planets themselves.
 
 ![Setup screen](docs/setup.png)
 
@@ -13,7 +16,7 @@ pushes back. Nothing is scripted.
 ```
 go run .                       # start
 go run . -lang ru              # start in Russian (default is English)
-go run . -preset 2             # start on preset 2 (0..4)
+go run . -preset 1             # start on preset 1 (0..4; 1 is Apollo)
 go test ./...                  # physics and interface checks
 ```
 
@@ -43,12 +46,26 @@ an engine running or air outside stays on the fixed step, and at ×1 so does eve
 
 **The system.** The Sun, eight planets and nine major moons, with real radii, masses and orbits — all in
 one plane, inclinations dropped. Bodies form a tree: a root that does not move, and moons and planets on
-Keplerian rails about their parents. They all pull on the vehicle at once, and the state is kept relative to whichever
-body's sphere of influence it is in, so the numbers stay small near a body and the telemetry stays
-meaningful. The camera can be pulled back from the launch pad to the Moon's orbit, ten orders of magnitude
-of zoom, and pinned to any body with `TAB` to watch an approach from there.
+Keplerian rails about their parents. They all pull on the vehicle at once, and the state is kept relative
+to whichever body's sphere of influence it is in, so the numbers stay small near a body and the telemetry
+stays stays meaningful. The camera drags anywhere, zooms ten orders of magnitude from the launch pad to the whole
+system, and locks onto the vehicle or any body in it to watch an approach from there.
+
+**Manoeuvres.** Past the ascent the pitch programme has nothing useful to say, so a flight plan is a list
+of burns: a time, a direction — prograde, retrograde, radial, or a held pitch — and how much Δv to spend.
+The predicted path is drawn ahead of the vehicle with the plan flown into it, which is the only way to aim
+a transfer at anything.
+
+**The verdict.** Reaching orbit is a result, not an ending: the flight carries on, and the verdict can
+still improve on itself — captured by a moon, or an impact, both naming the body they are about. What a
+launch achieved stays on the record even after the vehicle has left.
 
 ![Flight screen](docs/flight.png)
+
+![The Moon in the camera](docs/lunar.png)
+
+*The flight plan holds one burn — the translunar injection — and the predicted path is drawn with it flown
+into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
@@ -75,11 +92,6 @@ service module with an engine of its own. The lunar module's ride off the surfac
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.
 
-**Manoeuvres.** Past the ascent the pitch programme has nothing useful to say, so a flight plan is a list
-of burns: a time, a direction — prograde, retrograde, radial, or a held pitch — and how much Δv to spend.
-The predicted path is drawn ahead of the vehicle with the plan flown into it, which is the only way to aim
-a transfer at anything.
-
 ## Flying it
 
 The rocket is steered by a pitch programme — a table of times and angles, interpolated between, with
@@ -101,6 +113,13 @@ its own.
 ![Graphs](docs/graphs.png)
 
 ## Notes
+
+Each body is painted its own colour — dull red Mars, tan Jupiter, pale gold Saturn with its rings — and
+none of that is known to the physics, which carries identifiers and nothing else. Rings are decoration:
+no mass, no shadow, and the C, B and A bands with the Cassini division between the last two, drawn
+face-on because everything here shares one plane.
+
+
 
 Written in Go with [Ebiten](https://ebitengine.org/). The interface toolkit is hand-rolled — Ebiten
 ships no widgets — and the fonts are compiled in, so there are no assets to install and the binary
