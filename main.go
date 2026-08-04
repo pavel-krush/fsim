@@ -156,7 +156,7 @@ func main() {
 	}
 	app.setup = NewSetupScreen(chosen)
 	if *shotDir != "" {
-		app.shots = newShotRunner(*shotDir)
+		app.shots = newShotRunner(*shotDir, app.cfg)
 	}
 	app.traceLeft = *camTrace
 
