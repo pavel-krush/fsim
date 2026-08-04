@@ -114,6 +114,12 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A rocket with TWR < 1 sits on the pad and burns propellant.** That is the `holdOnPad` branch;
   without it the vehicle sinks through the planet. Its altitude is exactly 0 there, which is why a
   crash is detected with `alt < 0` rather than `<= 0`.
+- **The g-load is divided by `G0`, not by the local surface gravity.** A g is 9.80665 m/s² wherever the
+  vehicle is. Dividing by the body underneath — which is what `maxG` and `Telemetry.AccelG` used to do —
+  made the figure mean "local surface gravities": Titan's ascent read 4.9 where the crew would have felt
+  0.68, and the number *stepped* as the vehicle crossed into a moon's sphere of influence, because the
+  divisor changed with the frame. `kerbin-mun` reported 22 g for a burn pulling 3.7. The interface's own
+  thresholds (amber at 4, red at 6) are human tolerances, so they only ever meant real g.
 - **Gravity losses use the flight path angle in the frame rotating with the planet.** In the inertial
   frame the velocity at liftoff is horizontal (from rotation) and the losses would come out zero.
 - **g in the barometric formula is the surface value, held constant.** The standard ISA simplification,

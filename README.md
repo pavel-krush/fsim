@@ -78,16 +78,19 @@ Thirteen launchers, all of which actually reach orbit:
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
-| Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 43.1 kPa at 11 km | 14.4 g on entry |
+| Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 305 kPa at 32 km, on the way in | 14.5 g on entry |
 | Apollo / Mars orbit | 91139 × 95159 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
-| Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 4.9 g |
-| Io / off to Jupiter | 58 × 43 km, then 432 × 532 Mm round Jupiter | 2807 m/s in all | — | 3.3 g |
-| Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
-| Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
+| Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 0.68 g |
+| Io / off to Jupiter | 58 × 43 km, then 432 × 532 Mm round Jupiter | 2807 m/s in all | — | 0.60 g |
+| Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 1.4 g |
+| Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
-| Kerbin / round the Mun | 111 × 121 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.6 g |
+| Kerbin / round the Mun | 111 × 121 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
+
+The peak column is real g — 9.80665 m/s² — not local surface gravities, which is why a launch from Titan
+tops out at two thirds of one.
 
 The Earth figure comes in below the 9.3–9.5 km/s a real launcher spends because this one lifts off from
 the equator and is handed all 465 m/s of the planet's rotation.

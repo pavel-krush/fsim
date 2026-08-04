@@ -770,7 +770,13 @@ func (s *Sim) accumulate(f forceSet, ctx burnContext, dt float64) {
 		s.maxQAlt = s.Altitude()
 		s.maxQT = s.St.T
 	}
-	if ag := f.total().Sub(f.Grav).Len() / s.Center().SurfaceG; ag > s.maxG {
+	// Divided by standard gravity, not by the local surface value. A g is 9.80665
+	// m/s^2 wherever the vehicle is: dividing by the body underneath made the
+	// figure mean "local surface gravities", which read as six on a moon where the
+	// crew would have felt one — and it stepped discontinuously the moment the
+	// frame changed, because the divisor changed with it. The interface's own
+	// thresholds are human tolerances, so they only ever meant real g.
+	if ag := f.total().Sub(f.Grav).Len() / G0; ag > s.maxG {
 		s.maxG = ag
 	}
 }
@@ -1149,7 +1155,7 @@ func (s *Sim) Telemetry() Telemetry {
 	t.Thrust = f.ThrustMag
 	t.Drag = f.DragMag
 	t.Pitch = f.Pitch
-	t.AccelG = f.Thrust.Add(f.Drag).Len() / b.SurfaceG
+	t.AccelG = f.Thrust.Add(f.Drag).Len() / G0
 	t.DeltaV = s.St.DeltaV
 	t.GravLoss = s.St.GravLoss
 	t.DragLoss = s.St.DragLoss

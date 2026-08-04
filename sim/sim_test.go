@@ -678,3 +678,38 @@ func TestAllPresetsReachOrbit(t *testing.T) {
 		})
 	}
 }
+
+// A g is 9.80665 m/s² wherever the vehicle is. Both figures used to be divided by
+// the surface gravity of whatever body the state was measured from, which made
+// them mean "local surface gravities" — 0.68 g of Titan ascent reported as 4.9 —
+// and, worse, made them step discontinuously when the frame changed: kerbin-mun
+// showed 22 g for a burn pulling 3.7 of them, because the divisor became the Mun's.
+func TestGLoadIsInStandardGravities(t *testing.T) {
+	s := New(kerbinMun().Cfg)
+
+	// Mid-ascent, where there is thrust and drag to account for.
+	runFor(s, 40)
+	tm := s.Telemetry()
+	want := math.Hypot(tm.Thrust, 0) // thrust and drag are along the same line here
+	if tm.Drag > 0 {
+		want = tm.Thrust - tm.Drag
+	}
+	close(t, "acceleration", tm.AccelG, math.Abs(want)/tm.Mass/G0, 0.02)
+
+	// And over the whole flight, which crosses into the Mun's sphere of influence
+	// and burns there. The peak belongs to the ascent either way; what must not
+	// happen is the number jumping by the ratio of the two surface gravities.
+	s = New(kerbinMun().Cfg)
+	s.FastForward(s.Cfg.MaxTime)
+	if g := s.MaxG(); g < 3 || g > 5 {
+		t.Errorf("peak %.2f g over the whole mission, want the ascent's three and a half", g)
+	}
+	// The Mun's gravity is a sixth of Kerbin's, so the old bug showed as a factor
+	// of six on anything burning out there.
+	for _, h := range s.Hist {
+		if h.Center != 0 && h.AccelG > 6 {
+			t.Fatalf("%.2f g at T+%.0f s in body %d's frame: the divisor is following the frame",
+				h.AccelG, h.T, h.Center)
+		}
+	}
+}
