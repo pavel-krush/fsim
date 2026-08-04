@@ -118,6 +118,7 @@
   "phase.ignitionWait": "AWAITING IGNITION",
   "phase.sepWait": "AWAITING SEPARATION",
   "preset.apolloLunar": "Apollo / lunar orbit",
+  "preset.apolloMars": "Apollo / Mars orbit",
   "preset.apolloReturn": "Apollo / free return",
   "preset.apolloSaturn": "Apollo / Saturn V",
   "preset.earthFalcon": "Earth / Falcon-9",

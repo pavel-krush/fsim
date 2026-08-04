@@ -936,6 +936,11 @@ func (s *Sim) checkEnd() {
 	top := s.atmoTop()
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
+	case s.St.Center == 0 && s.Cfg.LaunchBody != 0:
+		// Out between the planets. A heliocentric orbit is not a capture — every
+		// rock in the system is in one — and saying so would outrank the verdict
+		// the flight actually earned. The first interplanetary preset reported
+		// "in orbit around the Sun" from the moment it left the Earth behind.
 	case s.St.Center != s.Cfg.LaunchBody:
 		// Around something else entirely. A closed orbit that clears the surface
 		// is a capture; a hyperbolic pass is just a visit, and says nothing until

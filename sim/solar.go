@@ -22,7 +22,11 @@ func SolarSystem() System {
 		{Name: "earth", Radius: 6.371e6, MassSource: FromMass, Mass: 5.97237e24,
 			RotationPeriod: 86164.1, Parent: 0, SemiMajor: 1.4960e11, Ecc: 0.0167, MeanAnom0: 0},
 		{Name: "mars", Radius: 3.3895e6, MassSource: FromMass, Mass: 6.4171e23,
-			RotationPeriod: 88642, Parent: 0, SemiMajor: 2.2794e11, Ecc: 0.0934, ArgPeri: 0.9, MeanAnom0: 0.9},
+			RotationPeriod: 88642, Parent: 0, SemiMajor: 2.2794e11, Ecc: 0.0934, ArgPeri: 0.9,
+			// Not a picture choice like the rest of them: this one is a launch
+			// window. It puts Mars where the transfer in the mars-flyby preset
+			// crosses its orbit, a hundred and eighty days out.
+			MeanAnom0: 5.9975},
 		{Name: "jupiter", Radius: 6.9911e7, MassSource: FromMass, Mass: 1.8982e27,
 			RotationPeriod: 35730, Parent: 0, SemiMajor: 7.7857e11, Ecc: 0.0489, MeanAnom0: 3.6},
 		{Name: "saturn", Radius: 5.8232e7, MassSource: FromMass, Mass: 5.6834e26,

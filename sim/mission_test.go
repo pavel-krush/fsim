@@ -503,3 +503,83 @@ func TestApolloReturnPresetComesHome(t *testing.T) {
 		t.Errorf("peak %.1f g: this is an impact, not an entry", g)
 	}
 }
+
+// Mars, which is the whole machine at once: a hundred and eighty-six days, two
+// burns two hundred million kilometres apart, and a verdict about a body the
+// vehicle was never in the same sphere of influence as when it launched.
+//
+// It is also the preset that found the last verdict bug. The moment the vehicle
+// left the Earth behind, its centre became the Sun — which is not the launch body,
+// and a heliocentric orbit is bound and clears the Sun's surface, so it settled as
+// a capture. "IN ORBIT AROUND THE SUN", outranking the one it had earned, for the
+// six months of the coast.
+func TestApolloMarsPresetEntersMarsOrbit(t *testing.T) {
+	s := New(apolloMars().Cfg)
+	mars := s.Cfg.System.IndexOf("mars")
+
+	var enteredSOI, leftEarth float64
+	for !s.St.Done && s.St.T < 200*86400 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+		if leftEarth == 0 && s.St.Center == 0 {
+			leftEarth = s.St.T
+		}
+		if enteredSOI == 0 && s.St.Center == mars {
+			enteredSOI = s.St.T
+		}
+		// The heliocentric leg is not a capture, and must never say it is.
+		if s.St.Center == 0 && s.St.Outcome == OutcomeCaptured {
+			t.Fatalf("settled as a capture by %s at T+%.1f days",
+				s.Cfg.System.Bodies[s.St.OutcomeBody].Name, s.St.T/86400)
+		}
+	}
+
+	if s.St.Center != mars {
+		t.Fatalf("ended in %s's frame", s.Center().Name)
+	}
+	o := ComputeOrbit(s.St.Pos, s.St.Vel, s.Center().Mu)
+	peri, apo := o.PeriapsisAlt(s.Center().Radius), o.ApoapsisAlt(s.Center().Radius)
+	t.Logf("left the Earth at T+%.2f d, inside Mars's sphere at T+%.2f d, orbit %.0f x %.0f km, e %.4f, period %.1f d, %.0f kg left",
+		leftEarth/86400, enteredSOI/86400, peri/1000, apo/1000, o.Eccentricity, o.Period/86400, s.St.Prop[3])
+
+	if s.St.Outcome != OutcomeCaptured || s.St.OutcomeBody != mars {
+		t.Fatalf("outcome %d about body %d, want captured by Mars", s.St.Outcome, s.St.OutcomeBody)
+	}
+	if !o.Bound() {
+		t.Fatal("the orbit around Mars is not closed")
+	}
+	// High, and it has to be: the vehicle arrives with 3 km/s of hyperbolic excess
+	// and the service module can only take 2410 m/s off it. What matters is that
+	// it is comfortably inside the sphere of influence rather than scraping the
+	// edge of it, where the Sun would take it back.
+	if soi := s.Cfg.System.Bodies[mars].SOI; apo > soi/2 {
+		t.Errorf("apoapsis %.0f km against a sphere of influence of %.0f km", apo/1000, soi/1000)
+	}
+	if o.Eccentricity > 0.1 {
+		t.Errorf("eccentricity %.3f: the braking burn is not sized for this approach", o.Eccentricity)
+	}
+	if s.St.Prop[3] <= 0 {
+		t.Error("the service module is dry, so it cannot have braked with what it had")
+	}
+	// The S-IVB was dropped with the injection, so the vehicle at Mars is the
+	// spacecraft alone.
+	if s.St.Stage != 3 {
+		t.Errorf("flying stage %d, want the fourth", s.St.Stage+1)
+	}
+	if enteredSOI < 150*86400 || enteredSOI > 200*86400 {
+		t.Errorf("arrival at T+%.1f days, want the hundred and eighty-six the transfer takes",
+			enteredSOI/86400)
+	}
+}
+
+// The launch window is data: Mars's mean anomaly at t = 0 is what puts it where the
+// transfer crosses its orbit. Everything else about the system's phasing is a
+// picture choice, so this one is worth stating out loud.
+func TestMarsWindowPhasing(t *testing.T) {
+	sys := SolarSystem()
+	m := &sys.Bodies[sys.IndexOf("mars")]
+	if math.Abs(m.MeanAnom0-5.9975) > 1e-9 {
+		t.Errorf("Mars's mean anomaly is %.4f: the apollo-mars transfer is tuned to 5.9975", m.MeanAnom0)
+	}
+}

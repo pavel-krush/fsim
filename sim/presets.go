@@ -67,8 +67,8 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), protonZvezda(),
-		protonGeo(), titanAscent(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
+		protonZvezda(), protonGeo(), titanAscent(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -296,6 +296,72 @@ func apolloReturn() Preset {
 	// Nine days: the flight takes eight and a bit, and the limit has to be a real
 	// bound rather than something a verdict happens to switch off.
 	cfg.MaxTime = 9 * 86400
+	return p
+}
+
+// apolloMars is what the EMPIRE studies were about in 1962: whether a Saturn V
+// could be pointed at Mars. This one is, and it arrives — a hundred and eighty-six
+// days out, one burn at each end, and a high orbit around Mars at the far side.
+//
+// The lander stays at home, which is the whole reason it works. Fifteen tonnes of
+// lunar module and its adapter come off the payload, so the third stage has 4891 m/s
+// of throw where Apollo's had 3668 — and 3668 does not reach Mars's orbit at any
+// longitude, whatever the phasing. What is left above the S-IVB is the command and
+// service module, 28.8 t of it, and the service module is the fourth stage: the
+// engine that brakes at Mars, exactly as apolloLunar uses it to brake at the Moon.
+//
+// The ascent had to be found again for the lighter stack. The same pitch family with
+// a shallower tail, and a third stage that shuts down at 30 s instead of 88.9 —
+// otherwise the S-II alone puts the vehicle into 1473 x 205 km and there is nothing
+// to circularise. It comes out at 204 x 187 km, rounder than Apollo's own.
+func apolloMars() Preset {
+	p := apolloSaturn()
+	p.Name = "apollo-mars"
+	cfg := &p.Cfg
+
+	// The command and service module, with the command module inside the fourth
+	// stage's dry mass — so nothing is payload, and the mass above the S-IVB is
+	// the 28.8 t the ascent was tuned for.
+	cfg.Rocket.Payload = 0
+	cfg.Rocket.Stages[2].CutoffTime = 30
+	cfg.Rocket.Stages = append(cfg.Rocket.Stages, Stage{
+		DryMass: 10390, PropMass: 18410,
+		ThrustVac: 91190, IspVac: 314, IspSL: 314,
+		Throttle: 1, Ignition: IgniteOnNode,
+	})
+	cfg.Program = Program{Keys: []Keyframe{
+		{Time: 0, Pitch: 90},
+		{Time: 12, Pitch: 90},
+		{Time: 60, Pitch: 62},
+		{Time: 108, Pitch: 42},
+		{Time: 155, Pitch: 28},
+		{Time: 203, Pitch: 18},
+		{Time: 251, Pitch: 13},
+		{Time: 299, Pitch: 10},
+		{Time: 346, Pitch: 8},
+		{Time: 394, Pitch: 8},
+		{Time: 442, Pitch: 8},
+	}}
+
+	// The injection has to happen at the one point in the parking orbit where the
+	// escape asymptote comes out along the Earth's own motion round the Sun.
+	// Anywhere else and the same 3695 m/s is thrown sideways: at T+3000 s it buys a
+	// heliocentric aphelion of 1.07 AU instead of 1.62, which is to say nothing at
+	// all. Then the spent S-IVB goes overboard with 15 t still in it, because a
+	// hydrogen stage that has been in the cold for six months is not going to
+	// relight anyway.
+	//
+	// The braking burn is eleven minutes long and lands the vehicle in a 91217 x
+	// 95199 km orbit at e = 0.021. High, because a chemical stack arrives at 3 km/s
+	// of hyperbolic excess and 2410 m/s is what the service module can spend on it.
+	cfg.Nodes = []Node{
+		{T: 4500, Frame: BurnPrograde, DeltaV: 3690, Separate: true},
+		{T: 16104985, Frame: BurnRetrograde, DeltaV: 2410},
+	}
+
+	cfg.TargetOrbit = 190000
+	// Two hundred days, against a mission of a hundred and eighty-six.
+	cfg.MaxTime = 200 * 86400
 	return p
 }
 

@@ -213,6 +213,8 @@ func presetName(key string) string {
 		return T("preset.apolloLunar")
 	case "apollo-return":
 		return T("preset.apolloReturn")
+	case "apollo-mars":
+		return T("preset.apolloMars")
 	case "proton-zvezda":
 		return T("preset.protonZvezda")
 	case "proton-geo":

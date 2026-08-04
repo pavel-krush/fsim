@@ -251,6 +251,36 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
 - **This one is forgiving where the translunar injection is sharp.** ±25 m/s on the insertion moves the
   periapsis by a couple of hundred kilometres; ±2 m/s on the injection moves the approach by two thousand.
 
+### Mars, and the verdict that thought the Sun had captured it
+
+`apollo-mars` is the longest mission here and the one that found the last verdict bug.
+
+- **A heliocentric orbit is not a capture.** `checkEnd`'s capture branch fires on "the centre is not the
+  launch body", and the moment the vehicle leaves the Earth its centre is the Sun — bound, and clear of the
+  Sun's surface. So it settled as `OutcomeCaptured` by the Sun, which outranks `OutcomeOrbit` and is true
+  of every rock in the system. There is now a case ahead of it for `Center == 0` that settles nothing.
+- **The injection only works at one point in the parking orbit.** "Prograde" is prograde in the *Earth's*
+  frame, and the escape asymptote has to come out along the Earth's own motion round the Sun. The same
+  3690 m/s buys a heliocentric aphelion of 1.62 AU at T+4500 s and 1.07 AU at T+3000 s — the second is
+  not a transfer at all, it is a slightly larger orbit than the Earth's. Sweep the node time over one
+  parking-orbit period and take the peak.
+- **The Apollo stack cannot reach Mars, and that is a payload problem.** 3668 m/s of S-IVB throw gives an
+  aphelion of 1.577 AU; Mars's ellipse is at 1.604 AU where the transfer's aphelion points, and no phasing
+  fixes a shortfall in *shape*. Dropping the lunar module takes the throw to 4891 m/s.
+- **A payload change means the ascent has to be found again.** The same pitch programme on a stack 15 t
+  lighter puts the vehicle in 1473 x 205 km, because the S-II alone now overshoots. Sweeping the tail
+  pitch, the profile exponent, the turn length and the third stage's cutoff together: (12, 430, 3.5, 8)
+  with a 30 s cutoff gives 204 x 187 km at e = 0.0013, rounder than Apollo's own.
+- **The window is Mars's `MeanAnom0`, and it was solved rather than searched.** The transfer crosses Mars's
+  *ellipse* at a point that does not depend on Mars's phase, so: fly the transfer, take the crossing time
+  and heliocentric longitude, invert Kepler for the mean anomaly Mars needs at t = 0. One equation, one
+  unknown, and 5.9975 came out of it. It changes nothing about `mars-ascent`, which is bit-for-bit
+  identical with Mars somewhere else entirely — the rail correction cancels the Sun at Mars's centre and
+  what is left over a six-hour flight is below the printing precision.
+- **Five metres a second either side of the injection is a crater.** 3700 m/s hits Mars; 3690 passes at
+  95209 km. The gradient through the encounter is about 7000 km per m/s, so the preset ships the value that
+  fails *gracefully* — a bad periapsis is a worse orbit, an impact is the end of the mission.
+
 ### The free return, which is one number aimed four days ahead
 
 `apollo-return` is the same Saturn V with one node on the plan and nothing after it. Two things have to be

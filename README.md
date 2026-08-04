@@ -71,7 +71,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Ten launchers, all of which actually reach orbit:
+Eleven launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -79,6 +79,7 @@ Ten launchers, all of which actually reach orbit:
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 43.1 kPa at 11 km | 14.4 g on entry |
+| Apollo / Mars orbit | 91139 × 95159 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 4.9 g |
@@ -110,6 +111,15 @@ half that by flying its capsule as a wing; there is no lift anywhere in this mod
 down the same corridor is what there is. The verdict for coming down on the planet you left is
 `RETURNED HOME`, which took a new one: the vehicle has orbited, so calling it a crash claims it never got
 there, and it has been away, so it is not a launch that fell over.
+
+Mars is the fourth Apollo and the longest thing here: a hundred and eighty-six days, one burn at each
+end. It is what the EMPIRE studies asked in 1962 — whether a Saturn V could be pointed at Mars — and the
+answer turns on leaving the lander at home. Fifteen tonnes of lunar module off the payload takes the third
+stage from 3668 m/s of throw to 4891, and 3668 does not reach Mars's orbit at any longitude whatever the
+phasing. What flies is the command and service module alone, with the service module as the fourth stage,
+braking 2410 m/s at the far end into a 91139 × 95159 km orbit at e = 0.021. High, because a chemical stack
+arrives with 3 km/s of hyperbolic excess and that is what there is to spend. Mars's mean anomaly in
+`sim/solar.go` is the launch window: unlike every other phase in the system, that one number is data.
 
 Proton-K is here because it is *serial* — three stages in a line — and a list of stages can describe that
 honestly. The R-7 family cannot be done that way: Vostok and Soyuz strap four boosters around a core and
