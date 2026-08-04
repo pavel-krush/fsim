@@ -7,7 +7,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // SetupScreen is the parameter form: planet, atmosphere, rocket, pitch

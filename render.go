@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // Rect is an axis-aligned rectangle in screen pixels.

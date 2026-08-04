@@ -7,7 +7,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // series describes one plotted quantity.

@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // Dragging and zoom-to-cursor are both statements about a world point that has to

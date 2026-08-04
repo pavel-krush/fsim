@@ -1,4 +1,4 @@
-module fsim
+module github.com/pavel-krush/fsim
 
 go 1.26.5
 

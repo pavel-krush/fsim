@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // closeTo is the assertion helper. It is not called close: that is a builtin

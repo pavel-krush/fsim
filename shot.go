@@ -10,7 +10,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // Screenshot mode. Ebiten images can only be created and read inside a running

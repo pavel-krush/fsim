@@ -7,7 +7,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // warpSteps are the time-warp settings offered on the flight screen. The ladder

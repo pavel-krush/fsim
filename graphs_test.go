@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // The axis labels go through the locale table, so it has to be loaded — the

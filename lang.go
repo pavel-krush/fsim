@@ -8,7 +8,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 
-	"fsim/sim"
+	"github.com/pavel-krush/fsim/sim"
 )
 
 // Interface text lives in assets/locale/<code>.json, keyed by dotted
