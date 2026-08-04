@@ -542,6 +542,15 @@ func (f *FlightScreen) drawBodies(dst *ebiten.Image, view Rect, cam *Camera) {
 		}
 	}
 	f.drawBody(dst, view, cam, center)
+
+	// Names last, in a pass of their own, so that a moon's cannot land on top of
+	// its planet's: at system scale the two are the same pixel. Index order gives
+	// the priority — the Sun and the planets are declared before the moons, and a
+	// moon two pixels from its planet is not worth naming.
+	var taken []Rect
+	for i := range sys.Bodies {
+		f.drawBodyLabel(dst, view, cam, i, &taken)
+	}
 }
 
 // drawRail traces the orbit a body runs on, around wherever its parent is drawn.
@@ -579,10 +588,7 @@ func (f *FlightScreen) drawBody(dst *ebiten.Image, view Rect, cam *Camera, i int
 	x, y := cam.Project(pos)
 	rpx := cam.Len(b.Radius)
 
-	surface, highlight := colBody, colBodyHi
-	if i == f.s.Cfg.LaunchBody {
-		surface, highlight = colPlanet, colPlanetHi
-	}
+	surface, rim, dot := bodyPaint(b.Name)
 
 	switch {
 	case rpx > maxRingPx:
@@ -595,29 +601,61 @@ func (f *FlightScreen) drawBody(dst *ebiten.Image, view Rect, cam *Camera, i int
 	case rpx >= 1.5:
 		f.drawAir(dst, cam, i, x, y)
 		circle(dst, x, y, rpx, surface)
-		ring(dst, x, y, rpx, 1.5, highlight)
+		ring(dst, x, y, rpx, 1.5, rim)
 
 	default:
 		// A dot. Anything smaller than a couple of pixels would otherwise
-		// vanish, and a moon you cannot see is a moon you cannot aim at.
+		// vanish, and a moon you cannot see is a moon you cannot aim at. Brighter
+		// than the surface it stands for, because two pixels of dull red is two
+		// pixels of nothing — and sized by how big the body actually is, so that
+		// the Sun and Phobos are not the same speck.
 		if !view.Inset(-8).Contains(x, y) {
 			return
 		}
-		circle(dst, x, y, 2, highlight)
+		circle(dst, x, y, dotRadius(b.Radius), dot)
 	}
+}
 
-	// Label anything that is not filling the screen. On the body underfoot the
-	// name would just sit in the middle of the ground.
+// dotRadius is how big a body draws when it is too small to draw at all: a
+// logarithm of its real size, because the range from Phobos to the Sun is five
+// orders of magnitude and a linear scale would make everything but the Sun a
+// single pixel.
+func dotRadius(radius float64) float64 {
+	if radius <= 0 {
+		return 1.5
+	}
+	return clamp(1.6+math.Log10(radius/1e6)*0.6, 1.4, 3.4)
+}
+
+// drawBodyLabel names a body, unless something already has that patch of screen.
+func (f *FlightScreen) drawBodyLabel(dst *ebiten.Image, view Rect, cam *Camera, i int, taken *[]Rect) {
+	b := &f.s.Cfg.System.Bodies[i]
+	x, y := cam.Project(f.framePoint(sim.Vec2{}, i, f.s.St.T))
+	rpx := cam.Len(b.Radius)
+
+	// Nothing on the body underfoot: the name would sit in the middle of the
+	// ground it is standing on.
 	if rpx >= math.Min(view.W, view.H)/3 || !view.Inset(-8).Contains(x, y) {
 		return
 	}
+
+	name := bodyName(b.Name)
+	w := textWidth(name, fontUISm)
+	var r Rect
 	if rpx < 4 {
-		// A dot shares its patch of screen with the launch pad's own label,
-		// which is drawn above it. Go underneath.
-		drawText(dst, bodyName(b.Name), fontUISm, x, y+7, colBodyText, alignCenter)
-		return
+		// A dot shares its patch of screen with the launch pad's own label, which
+		// is drawn above it. Go underneath.
+		r = Rect{x - w/2, y + 6, w, fontUISm.Size + 2}
+	} else {
+		r = Rect{x + rpx + 6, y - 8, w, fontUISm.Size + 2}
 	}
-	drawText(dst, bodyName(b.Name), fontUISm, x+rpx+6, y-7, colBodyText, alignLeft)
+	for _, t := range *taken {
+		if r.X < t.Right() && t.X < r.Right() && r.Y < t.Bottom() && t.Y < r.Bottom() {
+			return
+		}
+	}
+	*taken = append(*taken, r)
+	drawText(dst, name, fontUISm, r.X, r.Y, colBodyText, alignLeft)
 }
 
 // drawAir paints the atmosphere as concentric rings above a body's surface.
@@ -669,10 +707,7 @@ func (f *FlightScreen) drawFlatWorld(dst *ebiten.Image, view Rect, cam *Camera, 
 	at := &f.s.Cfg.Atmo
 	hasAir := i == f.s.Cfg.LaunchBody && !at.IsVacuum()
 
-	surface, highlight := colBody, colBodyHi
-	if i == f.s.Cfg.LaunchBody {
-		surface, highlight = colPlanet, colPlanetHi
-	}
+	surface, rim, _ := bodyPaint(b.Name)
 
 	// Up is the vertical under the vehicle: this mode is only ever reached from
 	// close up, where the vehicle and the body in the middle are the same one.
@@ -699,7 +734,7 @@ func (f *FlightScreen) drawFlatWorld(dst *ebiten.Image, view Rect, cam *Camera, 
 	}
 	// The ground is one very deep stripe hanging below the surface.
 	band(-long/cam.Scale/2, long, surface)
-	band(0, 1.5, highlight)
+	band(0, 1.5, rim)
 }
 
 // drawPad marks the launch site. Close in it is drawn as an actual structure

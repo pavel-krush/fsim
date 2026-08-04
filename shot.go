@@ -102,6 +102,9 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "8g-lunar-flyby", screen: ScreenFlight, advance: 232000, focus: 10, zoom: 3},
 			// Four days of flight on one axis, and then the same axis on the ten
 			// minutes of it that the ascent took.
+			// The camera on the Sun, at two scales: the inner system and the lot.
+			{name: "8k-inner-system", screen: ScreenFlight, focus: 1, zoom: 0.008},
+			{name: "8l-outer-system", screen: ScreenFlight, focus: 1, zoom: 0.0004},
 			{name: "8h-late", screen: ScreenFlight, advance: 360000, zoom: 0.02},
 			{name: "8i-graphs-lunar", screen: ScreenGraphs, graphs: true},
 			{name: "8j-graphs-ascent", screen: ScreenGraphs, graphs: true, graphAscent: true},

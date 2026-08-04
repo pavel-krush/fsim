@@ -444,6 +444,21 @@ the time it was measured**.
   so the dot has a floor of 2 px and a name under it — under, not beside, because beside is where the
   launch pad puts its own label.
 - **Only the launch body has air to draw**, which is the same limitation the physics has.
+- **`bodyColors` in `theme.go` is the one place that knows Mars is red.** The physics carries identifiers
+  and no colours, the same way it carries no text. An identifier with no entry — anything added in the
+  editor — comes out grey.
+- **All of them are dim on purpose.** The trajectory, the prediction and the markers are what is being read
+  on that screen; a planet is scenery, and scenery that competes with the instruments is drawn too
+  brightly. Earth keeps the green it has always had, because in the close-up view it is the ground under
+  the launch pad.
+- **The rim and the dot are derived with `lighten`, not listed.** Eighteen bodies is where three
+  hand-picked shades each stops being worth maintaining, and the fixed ratios are what make them read as
+  the same body at different sizes.
+- **A dot is sized by the logarithm of the real radius.** Phobos to the Sun is five orders of magnitude; on
+  a linear scale everything but the Sun is one pixel.
+- **Names are drawn in a pass of their own, skipping anything already taken.** At system scale a moon and
+  its planet are the same pixel, and "Phobos" printed over "Deimos" is worse than one of them going
+  unnamed. Index order sets the priority: the Sun and the planets are declared before the moons.
 - **Rails are drawn before bodies**, so a body sits on top of its own orbit, and only when the orbit is
   between 24 px and `maxRingPx` across — smaller is unreadable, larger is a straight line.
 - **Event labels stop stacking after `maxStackedLabels`.** Zoomed out to the Moon's orbit every event of

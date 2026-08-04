@@ -29,7 +29,6 @@ var (
 	colFlame     = color.NRGBA{0xff, 0x9a, 0x3c, 0xff}
 
 	colPlanet   = color.NRGBA{0x27, 0x3d, 0x2f, 0xff}
-	colPlanetHi = color.NRGBA{0x3a, 0x57, 0x44, 0xff}
 	colAir      = color.NRGBA{0x4d, 0xa6, 0xff, 0x20}
 	colTrail    = color.NRGBA{0x6f, 0xc8, 0xff, 0xff}
 	colTrailOld = color.NRGBA{0x2c, 0x5b, 0x7d, 0xff}
@@ -40,10 +39,9 @@ var (
 	colTarget   = color.NRGBA{0x4f, 0x45, 0x77, 0xff}
 	colGrid     = color.NRGBA{0x1e, 0x27, 0x33, 0xff}
 
-	// Bodies other than the one being flown at: a moon is grey rock at any
-	// distance, and its rail is faint enough not to compete with the trajectory.
+	// Anything with no colour of its own — a body someone added in the editor.
+	// Its rail is faint enough not to compete with the trajectory.
 	colBody     = color.NRGBA{0x5a, 0x5f, 0x6b, 0xff}
-	colBodyHi   = color.NRGBA{0x8b, 0x92, 0xa1, 0xff}
 	colRail     = color.NRGBA{0x2e, 0x3a, 0x4c, 0xff}
 	colBodyText = color.NRGBA{0x93, 0x9c, 0xab, 0xff}
 
@@ -52,6 +50,51 @@ var (
 	colPred     = color.NRGBA{0xd0, 0x8a, 0x5a, 0xff}
 	colNodeDone = color.NRGBA{0x54, 0x60, 0x6e, 0xff}
 )
+
+// bodyColors is what each body is painted with, keyed by the identifier sim
+// carries. Which is to say: this is the one place that knows Mars is red, because
+// the physics has no business knowing it.
+//
+// All of them are dim. The trajectory, the prediction and the markers are the
+// things being read on this screen; a planet is scenery, and scenery that
+// competes with the instruments is a planet drawn too brightly. Earth keeps the
+// green it has always had — it is the ground under the launch pad in the close-up
+// view, and land is what that should look like.
+var bodyColors = map[string]color.NRGBA{
+	"sun":     {0xc9, 0x9e, 0x3c, 0xff},
+	"mercury": {0x6b, 0x63, 0x5c, 0xff},
+	"venus":   {0xa8, 0x94, 0x63, 0xff},
+	"earth":   colPlanet,
+	"mars":    {0x5e, 0x33, 0x28, 0xff},
+	"jupiter": {0x7d, 0x64, 0x48, 0xff},
+	"saturn":  {0x8a, 0x7a, 0x54, 0xff},
+	"uranus":  {0x45, 0x72, 0x78, 0xff},
+	"neptune": {0x33, 0x4c, 0x8c, 0xff},
+
+	"moon":     {0x5a, 0x5f, 0x6b, 0xff},
+	"phobos":   {0x4c, 0x46, 0x42, 0xff},
+	"deimos":   {0x4c, 0x46, 0x42, 0xff},
+	"io":       {0x8a, 0x7e, 0x3e, 0xff},
+	"europa":   {0x82, 0x7d, 0x74, 0xff},
+	"ganymede": {0x6e, 0x66, 0x5e, 0xff},
+	"callisto": {0x4f, 0x4c, 0x50, 0xff},
+	"titan":    {0x8a, 0x6a, 0x3c, 0xff},
+	"triton":   {0x74, 0x6e, 0x78, 0xff},
+
+	"kerbin": colPlanet,
+}
+
+// bodyPaint is the surface colour of a body, the rim that outlines it, and the dot
+// it collapses into at a distance. The rim and the dot are derived rather than
+// listed: eighteen bodies is where three hand-picked shades each stops being worth
+// maintaining, and the ratios are what make them read as the same body.
+func bodyPaint(name string) (surface, rim, dot color.NRGBA) {
+	surface = colBody
+	if c, ok := bodyColors[name]; ok {
+		surface = c
+	}
+	return surface, lighten(surface, 0.22), lighten(surface, 0.5)
+}
 
 // The plot series colours, kept distinguishable in the graph screen.
 var plotColors = []color.NRGBA{
