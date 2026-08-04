@@ -470,10 +470,13 @@ func (s *Sim) Advance(dt float64) {
 // for "show me the state four hours in".
 func (s *Sim) FastForward(target float64) {
 	for !s.St.Done && s.St.T < target {
-		h := FixedStep
-		if s.coasting() {
-			h = s.coastTarget()
-		}
+		// The same step planner the live flight uses, minus the warp cap. Rolling
+		// its own — "fixed step, or the coast target if coasting" — left out both
+		// of the guards that live in it: a ten-minute step sailed past a scheduled
+		// burn by up to ten minutes, which on a lunar insertion is the difference
+		// between an orbit and a crater, and a descending vehicle could step
+		// straight through the atmosphere.
+		h := s.plannedStepUncapped()
 		if h > target-s.St.T {
 			h = target - s.St.T
 		}
@@ -495,11 +498,7 @@ func (s *Sim) RunToEnd() {
 	// step is whatever the state can carry. That is what makes a three-day
 	// mission finish in the time it takes to ask for it.
 	for !s.St.Done && !s.Settled() && s.St.T < limit {
-		h := FixedStep
-		if s.coasting() {
-			h = s.coastTarget()
-		}
-		if s.advanceOne(h) <= 0 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
 			break
 		}
 	}
@@ -777,11 +776,19 @@ func (s *Sim) checkPhase() {
 		spent := s.St.Node >= 0 && s.St.NodeDV >= s.Cfg.Nodes[s.St.Node].DeltaV-1e-12
 		switch {
 		case s.St.Node >= 0 && (out || spent):
-			// A node burn does not stage: it uses what is attached, and what is
-			// attached stays attached.
+			// A node burn does not stage on its own: it uses what is attached, and
+			// what is attached stays attached — unless the node says to drop it.
+			drop := s.Cfg.Nodes[s.St.Node].Separate && s.St.Stage < len(stages)-1
 			s.endNode()
-			s.setPhase(PhaseCoast)
 			s.mark(EvCutoff)
+			if drop {
+				// Straight to separation, skipping the ignition-wait machinery:
+				// that belongs to the ascent sequence, and a flight flown from a
+				// plan lights its next engine when the plan says so.
+				s.St.Stage++
+				s.mark(EvSeparation)
+			}
+			s.setPhase(PhaseCoast)
 		case out || cut:
 			s.endBurn()
 		}
@@ -807,8 +814,13 @@ func (s *Sim) checkPhase() {
 
 // endBurn shuts the current stage down and decides what comes next.
 func (s *Sim) endBurn() {
-	last := s.St.Stage >= len(s.Cfg.Rocket.Stages)-1
-	if last {
+	next := s.St.Stage + 1
+	// Nothing to hand over to: either there is no stage above, or the one above is
+	// lit by the flight plan rather than by the sequence. In both cases the vehicle
+	// coasts with what it has — including the stage that has just finished, which
+	// is exactly what a spacecraft does with a spent upper stage it is not ready to
+	// throw away yet.
+	if next >= len(s.Cfg.Rocket.Stages) || s.Cfg.Rocket.Stages[next].Ignition == IgniteOnNode {
 		s.setPhase(PhaseCoast)
 		s.mark(EvCutoff)
 		return
@@ -824,6 +836,10 @@ func (s *Sim) readyToIgnite() bool {
 		return false
 	}
 	switch stg.Ignition {
+	case IgniteOnNode:
+		// Never by itself. Belt and braces: endBurn does not hand over to a stage
+		// like this in the first place.
+		return false
 	case IgniteAfterDelay:
 		return s.St.PhaseT >= stg.IgnitionDelay
 	case IgniteAtApoapsis:

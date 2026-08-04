@@ -346,7 +346,7 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 
 // nodePanelW is the width of the manoeuvre panel. It fits a time, a direction, a
 // delta-v and a delete button on one row, which is the whole of what a node is.
-const nodePanelW = 356
+const nodePanelW = 392
 
 // drawNodePanel is the flight plan: what burns are scheduled, and the controls to
 // change them. It lives in the trajectory view rather than the telemetry column
@@ -367,6 +367,9 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 	panel(dst, r, colPanel)
 
 	u.SectionHeader(dst, Rect{r.X + 10, r.Y + 6, r.W - 20, 18}, T("flight.secPlan"))
+	if len(nodes) > 0 {
+		drawText(dst, T("flight.planColumns"), fontUISm, r.Right()-14, r.Y+8, colTextFaint, alignRight)
+	}
 
 	c := &rowCursor{x: r.X + 10, y: r.Y + 28, w: r.W - 20}
 	remove := -1
@@ -380,7 +383,11 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 		if done {
 			drawText(dst, fmtClock(n.T), fontMonoSm, row.X, row.Y+5, colNodeDone, alignLeft)
 			drawText(dst, nodeFrameName(n.Frame), fontUISm, row.X+112, row.Y+5, colNodeDone, alignLeft)
-			drawText(dst, fmt.Sprintf("%.0f %s", n.DeltaV, T("unit.mps")), fontMonoSm,
+			mark := ""
+			if n.Separate {
+				mark = " ⤓"
+			}
+			drawText(dst, fmt.Sprintf("%.0f %s%s", n.DeltaV, T("unit.mps"), mark), fontMonoSm,
 				row.Right()-24, row.Y+5, colNodeDone, alignRight)
 		} else {
 			u.NumField(dst, Rect{row.X, row.Y, 104, 20}, "", &n.T,
@@ -390,6 +397,10 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 			}
 			u.NumField(dst, Rect{row.X + 208, row.Y, 104, 20}, "", &n.DeltaV,
 				NumOpt{Unit: T("unit.mps"), Dec: 0, Min: 0, Max: 1e6})
+			// Whether the stage this burn used goes overboard when it is done. A
+			// spent booster carried through a coast has to go before the engine
+			// above it can fire, and there is nowhere else to say so.
+			u.Checkbox(dst, Rect{row.Right() - 44, row.Y, 20, 20}, "", &n.Separate)
 		}
 		if u.Button(dst, Rect{row.Right() - 18, row.Y + 1, 18, 18}, "×", ButtonDanger) {
 			remove = i

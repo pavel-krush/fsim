@@ -255,7 +255,7 @@ func TestSameMixtureIgnoresScale(t *testing.T) {
 // button is handled, not before — so this used to be a crash on the same frame.
 func TestLoadPresetClearsTheSelection(t *testing.T) {
 	a := &App{ui: NewUI()}
-	s := NewSetupScreen()
+	s := NewSetupScreen(0)
 	presets := sim.Presets()
 
 	// Find the two shapes that matter: a system with moons, and one without.

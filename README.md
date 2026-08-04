@@ -16,7 +16,7 @@ rails except the planets themselves.
 ```
 go run .                       # start
 go run . -lang ru              # start in Russian (default is English)
-go run . -preset 1             # start on preset 1 (0..4; 1 is Apollo)
+go run . -preset apollo-lunar  # start on a preset by name, not by position
 go test ./...                  # physics and interface checks
 ```
 
@@ -52,9 +52,11 @@ stays stays meaningful. The camera drags anywhere, zooms ten orders of magnitude
 system, and locks onto the vehicle or any body in it to watch an approach from there.
 
 **Manoeuvres.** Past the ascent the pitch programme has nothing useful to say, so a flight plan is a list
-of burns: a time, a direction — prograde, retrograde, radial, or a held pitch — and how much Δv to spend.
-The predicted path is drawn ahead of the vehicle with the plan flown into it, which is the only way to aim
-a transfer at anything.
+of burns: a time, a direction — prograde, retrograde, radial, or a held pitch — how much Δv to spend, and
+whether to drop the stage that spent it. A stage can also be marked as lit by the plan rather than by the
+staging sequence, which is what lets a spacecraft carry a spent booster through a coast and jettison it
+with the burn that no longer needs it. The predicted path is drawn ahead of the vehicle with the plan flown
+into it, which is the only way to aim a transfer at anything.
 
 **The verdict.** Reaching orbit is a result, not an ending: the flight carries on, and the verdict can
 still improve on itself — captured by a moon, or an impact, both naming the body they are about. What a
@@ -69,12 +71,13 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Five launchers, all of which actually reach orbit:
+Six launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
-| Apollo / Saturn V | 192 × 186 km, then the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -88,6 +91,12 @@ flight plan fires the translunar injection with what the S-IVB kept back, and tw
 the vehicle is inside the Moon's sphere of influence, 1789 km over the surface. It leaves again: capturing
 into lunar orbit needs 670 m/s and there are 540 left, which is the historical reason Apollo carried a
 service module with an engine of its own. The lunar module's ride off the surface is the Moon preset.
+
+The lunar-orbit preset is the same rocket, counted differently. The command and service module stops being
+dead payload and becomes the fourth stage, so the flight plan can brake with the engine Apollo actually
+braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and 725 m/s
+retrograde at the far end for a 1782 × 1921 km lunar orbit with the service module still half full. The
+mass on the pad is the same to the kilogram.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.

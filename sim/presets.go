@@ -67,7 +67,7 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -231,6 +231,43 @@ func apolloSaturn() Preset {
 			MaxTime: 6 * 86400,
 		},
 	}
+}
+
+// apolloLunar is the same vehicle flown further: into orbit around the Moon
+// instead of past it.
+//
+// Nothing about the rocket changes — the difference is bookkeeping. The command
+// and service module stops being dead payload and becomes the fourth stage, so the
+// flight plan can use the engine Apollo actually braked with. The mass on the pad
+// is the same to the kilogram; the S-IVB is dropped after translunar injection
+// because from there it is 23 tonnes of empty tank in the way.
+func apolloLunar() Preset {
+	p := apolloSaturn()
+	p.Name = "apollo-lunar"
+	cfg := &p.Cfg
+
+	// What the spacecraft was carrying: the lunar module and its adapter.
+	cfg.Rocket.Payload = 16900
+	cfg.Rocket.Stages = append(cfg.Rocket.Stages, Stage{
+		// The service module: 18.4 t of propellant behind one engine of 91 kN at
+		// an Isp of 314 s, and the command module riding on top as dry mass.
+		DryMass: 10390, PropMass: 18410,
+		ThrustVac: 91190, IspVac: 314, IspSL: 314,
+		Throttle: 1,
+		// Lit by the plan, which also stops the staging sequence from firing it the
+		// moment the S-IVB shuts down over the Atlantic.
+		Ignition: IgniteOnNode,
+	})
+
+	// Translunar injection, then the braking burn at the far end. Both times and
+	// both delta-v figures were found by search — an insertion burn of five and a
+	// half minutes is nothing like the impulse a textbook would hand you, so it has
+	// to start before the closest approach and be sized against the real thing.
+	cfg.Nodes = []Node{
+		{T: 15325, Frame: BurnPrograde, DeltaV: 3162, Separate: true},
+		{T: 286000, Frame: BurnRetrograde, DeltaV: 725},
+	}
+	return p
 }
 
 func marsAscent() Preset {

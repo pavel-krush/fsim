@@ -50,6 +50,9 @@ type Node struct {
 	Frame  BurnFrame //
 	Pitch  float64   // deg above the local horizon, for BurnPitch
 	DeltaV float64   // m/s of ideal delta-v to spend before shutting down
+	// Separate drops the stage this burn used once it is over. A spent booster
+	// carried through a coast has to go before the engine above it can fire.
+	Separate bool
 }
 
 // Direction is the unit vector the node wants thrust along, given the state
@@ -239,16 +242,14 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 			h = predBurnStep
 		}
 		if c.coasting() {
-			// What the state can carry, and nothing more. Forcing the step up to
-			// the sampling interval — "no point integrating finer than the
-			// drawing" — was a mistake that cost four times the work it saved:
-			// the error control rejected the oversized step and halved it two or
-			// three times, at six gravity evaluations a try. Recording is already
-			// decoupled from stepping below.
-			h = math.Min(c.coastTarget(), maxCoastStep)
-			if next := c.nextNodeTime(); next > c.St.T && next-c.St.T < h {
-				h = next - c.St.T
-			}
+			// The same step planner as everywhere else, which brings the guards
+			// with it: land on a scheduled burn, and do not reach the air. Forcing
+			// the step up to the sampling interval — "no point integrating finer
+			// than the drawing" — was a mistake that cost four times what it
+			// saved, because the error control rejected the oversized step and
+			// halved it two or three times at six gravity evaluations a try.
+			// Recording is decoupled from stepping below.
+			h = c.plannedStepUncapped()
 		}
 		if c.advanceOne(h) <= 0 {
 			break

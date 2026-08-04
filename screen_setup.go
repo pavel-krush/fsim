@@ -23,13 +23,20 @@ type SetupScreen struct {
 	// launch body is a separate choice: a system is worth looking at whether or
 	// not the pad is on the body being looked at.
 	selBody int
+	// preset is the one last loaded. The configuration can be edited freely
+	// afterwards, so this is a record of where it came from and not a claim about
+	// what it still is.
+	preset int
 }
 
-// NewSetupScreen starts with no body selected — not with body zero, which is a
-// valid index and would therefore survive the clamp in Update. On a single planet
-// the two are the same thing; in the solar system it is the difference between
-// opening on the planet being launched from and opening on the Sun.
-func NewSetupScreen() *SetupScreen { return &SetupScreen{selBody: -1} }
+// NewSetupScreen starts on the given preset with no body selected — not with body
+// zero, which is a valid index and would therefore survive the clamp in Update. On
+// a single planet the two are the same thing; in the solar system it is the
+// difference between opening on the planet being launched from and opening on the
+// Sun.
+func NewSetupScreen(preset int) *SetupScreen {
+	return &SetupScreen{selBody: -1, preset: preset}
+}
 
 // Update draws the whole screen and handles its input.
 func (s *SetupScreen) Update(a *App, dst *ebiten.Image) {
@@ -489,6 +496,7 @@ func (s *SetupScreen) rocketRows(a *App, dst *ebiten.Image, c *rowCursor) {
 			u.Radio(dst, c.next(18), T("setup.ignitionImmediate"), ig, int(sim.IgniteImmediate))
 			u.Radio(dst, c.next(18), T("setup.ignitionDelayed"), ig, int(sim.IgniteAfterDelay))
 			u.Radio(dst, c.next(18), T("setup.ignitionApoapsis"), ig, int(sim.IgniteAtApoapsis))
+			u.Radio(dst, c.next(18), T("setup.ignitionNode"), ig, int(sim.IgniteOnNode))
 			if st.Ignition == sim.IgniteAfterDelay {
 				u.NumField(dst, c.next(rowH), T("setup.ignitionDelay"), &st.IgnitionDelay, NumOpt{Unit: T("unit.s"), Min: 0, Max: 1e5, Info: "setup.ignitionDelay.info"})
 			}
@@ -683,15 +691,24 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 
 	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, r.Y + 8, langPickerW, r.H - 16})
 
+	// A picker rather than a row of buttons: six of them already needed 900 pixels
+	// of header, and the number only goes one way.
 	presets := sim.Presets()
-	bw := 168.0
-	x := r.Right() - 20 - langPickerW - float64(len(presets))*(bw+6)
-	drawText(dst, T("setup.presetLabel"), fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
-	for _, p := range presets {
-		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, presetName(p.Name), ButtonNormal) {
-			s.loadPreset(a, p.Cfg)
-		}
-		x += bw + 6
+	items := make([]string, len(presets))
+	for i, p := range presets {
+		items[i] = presetName(p.Name)
+	}
+	if s.preset < 0 || s.preset >= len(presets) {
+		s.preset = 0
+	}
+
+	const bw = 230.0
+	box := Rect{r.Right() - 20 - langPickerW - bw, r.Y + 8, bw, r.H - 16}
+	drawText(dst, T("setup.presetLabel"), fontUISm, box.X-8,
+		r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignRight)
+	if picked := u.Dropdown(dst, box, "preset", items, s.preset); picked != s.preset {
+		s.preset = picked
+		s.loadPreset(a, presets[picked].Cfg)
 	}
 }
 

@@ -13,6 +13,12 @@ const (
 	// IgniteAtApoapsis coasts to apoapsis and burns there. This is what makes
 	// a circularisation burn possible.
 	IgniteAtApoapsis
+	// IgniteOnNode never lights by itself: the flight plan does it. A stage like
+	// this also stops the staging sequence from handing over to it, so whatever it
+	// sits on stays attached until a burn says to drop it — which is how a
+	// spacecraft keeps its spent booster through a coast and jettisons it with the
+	// burn that no longer needs it.
+	IgniteOnNode
 )
 
 // Stage is one propulsive stage of the vehicle.

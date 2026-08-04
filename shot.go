@@ -107,6 +107,9 @@ func newShotRunner(dir string) *shotRunner {
 			{name: "8l-outer-system", screen: ScreenFlight, focus: 1, zoom: 0.0004},
 			// Saturn, close enough for the rings.
 			{name: "8m-saturn", screen: ScreenFlight, focus: 7, zoom: 40},
+			// In orbit around the Moon, if the preset being flown is the one that
+			// brakes into one. On the flyby preset this is the same view, passing.
+			{name: "8n-lunar-orbit", screen: ScreenFlight, advance: 300000, focus: 10, zoom: 6},
 			{name: "8h-late", screen: ScreenFlight, advance: 360000, zoom: 0.02},
 			{name: "8i-graphs-lunar", screen: ScreenGraphs, graphs: true},
 			{name: "8j-graphs-ascent", screen: ScreenGraphs, graphs: true, graphAscent: true},

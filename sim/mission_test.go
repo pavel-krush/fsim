@@ -247,3 +247,73 @@ func TestDistantPlanetsAreLeftOut(t *testing.T) {
 		}
 	}
 }
+
+// The second Apollo preset brakes into lunar orbit instead of passing the Moon.
+// This is the whole chain end to end: rails, spheres of influence, the adaptive
+// step, staging, two nodes and a verdict that names the body it is about.
+func TestApolloLunarPresetEntersLunarOrbit(t *testing.T) {
+	s := New(apolloLunar().Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+
+	for !s.St.Done && s.St.T < 5*86400 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+	}
+
+	if s.St.Center != moon {
+		t.Fatalf("ended in %s's frame at T+%.2f days", s.Center().Name, s.St.T/86400)
+	}
+	o := ComputeOrbit(s.St.Pos, s.St.Vel, s.Center().Mu)
+	peri, apo := o.PeriapsisAlt(s.Center().Radius), o.ApoapsisAlt(s.Center().Radius)
+	t.Logf("lunar orbit %.0f x %.0f km, e %.4f, period %.0f min, service module %.0f%% full",
+		peri/1000, apo/1000, o.Eccentricity, o.Period/60,
+		s.St.Prop[3]/s.Cfg.Rocket.Stages[3].PropMass*100)
+
+	if !o.Bound() {
+		t.Fatal("the orbit around the Moon is not closed")
+	}
+	if peri < 500000 {
+		t.Errorf("periapsis %.0f km: too close to call this an orbit", peri/1000)
+	}
+	if o.Eccentricity > 0.15 {
+		t.Errorf("eccentricity %.3f: the insertion burn is not sized for this approach", o.Eccentricity)
+	}
+	if s.St.Outcome != OutcomeCaptured || s.St.OutcomeBody != moon {
+		t.Errorf("outcome %d about body %d, want captured by the Moon", s.St.Outcome, s.St.OutcomeBody)
+	}
+	// The S-IVB went overboard with the burn that no longer needed it, and the
+	// service module is what is left.
+	if s.St.Stage != 3 {
+		t.Errorf("flying stage %d, want the fourth", s.St.Stage+1)
+	}
+	if s.St.Prop[3] <= 0 {
+		t.Error("the service module has nothing left, so it cannot have braked with it")
+	}
+}
+
+// FastForward has to land on a scheduled burn like every other way of advancing.
+// It used to roll its own step — "fixed, or the coast target" — which left out the
+// clamp to the next node: a ten-minute step sailed up to ten minutes past the
+// ignition, and on a lunar insertion that is the difference between an orbit and a
+// crater. The screenshots showed it before any test did.
+func TestFastForwardLandsOnScheduledBurns(t *testing.T) {
+	const at = 40000.0
+	s := parked(300000, Node{T: at, Frame: BurnPrograde, DeltaV: 50})
+
+	s.FastForward(at + 5000)
+
+	var lit float64 = -1
+	for _, e := range s.Events {
+		if e.Kind == EvIgnition {
+			lit = e.T
+		}
+	}
+	if lit < 0 {
+		t.Fatal("the burn never happened")
+	}
+	if math.Abs(lit-at) > FixedStep {
+		t.Errorf("lit at T+%.3f s, scheduled for T+%.0f — %.1f s late", lit, at, lit-at)
+	}
+	close(t, "delta-v spent", s.St.DeltaV, 50, 1e-6)
+}

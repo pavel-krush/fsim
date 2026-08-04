@@ -12,7 +12,7 @@ translunar injection at T+15325 s, and the Moon's sphere of influence two and a 
 
 ```
 go run .                       # start
-go run . -preset 1             # start on preset 1 (0..4; 1 is Apollo)
+go run . -preset apollo-lunar  # start on a preset by name (see sim.Presets), not by position
 go run . -shot ./shots         # run the capture script and save a PNG of every screen
 go run . -camtrace 700         # print the vehicle's screen coordinates per frame (catches camera shake)
 go run . -lang ru              # start with the interface in Russian (default is English)
@@ -38,7 +38,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
-| `sim/presets.go` | Earth/Falcon-9, Apollo/Saturn V, Mars, Moon, Kerbin — all five reach orbit, and Apollo goes further |
+| `sim/presets.go` | Earth/Falcon-9, two Apollos, Mars, Moon, Kerbin — all six reach orbit, and the Apollos go further |
 | `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
@@ -225,7 +225,28 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
 - **`bodyName` is a lookup, not a switch.** Seventeen bodies is where a switch stops being worth writing;
   a missing entry renders as the identifier, which is the same safety net `T` has.
 
-### Apollo goes to the Moon
+### Apollo goes to the Moon, twice
+
+There are two of them. `apollo-saturn` flies past the Moon; `apollo-lunar` brakes into orbit around it.
+The rocket is identical to the kilogram — what differs is the bookkeeping and the plan.
+
+- **The command and service module becomes the fourth stage** in the lunar-orbit preset, instead of dead
+  payload, so the flight plan can brake with the engine Apollo actually braked with: 18.4 t of propellant
+  behind one 91 kN engine at 314 s. Payload drops to the lunar module and its adapter. Liftoff mass is
+  unchanged, because nothing moved except which column the numbers sit in.
+- **Two model additions were needed, and both say something real.** `IgniteOnNode` is a stage the staging
+  sequence never lights — and, crucially, never *hands over to*, so `endBurn` leaves the spent S-IVB
+  attached instead of separating over the Atlantic and firing the service module into the parking orbit.
+  `Node.Separate` drops the stage a burn used once it is over, because 23 tonnes of empty tank is in the
+  way of the engine above it.
+- **The insertion burn is five and a half minutes long**, so it is nothing like the impulse a textbook
+  hands you: it has to start 200 s *before* closest approach and be sized against the integrated result,
+  not against `v_peri − v_circ`. Found by search, like everything else here: T+286000 s and 725 m/s give
+  1782 × 1921 km at e = 0.019, with the service module still half full.
+- **This one is forgiving where the translunar injection is sharp.** ±25 m/s on the insertion moves the
+  periapsis by a couple of hundred kilometres; ±2 m/s on the injection moves the approach by two thousand.
+
+### The flyby preset
 
 The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking
 orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at **T+2.63 days**, passes
@@ -237,9 +258,10 @@ orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at 
   kilometres.** That is why the preset aims 1800 km clear of the surface rather than at the 200 km that
   scored best — a preset that turns into a crater when the integrator changes in the tenth digit is not a
   preset. `TestApolloPresetReachesTheMoon` asserts a wide band for the same reason.
-- **It is a flyby, and it has to be.** Capturing into lunar orbit from that approach needs some 670 m/s and
-  the S-IVB has 540 left. That is not a modelling gap — it is the historical reason Apollo carried a
-  service module with its own engine, which this vehicle does not have.
+- **It is a flyby because the S-IVB cannot do better.** Capturing from that approach needs some 670 m/s and
+  it has 540 left — which is the historical reason Apollo carried a service module with its own engine, and
+  exactly what `apollo-lunar` models by making that module a stage. Same rocket, same approach, different
+  bookkeeping.
 - **The osculating lunar orbit at the crossing can read as bound** while the integrated path is a flyby:
   at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1789 km
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
@@ -271,6 +293,12 @@ a delta-v to spend. `sim/node.go`, edited on the flight screen, drawn as the pat
   ignition ten minutes late, which for a correction burn is the difference between a transfer and a miss.
   For the same reason `coastStep` checks whether the phase machine lit something and hands the step back
   to the fixed integrator: the adaptive propagator knows nothing about thrust.
+- **Everything that advances time uses `plannedStepUncapped`**: `RunToEnd`, `FastForward` and `Predict`.
+  Each of them used to roll its own — "the fixed step, or the coast target if coasting" — and each of them
+  therefore left out both guards that live in the planner: the clamp onto the next scheduled burn and the
+  one that stops a descending step from reaching the air. A ten-minute coast step sailed up to ten minutes
+  past a lunar insertion, which is the difference between an orbit and a crater. The screenshots caught it;
+  no test did, which is why `TestFastForwardLandsOnScheduledBurns` exists now.
 - **`Predict` is the flight, not a sketch of it** — the same integrator over the same plan, on a copy that
   shares nothing writable. Burns run at the same fixed 0.02 s, and points are **sampled** out of the run:
   the first cut recorded one per step and spent all four hundred points on the first eight seconds of a
@@ -572,6 +600,9 @@ the slice it pointed into — so `TestPresetsAreValid`, `TestRemoveRunningNode`,
 - **The launch body cannot be deleted.** The remap would put the pad on whatever
   the renumbering happens to leave at index zero, which in the solar system is the
   Sun.
+- **The preset picker is a dropdown and `-preset` takes a name.** Six entries already needed 900 pixels of
+  header as buttons, and an index into a list that grows is a thing nobody can remember and every new
+  preset silently redefines.
 - **A preset's nodes have to fire inside its own time limit.** Apollo's translunar
   burn is at T+15325 s and the preset used to say sixty minutes; it only worked
   because the limit stops applying once there is a verdict. Relying on that is

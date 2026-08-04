@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"strings"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -117,7 +118,7 @@ func (a *App) ShowGraphs(s *sim.Sim) {
 
 func main() {
 	shotDir := flag.String("shot", "", "run the capture script and save screenshots of every screen into this directory")
-	preset := flag.Int("preset", 0, "index of the preset to start from (0 is the first)")
+	presetSlug := flag.String("preset", "", "identifier of the preset to start from, e.g. apollo-lunar; empty for the first")
 	camTrace := flag.Int("camtrace", 0, "print the vehicle's screen coordinates for N frames of live flight")
 	langCode := flag.String("lang", "en", "interface language to start in: en or ru")
 	flag.Parse()
@@ -131,17 +132,29 @@ func main() {
 
 	initFonts()
 
+	// By name rather than by position: an index into a list that grows is a thing
+	// nobody can remember and every new preset silently redefines.
 	presets := sim.Presets()
-	cfg := sim.DefaultConfig()
-	if *preset > 0 && *preset < len(presets) {
-		cfg = presets[*preset].Cfg
+	chosen := 0
+	if *presetSlug != "" {
+		chosen = -1
+		names := make([]string, len(presets))
+		for i, p := range presets {
+			names[i] = p.Name
+			if p.Name == *presetSlug {
+				chosen = i
+			}
+		}
+		if chosen < 0 {
+			log.Fatalf("unknown preset %q; expected one of %s", *presetSlug, strings.Join(names, ", "))
+		}
 	}
 
 	app := &App{
 		ui:  NewUI(),
-		cfg: cfg,
+		cfg: presets[chosen].Cfg,
 	}
-	app.setup = NewSetupScreen()
+	app.setup = NewSetupScreen(chosen)
 	if *shotDir != "" {
 		app.shots = newShotRunner(*shotDir)
 	}
