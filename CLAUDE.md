@@ -246,6 +246,29 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
 - **This one is forgiving where the translunar injection is sharp.** ±25 m/s on the insertion moves the
   periapsis by a couple of hundred kilometres; ±2 m/s on the injection moves the approach by two thousand.
 
+### Proton-K, and why not Soyuz
+
+`proton-zvezda` is the July 2000 launch of Zvezda. Proton-K is in here rather than an R-7 because it is
+**serial** — three stages in a line — and `Rocket.Stages` is a serial list. Vostok and Soyuz strap four
+boosters around a core and burn them together; a serial list can only lie about that, and the lie would be
+in the first thirty seconds of every flight.
+
+- **The launcher is not supposed to reach the station's altitude.** Nineteen tonnes to a couple of hundred
+  kilometres is what Proton-K sells; 400 km with the same payload is beyond it, and the tuner said so —
+  the best it found was 461 x 308 km. That is also what really happened: the module went up into an ellipse
+  and climbed to the station over the following days on its own engines.
+- **The circularisation is done by the third stage's leftovers**, not by the module. The cutoff at 225 s
+  leaves 3.3 t in the tank, and 43 m/s of it at the first apoapsis gives 513 x 408 km with the low side
+  exactly at the station's altitude. `Node.Separate` then drops the stage, and the module is left flying
+  alone with all 860 kg of its own propellant — which is what the station-keeping this simulator does not
+  model would have wanted.
+- **Baikonur is at 51.6 degrees and this simulator has one plane.** The pad is handed all 465 m/s of the
+  equator's rotation instead of the 325 the real site gets, so the ascent is that much cheaper than it
+  should be. Every preset here tells the same lie; this is the one where it is largest.
+- **`protonK` carries no third-stage cutoff.** Where the third stage stops is the mission's business, and
+  the first cut left 250 s in the shared vehicle — a number the stage never reaches, so it burned dry and
+  the insertion came out 2235 x 325 km instead of 461 x 308. `protonInsertion(cutoff)` is the fix.
+
 ### The flyby preset
 
 The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking

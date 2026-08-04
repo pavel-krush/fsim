@@ -71,13 +71,14 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Six launchers, all of which actually reach orbit:
+Seven launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
+| Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -97,6 +98,14 @@ dead payload and becomes the fourth stage, so the flight plan can brake with the
 braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and 725 m/s
 retrograde at the far end for a 1782 × 1921 km lunar orbit with the service module still half full. The
 mass on the pad is the same to the kilogram.
+
+Proton-K is here because it is *serial* — three stages in a line — and a list of stages can describe that
+honestly. The R-7 family cannot be done that way: Vostok and Soyuz strap four boosters around a core and
+burn them together, which a serial list can only lie about. This is the launch of July 2000 that put Zvezda
+up: nineteen tonnes, and the launcher only gets it as far as an ellipse, because Proton's advertised
+nineteen tonnes are to a couple of hundred kilometres and not to the station's four hundred. The third
+stage cuts off with 3.3 t still in the tank, 43 m/s of it at the first apoapsis makes the orbit round, and
+then it goes overboard and leaves the module with its own propellant untouched.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.

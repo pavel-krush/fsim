@@ -67,7 +67,7 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -268,6 +268,124 @@ func apolloLunar() Preset {
 		{T: 286000, Frame: BurnRetrograde, DeltaV: 725},
 	}
 	return p
+}
+
+// protonK is the vehicle both Proton presets fly: three stages in a line, which is
+// what makes it modellable here at all. The R-7 family — Vostok, Soyuz — straps
+// four boosters around a core and burns them together, and a serial list of stages
+// cannot say that without lying about it.
+//
+// Real figures: six RD-253 on the first stage, four RD-0210/0211 on the second, one
+// RD-0212 on the third, and hypergolics all the way up, which is why it sat on the
+// pad for weeks without complaint.
+func protonK() []Stage {
+	return []Stage{
+		{
+			DryMass: 31100, PropMass: 419410,
+			ThrustVac: 9810000, IspVac: 316, IspSL: 285,
+			Throttle: 1, SepDelay: 2,
+		},
+		{
+			DryMass: 11000, PropMass: 156113,
+			ThrustVac: 2399000, IspVac: 327, IspSL: 327,
+			Throttle: 1, SepDelay: 2,
+			Ignition: IgniteImmediate,
+		},
+		{
+			// No cutoff here: where the third stage stops is the mission's
+			// business, and each preset that flies this rocket says so itself.
+			DryMass: 3500, PropMass: 46562,
+			ThrustVac: 613000, IspVac: 325, IspSL: 325,
+			Throttle: 1,
+			Ignition: IgniteImmediate,
+		},
+	}
+}
+
+// protonInsertion is the launcher with its third stage told when to stop, which is
+// the one number that differs between the missions it flies.
+func protonInsertion(cutoff float64) []Stage {
+	st := protonK()
+	st[2].CutoffTime = cutoff
+	return st
+}
+
+// earthSystem is the solar system with the Earth picked out of it, for the presets
+// that launch from there.
+func earthSystem() (System, int) {
+	sys := SolarSystem()
+	return sys, sys.IndexOf("earth")
+}
+
+// protonZvezda is the Proton-K that put Zvezda up in July 2000: nineteen tonnes of
+// space station module, and the launcher only gets it as far as an ellipse.
+//
+// That is not a shortfall of the model. Proton-K's advertised nineteen tonnes are to
+// a couple of hundred kilometres, not to the station's four hundred, so the real
+// launch left the module in 180 x 350 km and it climbed to the station over the
+// following days on its own engines.
+//
+// Here the launcher's third stage cuts off early enough to leave 3.3 t in the tank,
+// and 43 m/s of that at the first apoapsis is what makes the orbit round: 512 x 408
+// km, with the low side sitting exactly at the station's altitude. Then the stage
+// goes overboard and the module is left with all 860 kg of its own propellant, which
+// is what the station-keeping this simulator does not model would have wanted.
+func protonZvezda() Preset {
+	sys, earth := earthSystem()
+	return Preset{
+		Name: "proton-zvezda",
+		Cfg: Config{
+			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
+			Atmo: Atmosphere{
+				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
+				Layers:          earthISA(),
+				SurfaceTemp:     288.15,
+				SurfacePressure: 101325,
+				Top:             140000,
+			},
+			Rocket: Rocket{
+				// The cargo Zvezda carried inside it; the module itself is the
+				// stage below.
+				Payload:  1300,
+				Cd:       0.4,
+				Diameter: 7.4,
+				Stages: append(protonInsertion(225), Stage{
+					// Zvezda: 16.9 t of module, 860 kg of propellant, two engines
+					// of 3.07 kN.
+					DryMass: 16890, PropMass: 860,
+					ThrustVac: 6140, IspVac: 300, IspSL: 300,
+					Throttle: 1,
+					Ignition: IgniteOnNode,
+				}),
+			},
+			// Baikonur launches at 51.6 degrees and this simulator has one plane, so
+			// the pad here is handed all 465 m/s of the equator's rotation instead of
+			// the 325 the real site gets. The ascent is that much cheaper than it
+			// should be, which is the same lie every preset here tells.
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 12, Pitch: 90},
+				{Time: 68, Pitch: 68},
+				{Time: 125, Pitch: 49},
+				{Time: 181, Pitch: 35},
+				{Time: 237, Pitch: 23},
+				{Time: 294, Pitch: 15},
+				{Time: 350, Pitch: 8},
+				{Time: 407, Pitch: 4},
+				{Time: 463, Pitch: 2},
+				{Time: 519, Pitch: 1},
+				{Time: 576, Pitch: 0},
+			}},
+			Nodes: []Node{
+				// Prograde at the first apoapsis, which raises the low side, and then
+				// the spent stage is dropped. This is the one number here the textbook
+				// gets right on its own: 43 m/s, against the 43 the two-body sum says.
+				{T: 3333, Frame: BurnPrograde, DeltaV: 43, Separate: true},
+			},
+			TargetOrbit: 408000,
+			MaxTime:     6 * 3600,
+		},
+	}
 }
 
 func marsAscent() Preset {

@@ -317,3 +317,43 @@ func TestFastForwardLandsOnScheduledBurns(t *testing.T) {
 	}
 	close(t, "delta-v spent", s.St.DeltaV, 50, 1e-6)
 }
+
+// The Proton preset: nineteen tonnes to an elliptical orbit, made round by what the
+// third stage has left, and the module dropped off with its own tanks still full.
+func TestProtonPresetDeliversToTheStationsAltitude(t *testing.T) {
+	s := New(protonZvezda().Cfg)
+
+	// The launcher's own job first.
+	s.RunToEnd()
+	if s.St.Outcome != OutcomeOrbit {
+		t.Fatalf("outcome %d at T+%.0f s", s.St.Outcome, s.St.T)
+	}
+	tm := s.Telemetry()
+	t.Logf("insertion at T+%.0f s into %.0f x %.0f km", s.St.T, tm.ApoAlt/1000, tm.PeriAlt/1000)
+	if tm.PeriAlt < 200000 {
+		t.Errorf("periapsis %.0f km, which is not an orbit anyone would leave a module in", tm.PeriAlt/1000)
+	}
+
+	// Then the plan.
+	s.FastForward(5000)
+	tm = s.Telemetry()
+	t.Logf("after circularising: %.0f x %.0f km, e %.4f", tm.ApoAlt/1000, tm.PeriAlt/1000, tm.Ecc)
+
+	if tm.Ecc > 0.02 {
+		t.Errorf("eccentricity %.4f: the circularisation burn did not do its job", tm.Ecc)
+	}
+	// The station is at 408 km and the low side of the orbit is what has to reach it.
+	if d := tm.PeriAlt - 408000; d < -60000 || d > 60000 {
+		t.Errorf("periapsis %.0f km, %.0f km off the station's altitude", tm.PeriAlt/1000, d/1000)
+	}
+	// The module is flying alone, with its own propellant untouched.
+	if s.St.Stage != 3 {
+		t.Errorf("flying stage %d, want the module", s.St.Stage+1)
+	}
+	if left := s.St.Prop[3]; left < 859 {
+		t.Errorf("the module has spent %.0f kg of its own propellant", 860-left)
+	}
+	if m := s.Mass(); m < 18500 || m > 19500 {
+		t.Errorf("mass in orbit %.0f kg, want the module's nineteen tonnes", m)
+	}
+}
