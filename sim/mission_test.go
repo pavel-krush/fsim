@@ -194,3 +194,56 @@ func TestLeavingAMoonIsNotEscape(t *testing.T) {
 		t.Errorf("the flight ended with outcome %d", s.St.Outcome)
 	}
 }
+
+// Bodies off the frame's own chain are left out of the sum, and that is a
+// correction as much as a saving: the rails give a body the motion of its own
+// chain and nothing else, so a distant planet pulls the vehicle without pulling
+// the centre it is measured from. Including Jupiter in an Earth-centred flight
+// buys three hundred nanometres a second squared of pull that the Earth never
+// feels — twenty kilometres of error over four days, against a true differential
+// effect of about 1e-11.
+func TestDistantPlanetsAreLeftOut(t *testing.T) {
+	sys := SolarSystem()
+	earth, moon := sys.IndexOf("earth"), sys.IndexOf("moon")
+	rel := Vec2{sys.Bodies[earth].Radius + 300000, 0}
+
+	if !sys.Contributes(sys.IndexOf("sun"), earth) {
+		t.Error("the Sun is up the Earth's chain and has to count")
+	}
+	if !sys.Contributes(moon, earth) {
+		t.Error("the Moon orbits the Earth and has to count")
+	}
+	for _, name := range []string{"jupiter", "venus", "io", "titan", "phobos"} {
+		if sys.Contributes(sys.IndexOf(name), earth) {
+			t.Errorf("%s is off the Earth's chain and should not count", name)
+		}
+	}
+
+	base := sys.Gravity(earth, rel, 1000)
+
+	// Doubling Jupiter changes nothing near the Earth...
+	heavy := SolarSystem()
+	j := heavy.IndexOf("jupiter")
+	heavy.Bodies[j].Mass *= 2
+	heavy.Normalize()
+	if got := heavy.Gravity(earth, rel, 1000); got != base {
+		t.Errorf("doubling Jupiter moved the acceleration near the Earth by %g m/s^2",
+			got.Sub(base).Len())
+	}
+
+	// ...but doubling the Moon certainly does, or the sum is not summing.
+	heavy = SolarSystem()
+	heavy.Bodies[heavy.IndexOf("moon")].Mass *= 2
+	heavy.Normalize()
+	if got := heavy.Gravity(earth, rel, 1000); got == base {
+		t.Error("doubling the Moon changed nothing: the perturbers are not being summed")
+	}
+
+	// When the root is the frame, nothing is dropped: it does not move, so every
+	// pull on the vehicle is an honest one.
+	for i := range sys.Bodies {
+		if !sys.Contributes(i, 0) {
+			t.Errorf("%s was dropped in the root's own frame", sys.Bodies[i].Name)
+		}
+	}
+}

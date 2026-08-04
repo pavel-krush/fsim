@@ -56,6 +56,11 @@ func (s *Sim) coasting() bool {
 	return s.Altitude() > s.atmoTop()
 }
 
+// coastScale is a multiplier on the target step, held on the Sim: a prediction is
+// a drawing and can afford a coarser path than the flight it previews. The error
+// control still has the last word, so a step this makes too long is rejected
+// rather than believed.
+
 // coastFactor sets the target step as a fraction of the local timescale. It is
 // conservative on purpose: the controller below can shrink a step it does not
 // like, but it remembers nothing between steps, so a target that is usually
@@ -78,9 +83,13 @@ func (s *Sim) coastTarget() float64 {
 	if r <= 0 || mu <= 0 {
 		return FixedStep
 	}
+	scale := s.coastScale
+	if scale <= 0 {
+		scale = 1
+	}
 	orbital := math.Sqrt(r * r * r / mu)
 	crossing := r / math.Max(s.St.Vel.Len(), 1)
-	return clampStep(coastFactor * math.Min(orbital, crossing))
+	return clampStep(coastFactor * scale * math.Min(orbital, crossing))
 }
 
 func clampStep(h float64) float64 {
@@ -211,7 +220,7 @@ func shrinkFactor(err, tol float64) float64 {
 func (s *Sim) gravLossRate(pos, vel Vec2, t float64) float64 {
 	vRel := vel.Sub(pos.Perp().Scale(s.Center().AngularVelocity()))
 	gamma := FlightPathAngle(pos, vRel)
-	g := s.Cfg.System.Gravity(s.St.Center, pos, t).Len()
+	g := s.gravity(s.St.Center, pos, t).Len()
 	return g * math.Sin(gamma*math.Pi/180)
 }
 
@@ -221,7 +230,7 @@ func (s *Sim) gravLossRate(pos, vel Vec2, t float64) float64 {
 // so the derivative is a plain function of position and time.
 func (s *Sim) cashKarp(y coastState, t, h float64) (fifth, fourth coastState) {
 	f := func(dt float64, y coastState) coastState {
-		return coastState{y.V, s.Cfg.System.Gravity(s.St.Center, y.P, t+dt)}
+		return coastState{y.V, s.gravity(s.St.Center, y.P, t+dt)}
 	}
 
 	k1 := f(0, y)

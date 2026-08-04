@@ -205,6 +205,23 @@ func (s *System) Frame(rootPos Vec2, t float64) int {
 	}
 }
 
+// Contributes reports whether body i is worth summing when the frame is centred
+// on c: the chain of ancestors above c, and everything at or below c.
+//
+// This is both a saving and a correction, and the correction is the reason for it.
+// The rails give a body the two-body motion of its own chain and nothing else, so
+// a body off that chain pulls the vehicle without pulling the frame's centre. For
+// a vehicle near the Earth, Jupiter's *true* differential effect is about
+// 1e-11 m/s^2, and its uncompensated pull in this model is 3e-7 — over four days
+// that is twenty kilometres of error bought by including it. Leaving it out is
+// closer to the truth as well as five times faster.
+//
+// When the centre is the root nothing is dropped: the root does not move, so every
+// pull on the vehicle is an honest one.
+func (s *System) Contributes(i, c int) bool {
+	return i == c || s.isAncestor(i, c) || s.isAncestor(c, i)
+}
+
 // isAncestor reports whether a is somewhere up b's chain of parents.
 func (s *System) isAncestor(a, b int) bool {
 	for j := b; j > 0; j = s.Bodies[j].Parent {
@@ -226,6 +243,33 @@ func (s *System) isAncestor(a, b int) bool {
 // correction as a sum over every perturber, the way a true N-body integration
 // would, would contradict the rails.
 func (s *System) Gravity(center int, rel Vec2, t float64) Vec2 {
+	if len(s.Bodies) == 1 {
+		return s.GravityFrom(center, rel, nil)
+	}
+	return s.GravityFrom(center, rel, s.Positions(center, t, nil))
+}
+
+// Positions fills buf with the root-frame position at time t of every body that
+// contributes in the frame of center, and returns it. Each entry costs a Kepler
+// solve per link of its chain, which is why callers on a hot path hold on to the
+// answer instead of asking twice — and why the ones that cannot matter are not
+// computed at all.
+func (s *System) Positions(center int, t float64, buf []Vec2) []Vec2 {
+	if cap(buf) < len(s.Bodies) {
+		buf = make([]Vec2, len(s.Bodies))
+	}
+	buf = buf[:len(s.Bodies)]
+	for i := range s.Bodies {
+		if s.Contributes(i, center) {
+			buf[i], _ = s.StateAt(i, t)
+		}
+	}
+	return buf
+}
+
+// GravityFrom is Gravity with the ephemeris already in hand. pos may be nil for a
+// system of one body, which needs none.
+func (s *System) GravityFrom(center int, rel Vec2, pos []Vec2) Vec2 {
 	c := &s.Bodies[center]
 
 	r := rel.Len()
@@ -241,29 +285,28 @@ func (s *System) Gravity(center int, rel Vec2, t float64) Vec2 {
 		return acc
 	}
 
-	cp, _ := s.StateAt(center, t)
+	cp := pos[center]
 	for i := range s.Bodies {
-		if i == center || s.Bodies[i].Mu <= 0 {
+		if i == center || s.Bodies[i].Mu <= 0 || !s.Contributes(i, center) {
 			continue
 		}
-		bp, _ := s.StateAt(i, t)
-		d := bp.Sub(cp).Sub(rel) // perturber as seen from the vehicle
+		d := pos[i].Sub(cp).Sub(rel) // perturber as seen from the vehicle
 		if dl := d.Len(); dl >= 1 {
 			acc = acc.Add(d.Scale(s.Bodies[i].Mu / (dl * dl * dl)))
 		}
 	}
-	return acc.Sub(s.railAccel(center, t))
+	return acc.Sub(s.railAccelFrom(center, pos))
 }
 
-// railAccel is the acceleration the rails impose on body i, summed along its
+// railAccelFrom is the acceleration the rails impose on body i, summed along its
 // chain of ancestors. Each link contributes the two-body pull that orbitState
-// integrates, which is what makes the correction in Gravity exact rather than
+// integrates, which is what makes the correction in GravityFrom exact rather than
 // approximate.
-func (s *System) railAccel(i int, t float64) Vec2 {
+func (s *System) railAccelFrom(i int, pos []Vec2) Vec2 {
 	var a Vec2
 	for j := i; j > 0; j = s.Bodies[j].Parent {
 		p := s.Bodies[j].Parent
-		d, _ := s.RelState(j, p, t)
+		d := pos[j].Sub(pos[p])
 		if l := d.Len(); l > 0 {
 			a = a.Add(d.Scale(-s.Bodies[p].Mu / (l * l * l)))
 		}

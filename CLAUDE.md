@@ -219,6 +219,48 @@ header and in the bottom bars of the flight and graph screens.
 - A third language is one more file plus entries in `localeFile` and `localeCode`; the tests will list
   every key it is missing.
 
+## What it costs to run
+
+Measured, because all four of these were guesses that turned out wrong in one
+direction or another. A hitch appeared once the vehicle left the atmosphere: the
+numbers said the prediction was taking **658 ms** and running twice a second.
+
+| | before | after |
+|---|---|---|
+| one step, solar system | 17.2 µs | **3.1 µs** |
+| one step, single body | 1.08 µs | 0.88 µs |
+| one prediction from the parking orbit | 658 ms | **9.5 ms** |
+
+- **A prediction only runs while coasting.** During an ascent the pitch programme
+  is flying and a preview of it says nothing — and it is the expensive case,
+  because a burn is integrated at the fixed step. The old altitude test let
+  predictions through the moment the vehicle passed the top of the atmosphere,
+  which is exactly where the stutter appeared.
+- **A predicted burn steps at one second, not 0.02.** A translunar injection is
+  five hundred seconds of smooth vacuum thrust; at the fixed step that is
+  twenty-five thousand steps of work several times a second, and the drawn path
+  moves by centimetres for it.
+- **`Predict` must not force the step up to the sampling interval.** "No point
+  integrating finer than the drawing" cost four times what it saved: the error
+  control rejected the oversized step and halved it two or three times, at six
+  gravity evaluations a try. Recording is decoupled from stepping already.
+- **The ephemeris is cached on four instants** (`Sim.ephemeris`). A Runge-Kutta
+  step asks for gravity at three distinct times and evaluates four stages, and
+  every answer costs a Kepler solve per body. The cache is keyed on time alone, so
+  it has to be dropped when the frame changes: which bodies are in it depends on
+  the centre.
+- **`System.Contributes` drops the bodies off the frame's own chain, and that is a
+  correction as much as a saving.** The rails give a body the two-body motion of
+  its chain and nothing else, so a distant planet pulls the vehicle without
+  pulling the centre it is measured from. Jupiter's true differential effect on a
+  vehicle near the Earth is about 1e-11 m/s²; its uncompensated pull in this model
+  was 3e-7, which is twenty kilometres of error over four days bought by including
+  it. In the root's own frame nothing is dropped — the root does not move, so every
+  pull is honest. `TestDistantPlanetsAreLeftOut` pins both halves.
+- The pruning moved the Apollo ascent by **three centimetres** and its periselene
+  from 1789 to 1791 km. The other four presets are bit-for-bit unchanged, as they
+  have been through every phase of this.
+
 ## Editing the system
 
 The setup screen's first column edits **one body of the tree**, chosen by a picker at the top with the

@@ -27,10 +27,17 @@ const (
 	BurnPitch
 )
 
+// predCoastScale is how much coarser a predicted coast may step than a flown one.
+const predCoastScale = 5
+
+// predBurnStep is the step a predicted burn is integrated at, in seconds. See the
+// loop below for why it is not the fixed step.
+const predBurnStep = 1.0
+
 // maxPredSteps bounds the work one prediction may do. A burn runs at the fixed
 // step, and a long one is tens of thousands of them; the prediction is recomputed
 // several times a second, so it needs a ceiling more than it needs to be complete.
-const maxPredSteps = 40000
+const maxPredSteps = 20000
 
 // maxNodes is how many manoeuvres a flight plan may hold. The executed ones are
 // tracked as a bitmask in the state, which is what sets the ceiling — and a
@@ -178,6 +185,11 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 	// the step size from here while routing on that cap means a minute-long
 	// fixed step, which in low orbit is not a trajectory at all.
 	c.WarpRate = math.Inf(1)
+	// And a coarser coast than the flight itself: the path is being drawn, not
+	// flown, so a step five times longer costs a few metres of a forty-thousand
+	// kilometre arc and five times less work. In low orbit that is the difference
+	// between seventeen hundred steps to reach a planned burn and three hundred.
+	c.coastScale = predCoastScale
 
 	// The prediction is the flight, not a sketch of it: the same integrator on the
 	// same plan. So a burn runs at the same fixed 0.02 s as the real one, and the
@@ -192,11 +204,22 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 
 	for steps := 0; steps < maxPredSteps && len(out) < maxPoints && !c.St.Done && c.St.T < end; steps++ {
 		h := FixedStep
+		if c.St.Phase == PhaseBurn && c.Altitude() > c.atmoTop() {
+			// A planned burn in vacuum is a smooth arc, and a preview of it does
+			// not need the ascent's step: a translunar injection is five hundred
+			// seconds long, which at 0.02 s is twenty-five thousand steps of work
+			// several times a second. At a second a step the drawn path moves by
+			// centimetres and the cost drops by fifty.
+			h = predBurnStep
+		}
 		if c.coasting() {
-			// Out of the atmosphere with the engine off, the step can be as long
-			// as the sampling interval — there is no point integrating finer than
-			// the drawing.
-			h = math.Min(math.Max(c.coastTarget(), interval), maxCoastStep)
+			// What the state can carry, and nothing more. Forcing the step up to
+			// the sampling interval — "no point integrating finer than the
+			// drawing" — was a mistake that cost four times the work it saved:
+			// the error control rejected the oversized step and halved it two or
+			// three times, at six gravity evaluations a try. Recording is already
+			// decoupled from stepping below.
+			h = math.Min(c.coastTarget(), maxCoastStep)
 			if next := c.nextNodeTime(); next > c.St.T && next-c.St.T < h {
 				h = next - c.St.T
 			}

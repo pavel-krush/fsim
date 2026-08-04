@@ -410,7 +410,13 @@ func (f *FlightScreen) predHorizon() float64 {
 // appears once the vehicle is out of the air, where the ascent's ground-frame
 // reading stops being the useful one.
 func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64) {
-	if f.s.Altitude() <= f.s.Cfg.Atmo.Top || f.s.St.Done {
+	// Only while coasting. During the ascent the pitch programme is flying and a
+	// prediction of it says nothing useful — and it is the expensive case: with a
+	// burn in progress every predicted step is a fixed 0.02 s one, which came to
+	// 650 ms of work twice a second in a system of eighteen bodies. That was the
+	// stutter that showed up on the way out of the atmosphere, which is exactly
+	// where the altitude test below starts letting predictions through.
+	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.Cfg.Atmo.Top {
 		f.pred = nil
 		return
 	}

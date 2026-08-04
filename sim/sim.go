@@ -240,6 +240,18 @@ type Sim struct {
 
 	coastH float64 // step the adaptive propagator wants next, s
 
+	// The ephemeris cache. One Runge-Kutta step asks for gravity at three
+	// distinct instants and evaluates four stages, and every answer costs a
+	// Kepler solve per body — in a system of eighteen that was most of the cost
+	// of a step. The positions are a pure function of the system and the time, so
+	// caching them is safe as long as the system does not change mid-flight,
+	// which nothing does: the setup screen edits its own copy.
+	ephT    [ephSlots]float64
+	ephHas  [ephSlots]bool
+	ephPos  [ephSlots][]Vec2
+	ephNext int
+
+	coastScale   float64 // multiplier on the adaptive step; 0 means one
 	accum        float64 // leftover real time not yet turned into a fixed step
 	surfaceP     float64
 	launchAngle  float64
@@ -319,6 +331,36 @@ func (s *Sim) Mass() float64 {
 	return m
 }
 
+// ephSlots is how many instants the ephemeris cache holds. A step asks for t,
+// t+h/2 twice and t+h, and the next step reuses its own t, so four is enough to
+// catch every repeat without a map's overhead.
+const ephSlots = 4
+
+// gravity is Gravity with the ephemeris cache in front of it.
+func (s *Sim) gravity(center int, rel Vec2, t float64) Vec2 {
+	if len(s.Cfg.System.Bodies) == 1 {
+		return s.Cfg.System.GravityFrom(center, rel, nil)
+	}
+	return s.Cfg.System.GravityFrom(center, rel, s.ephemeris(t))
+}
+
+// ephemeris returns the contributing bodies' root-frame positions at t, from the
+// cache when that instant has been asked for before. The cache is keyed on time
+// alone, so it is dropped when the frame changes: which bodies are in it depends
+// on the centre.
+func (s *Sim) ephemeris(t float64) []Vec2 {
+	for i := range s.ephT {
+		if s.ephHas[i] && s.ephT[i] == t {
+			return s.ephPos[i]
+		}
+	}
+	i := s.ephNext
+	s.ephNext = (s.ephNext + 1) % ephSlots
+	s.ephPos[i] = s.Cfg.System.Positions(s.St.Center, t, s.ephPos[i])
+	s.ephT[i], s.ephHas[i] = t, true
+	return s.ephPos[i]
+}
+
 // Center is the body the state is currently measured from.
 func (s *Sim) Center() *Body { return &s.Cfg.System.Bodies[s.St.Center] }
 
@@ -360,6 +402,7 @@ func (s *Sim) refocus() {
 	}
 	dp, dv := sys.RelState(s.St.Center, want, s.St.T)
 	s.St.Pos, s.St.Vel = s.St.Pos.Add(dp), s.St.Vel.Add(dv)
+	s.ephHas = [ephSlots]bool{} // a different centre means a different set of bodies
 
 	// Which way the crossing went: into a body's sphere if the one being left is
 	// an ancestor of the one being entered, out of it otherwise.
@@ -640,7 +683,7 @@ func (s *Sim) forces(t float64, pos, vel Vec2, ctx burnContext) forceSet {
 	if s.St.Center == s.Cfg.LaunchBody {
 		f.Atmo = s.Cfg.Atmo.State(h)
 	}
-	f.Grav = s.Cfg.System.Gravity(s.St.Center, pos, t)
+	f.Grav = s.gravity(s.St.Center, pos, t)
 
 	// Velocity relative to the rotating atmosphere: what the airframe feels,
 	// and the frame the pitch programme is judged against.
