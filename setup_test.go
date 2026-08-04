@@ -248,3 +248,48 @@ func TestSameMixtureIgnoresScale(t *testing.T) {
 		t.Error("an empty mixture matched Earth air")
 	}
 }
+
+// Loading a preset while the body editor is pointing at a body the new preset does
+// not have. Coming from the solar system to a single planet leaves the editor
+// holding index nine of a slice of one, and the columns are drawn after the preset
+// button is handled, not before — so this used to be a crash on the same frame.
+func TestLoadPresetClearsTheSelection(t *testing.T) {
+	a := &App{ui: NewUI()}
+	s := NewSetupScreen()
+	presets := sim.Presets()
+
+	// Find the two shapes that matter: a system with moons, and one without.
+	var many, one sim.Config
+	for _, p := range presets {
+		cfg := p.Cfg
+		cfg.EnsureSystem()
+		if len(cfg.System.Bodies) > 1 && many.Body.Radius == 0 {
+			many = p.Cfg
+		}
+		if len(cfg.System.Bodies) == 1 && one.Body.Radius == 0 {
+			one = p.Cfg
+		}
+	}
+	if many.Body.Radius == 0 || one.Body.Radius == 0 {
+		t.Skip("no preset of each shape to compare")
+	}
+
+	s.loadPreset(a, many)
+	s.selBody = len(a.cfg.System.Bodies) - 1
+	if s.selBody == 0 {
+		t.Fatal("the many-body preset has one body")
+	}
+
+	s.loadPreset(a, one)
+
+	if s.selBody < 0 || s.selBody >= len(a.cfg.System.Bodies) {
+		t.Fatalf("selection is %d in a system of %d", s.selBody, len(a.cfg.System.Bodies))
+	}
+	if s.selBody != a.cfg.LaunchBody {
+		t.Errorf("selection is %d, want the launch body %d", s.selBody, a.cfg.LaunchBody)
+	}
+	// And the config that came in is usable: EnsureSystem ran on it.
+	if len(a.cfg.System.Bodies) == 0 || a.cfg.Body.Mu <= 0 {
+		t.Error("the loaded preset was not prepared")
+	}
+}

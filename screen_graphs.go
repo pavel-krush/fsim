@@ -411,6 +411,11 @@ func (g *GraphScreen) drawPlot(dst *ebiten.Image, r Rect, s series, c color.NRGB
 // side so the trace enters and leaves the plot rather than starting inside it.
 func (g *GraphScreen) visibleRange() (int, int) {
 	h := g.s.Hist
+	if len(h) == 0 {
+		// An empty slice rather than a negative index: nothing calls this without
+		// history today, and nothing should crash if something starts to.
+		return 0, -1
+	}
 	first := sampleAt(h, g.t0)
 	last := sampleAt(h, g.t1)
 	if first > 0 {

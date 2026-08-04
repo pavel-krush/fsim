@@ -447,3 +447,55 @@ func TestEnsureSystemCopiesTheEditableFace(t *testing.T) {
 		t.Errorf("the Moon's orbit changed to %g", got)
 	}
 }
+
+// The editor's two operations, run in a long enough sequence to catch a fixup that
+// only works the first time. Whatever it does, the tree has to stay walkable: that
+// is what everything from gravity to the camera assumes.
+func TestEditingKeepsTheTreeWalkable(t *testing.T) {
+	sys := SolarSystem()
+
+	for round := range 6 {
+		// Hang something new on a body a little further down each time.
+		parent := (round * 3) % len(sys.Bodies)
+		sys.AddChild(parent, Body{
+			Name: "custom", Radius: 300000,
+			MassSource: FromDensity, Density: 3000,
+			SemiMajor: sys.Bodies[parent].Radius * 12,
+		})
+		// And take out something that has children of its own.
+		if victim := sys.IndexOf("jupiter"); victim > 0 && round == 2 {
+			sys.Remove(victim)
+			if sys.IndexOf("io") >= 0 {
+				t.Error("Io outlived Jupiter")
+			}
+		}
+		if victim := sys.IndexOf("earth"); victim > 0 && round == 4 {
+			sys.Remove(victim)
+			if sys.IndexOf("moon") >= 0 {
+				t.Error("the Moon outlived the Earth")
+			}
+		}
+
+		for i := range sys.Bodies {
+			b := &sys.Bodies[i]
+			if i == 0 {
+				if b.Parent != -1 {
+					t.Fatalf("round %d: the root has parent %d", round, b.Parent)
+				}
+				continue
+			}
+			if b.Parent < 0 || b.Parent >= i {
+				t.Fatalf("round %d: %s has parent %d at index %d", round, b.Name, b.Parent, i)
+			}
+			// Which is to say: every walk up the tree terminates, and every body
+			// has a position and a sphere of influence to be found in.
+			p, _ := sys.StateAt(i, 12345)
+			if math.IsNaN(p.X) || math.IsNaN(p.Y) || b.SOI <= 0 {
+				t.Fatalf("round %d: %s is at %v with an SOI of %g", round, b.Name, p, b.SOI)
+			}
+			if g := sys.Gravity(i, Vec2{X: b.Radius * 2}, 12345); math.IsNaN(g.X) {
+				t.Fatalf("round %d: gravity at %s came out NaN", round, b.Name)
+			}
+		}
+	}
+}

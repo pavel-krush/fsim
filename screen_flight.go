@@ -403,12 +403,12 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 
 	if remove >= 0 {
 		// The nodes above shift down inside the same array, so a focused field
-		// would carry on editing what is now a different burn — and the done
-		// bitmask has to shift with them or it marks the wrong one.
+		// would carry on editing what is now a different burn. Everything else
+		// the delete has to repair — the running index, the spent mask, an engine
+		// that is on for a burn that no longer exists — belongs to the state, so
+		// the simulation does it.
 		u.cancel()
-		f.s.Cfg.Nodes = append(nodes[:remove], nodes[remove+1:]...)
-		low := f.s.St.NodesDone & ((1 << uint(remove)) - 1)
-		f.s.St.NodesDone = low | (f.s.St.NodesDone>>1)&^((1<<uint(remove))-1)
+		f.s.RemoveNode(remove)
 	}
 
 	add := c.next(24)

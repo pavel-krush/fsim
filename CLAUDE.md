@@ -549,6 +549,33 @@ machine in `sim` never cared how many there were; the editor did, and the bounds
 - The `9-*` steps of `-shot` capture a four-stage vehicle. They come last in the script because they
   edit the configuration the flight captures fly.
 
+## Stale indices, which is how this thing crashes
+
+Everything here is indexed: bodies into a system, nodes into a plan, a selection
+into either. Every crash found so far has been the same shape — an index outliving
+the slice it pointed into — so `TestPresetsAreValid`, `TestRemoveRunningNode`,
+`TestRemoveEarlierNode`, `TestLoadPresetClearsTheSelection` and
+`TestEditingKeepsTheTreeWalkable` exist to keep them found.
+
+- **Loading a preset has to reset the body selection** (`SetupScreen.loadPreset`).
+  The clamp at the top of `Update` does not help: the preset buttons are handled in
+  `drawHeader`, which runs *before* the columns, so a jump from the solar system to
+  a single planet left the editor holding index nine of a slice of one on the same
+  frame. That was a hard crash.
+- **Deleting a node is `Sim.RemoveNode`, not a slice operation.** The running
+  index, the spent-bitmask and an engine that is on for a burn that no longer
+  exists all have to be repaired; deleting the burn in progress used to index a
+  plan that had just lost that entry. The panel's job is `u.cancel()` and nothing
+  else.
+- **The launch body cannot be deleted.** The remap would put the pad on whatever
+  the renumbering happens to leave at index zero, which in the solar system is the
+  Sun.
+- **A preset's nodes have to fire inside its own time limit.** Apollo's translunar
+  burn is at T+15325 s and the preset used to say sixty minutes; it only worked
+  because the limit stops applying once there is a verdict. Relying on that is
+  relying on an accident, so the limit is now six days — the length of the mission
+  it ships with.
+
 ## Presets
 
 The pitch programmes and the final cutoffs were found by search (a profile generator,

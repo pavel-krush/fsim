@@ -245,18 +245,20 @@ func (s *SetupScreen) bodyButtons(a *App, dst *ebiten.Image, c *rowCursor, sys *
 			SemiMajor:  parent.Radius * 10,
 		})
 	}
-	if len(sys.Bodies) > 1 && s.selBody > 0 {
+	// The root cannot go, and neither can the body the pad is on: deleting it
+	// leaves the vehicle standing on whatever the renumbering happens to put
+	// there, which in the solar system is the Sun.
+	if len(sys.Bodies) > 1 && s.selBody > 0 && s.selBody != a.cfg.LaunchBody {
 		if u.Button(dst, Rect{r.X + r.W/2 + 3, r.Y, r.W/2 - 3, r.H}, T("setup.removeBody"), ButtonDanger) {
 			u.cancel()
 			remap := sys.Remove(s.selBody)
-			// Everything that pointed into the old numbering has to be repaired,
-			// and the pad has to land somewhere: the root will do.
-			if a.cfg.LaunchBody < len(remap) {
-				if n := remap[a.cfg.LaunchBody]; n >= 0 {
-					a.cfg.LaunchBody = n
-				} else {
-					a.cfg.LaunchBody = 0
-				}
+			// Everything that pointed into the old numbering has to be repaired.
+			// The launch body cannot have been the one removed — the button is not
+			// offered for it — so the remap can only have moved it.
+			if n := remap[a.cfg.LaunchBody]; n >= 0 {
+				a.cfg.LaunchBody = n
+			} else {
+				a.cfg.LaunchBody = 0
 			}
 			s.selBody = a.cfg.LaunchBody
 		}
@@ -683,13 +685,24 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 	drawText(dst, T("setup.presetLabel"), fontUISm, x-52, r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignLeft)
 	for _, p := range presets {
 		if u.Button(dst, Rect{x, r.Y + 8, bw, r.H - 16}, presetName(p.Name), ButtonNormal) {
-			// Same reason as the mixture picker: the whole config is replaced,
-			// including the slices a focused field may be pointing into.
-			u.cancel()
-			a.cfg = p.Cfg
+			s.loadPreset(a, p.Cfg)
 		}
 		x += bw + 6
 	}
+}
+
+// loadPreset drops a whole configuration in.
+//
+// Everything the screen was pointing into belonged to the old one. The focused
+// field is the obvious half — the config's slices are replaced under it — and the
+// selected body is the half that crashed: coming from a system of eighteen to a
+// system of one leaves the editor holding index nine, and the columns are drawn
+// after this runs, not before.
+func (s *SetupScreen) loadPreset(a *App, cfg sim.Config) {
+	a.ui.cancel()
+	a.cfg = cfg
+	a.cfg.EnsureSystem()
+	s.selBody = a.cfg.LaunchBody
 }
 
 // drawFooter shows the derived launch numbers and the start button.

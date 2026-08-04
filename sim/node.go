@@ -150,6 +150,32 @@ func (s *Sim) nodeBurnLeft(thrust, mdot, mass float64) float64 {
 	return mass / mdot * (1 - math.Exp(-want*mdot/thrust))
 }
 
+// RemoveNode deletes node i and repairs everything that pointed at it: the index
+// of the burn in progress, and the mask of the ones already spent. A flight plan
+// is edited while it is being flown, so deleting from it has to be a change of
+// plan rather than a crash — and deleting the burn that is *running* has to shut
+// the engine down, not leave it thrusting for a plan that no longer exists.
+func (s *Sim) RemoveNode(i int) {
+	if i < 0 || i >= len(s.Cfg.Nodes) {
+		return
+	}
+	s.Cfg.Nodes = append(s.Cfg.Nodes[:i], s.Cfg.Nodes[i+1:]...)
+
+	// The bits above i shift down with the slice; the ones below stay put.
+	low := s.St.NodesDone & (1<<uint(i) - 1)
+	high := s.St.NodesDone >> uint(i+1) << uint(i)
+	s.St.NodesDone = low | high
+
+	switch {
+	case s.St.Node == i:
+		s.endNode()
+		s.setPhase(PhaseCoast)
+		s.mark(EvCutoff)
+	case s.St.Node > i:
+		s.St.Node--
+	}
+}
+
 // endNode releases the vehicle from a node burn.
 func (s *Sim) endNode() {
 	s.St.Node = -1

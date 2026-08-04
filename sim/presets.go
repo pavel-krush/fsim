@@ -224,7 +224,11 @@ func apolloSaturn() Preset {
 			Nodes: []Node{{T: 15325, Frame: BurnPrograde, DeltaV: 3162}},
 
 			TargetOrbit: 185000,
-			MaxTime:     3600,
+			// Six days, because the plan above runs for four. The old hour only
+			// worked by accident: the limit stops applying once a flight has a
+			// verdict, and this one gets its verdict at T+604 s — so the burn
+			// fired at T+15325 despite being well past the stated limit.
+			MaxTime: 6 * 86400,
 		},
 	}
 }
