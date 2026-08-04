@@ -410,16 +410,35 @@ the time it was measured**.
   and around the Moon, and both are true.
 - **The shift is taken at the sample's own time**, not the current one. A track relative to a moving body
   is a sequence of "where was it relative to the body *then*", which is what "in the Moon's frame" means.
-- **The camera lets go of the local vertical as it pulls back**, on the same ramp that slides the focus
-  from the vehicle to the planet's centre — standing on a planet becomes looking at one over the same
+- **The camera is three separate decisions — scale, centre, rotation — and each of them becomes the
+  user's the moment the user touches it.** `frame` is whose coordinates the world is drawn in; `follow` is
+  what sits in the middle of the screen: the vehicle, a body, or `camFree` for a point. Splitting the two
+  is what lets the view be pushed around while a moon still holds still in it.
+- **Dragging pans, the wheel zooms, `C` gives it all back to the automatic framing.** A drag takes over
+  from wherever the camera happened to be (`freePos = cam.Center`), so the picture does not jump on the
+  first pixel. Any gesture sets `manualScale`, which stops the easing towards the automatic span —
+  otherwise the automatic zoom keeps pulling the rug while the user is looking at something.
+- **`Camera.Unproject` is what makes both gestures possible.** Panning and zoom-to-cursor are the same
+  statement — a world point has to stay under the pointer — so they are only as good as `Project` and
+  `Unproject` being inverses, which `TestProjectAndUnprojectAreInverses` pins.
+- **The wheel zooms about the cursor when free and about the centre when following.** Zooming about the
+  cursor while locked to a body would walk the body out of the middle, which is the one thing a lock is
+  for.
+- **Camera gestures are read at the *end* of the frame**, in `handleCamera`, after every widget has had
+  its chance at the click. The flight plan panel sits inside the trajectory view, and a press on it must
+  not also grab the world; `u.consumed` is the only thing that knows.
+- **The picker shows the free state as its own entry.** Claiming to follow the vehicle while the camera
+  sits half way to the Moon is a lie about the one thing that control exists to report.
+- **The camera lets go of the local vertical as it pulls back**, on the same ramp that slides the centre
+  from the vehicle to the planet's middle — standing on a planet becomes looking at one over the same
   stretch. Held all the way out the picture would spin with the orbit, a full turn every five seconds at
-  ×1000. It is written as `Rot += (1-u)·angleDelta(Rot, want)`, so at `u = 0` it is still exactly "point
-  the vertical at the top of the screen", and the shortest-path delta is what stops the wrap through π
-  from flipping the world over. Multiplying an accumulated angle by `(1-u)` does not work: with a few
-  hundred radians on the clock, a 0.01 change in `u` is a full revolution of jolt.
-- **The zoom ladder is ten orders of magnitude**, from a 1.5 km view of the pad to the whole system, so
-  `zoomBias` runs from 1e-7. The automatic scale is still vehicle-driven; the wheel is what reaches the
-  ends.
+  ×1000, and in a body's frame or a dragged view there is no "up" to speak of. It is written as
+  `Rot += hold·angleDelta(Rot, want)`, so with `hold = 1-u` and `u = 0` it is still exactly "point the
+  vertical at the top of the screen". Multiplying an accumulated angle by `(1-u)` does not work: with a
+  few hundred radians on the clock, a 0.01 change in `u` is a full revolution of jolt.
+- **The zoom range is ten orders of magnitude**, from a 1.5 km view of the pad to the whole system. The
+  scale is absolute once touched; `clamp(1e-12, 1e4)` is only there to keep a runaway wheel from
+  overflowing the rasteriser.
 - **Every body draws at the detail its pixel radius earns**: under 1.5 px a labelled dot, up to
   `maxRingPx` a disc, beyond that the flat-band mode. A moon you cannot see is a moon you cannot aim at,
   so the dot has a floor of 2 px and a name under it — under, not beside, because beside is where the

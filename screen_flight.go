@@ -24,29 +24,40 @@ type FlightScreen struct {
 	paused bool
 	warp   int // index into warpSteps
 
-	cam       Camera
-	manualCam bool
-	zoomBias  float64 // user zoom multiplier on top of the automatic scale
+	cam Camera
+
+	// The camera. frame is whose coordinates the world is drawn in — -1 follows
+	// the vehicle's own sphere of influence — and follow is what sits in the
+	// middle of the screen: the vehicle, a body, or camFree for wherever it was
+	// last dragged to. Splitting the two is what lets the view be pushed around
+	// while a moon still holds still in it.
+	frame   int
+	follow  int
+	freePos sim.Vec2 // centre in frame coordinates, while free
+	// manualScale stops the zoom easing towards the automatic framing. Any camera
+	// gesture sets it; C clears it.
+	manualScale bool
+	pendingZoom float64 // a scripted zoom, applied once the view size is known
+
+	dragging   bool
+	dragAnchor sim.Vec2 // the world point grabbed at the press
 
 	// The predicted path, recomputed on a timer rather than every frame: it is a
 	// few hundred integrator steps and nothing about it changes in 200 ms.
 	pred    []sim.PredPoint
 	predAge float64
-
-	// focus is the body the picture is built around: -1 follows the vehicle and
-	// whatever body currently holds it, which is the default and what the
-	// simulator has always done. Anything else pins a body from the system and
-	// draws the world from there, which is the only way to watch a moon at all —
-	// in the launch body's frame it crosses the screen at a kilometre a second.
-	focus int
 }
+
+// camFree is the follow target of a camera that has been dragged: it centres on a
+// point rather than on a thing.
+const camFree = -2
 
 // frameBody is the body at the origin of the drawn world.
 func (f *FlightScreen) frameBody() int {
-	if f.focus < 0 || f.focus >= len(f.s.Cfg.System.Bodies) {
+	if f.frame < 0 || f.frame >= len(f.s.Cfg.System.Bodies) {
 		return f.s.St.Center
 	}
-	return f.focus
+	return f.frame
 }
 
 // framePoint maps a position measured from body `from` at time t into the frame
@@ -84,7 +95,7 @@ func (f *FlightScreen) vehiclePos() sim.Vec2 {
 }
 
 func NewFlightScreen(s *sim.Sim) *FlightScreen {
-	f := &FlightScreen{s: s, zoomBias: 1, focus: -1}
+	f := &FlightScreen{s: s, frame: -1, follow: -1}
 	f.cam.Scale = 0
 	return f
 }
@@ -128,111 +139,160 @@ func (f *FlightScreen) handleKeys(u *UI) {
 		f.warp--
 	}
 	if u.keyPressed(ebiten.KeyC) {
-		f.manualCam = false
-		f.zoomBias = 1
-		f.focus = -1
+		f.lookAt(-1)
+		f.manualScale = false
 	}
 	if u.keyPressed(ebiten.KeyTab) {
-		// Round the bodies and back to the vehicle. With one body in the system
-		// there is nothing to cycle to and the key does nothing.
-		f.focus++
-		if f.focus >= len(f.s.Cfg.System.Bodies) || len(f.s.Cfg.System.Bodies) < 2 {
-			f.focus = -1
+		// Round the bodies and back to the vehicle. From a free view this lands on
+		// the vehicle first, which is the way back most of the time.
+		next := f.follow + 1
+		if f.follow == camFree || next >= len(f.s.Cfg.System.Bodies) {
+			next = -1
 		}
+		f.lookAt(next)
 	}
 }
 
-// updateCamera picks a scale that keeps both the vehicle and the ground below
-// it in frame, then eases towards it so the zoom never jumps.
-func (f *FlightScreen) updateCamera(a *App, view Rect) {
-	f.cam.View = view
-
-	if f.focus >= 0 {
-		f.focusCamera(a, view)
-		return
+// lookAt points the camera at the vehicle (-1) or at a body, and draws the world
+// in that body's frame so the thing being watched holds still.
+func (f *FlightScreen) lookAt(target int) {
+	if target >= len(f.s.Cfg.System.Bodies) {
+		target = -1
 	}
+	f.follow, f.frame = target, target
+	f.dragging = false
+}
 
+// autoScale is the framing the flight would choose for itself: a window holding
+// the vehicle and the ground under it, widening to the whole orbit once there is
+// one.
+func (f *FlightScreen) autoScale(view Rect) float64 {
 	b := f.s.Center()
 	pos := f.s.St.Pos
 	r := pos.Len()
-	alt := f.s.Altitude()
 
-	// Show a window that always contains the launch altitude band plus the
-	// vehicle. The floor is tight enough that the pad is a structure rather
-	// than a speck for the first few seconds.
-	span := math.Max(alt*2.6, 1500)
+	span := math.Max(f.s.Altitude()*2.6, 1500)
 	o := sim.ComputeOrbit(pos, f.s.St.Vel, b.Mu)
 	switch {
 	case o.Bound() && o.PeriapsisAlt(b.Radius) > 0:
-		// A closed orbit that clears the ground: pull back far enough to see
-		// the whole ellipse, which is the interesting picture at that point.
+		// A closed orbit that clears the ground: pull back far enough to see the
+		// whole ellipse, which is the interesting picture at that point.
 		span = math.Max(span, o.Apoapsis*2.3)
 	case o.Bound() && o.Apoapsis > r:
 		span = math.Max(span, (o.Apoapsis-b.Radius)*2.4)
 	}
 	span = math.Min(span, b.Radius*24)
 
-	wantScale := math.Min(view.W, view.H) / span * f.zoomBias
-
-	// Only the zoom is eased. The centre is derived from the vehicle's current
-	// position every frame instead of being smoothed towards it, because the
-	// smoothing has to happen in some frame of reference and the inertial one
-	// is the wrong choice: the vehicle sweeps around the planet at 465 m/s, so
-	// an eased camera sits permanently ~100 m behind it and every hitch in the
-	// fixed-step integrator turns that lag into a few pixels of shake.
-	if f.cam.Scale == 0 {
-		f.cam.Scale = wantScale
-	} else if !f.manualCam {
-		f.cam.Scale = math.Exp(expLerp(math.Log(f.cam.Scale), math.Log(wantScale), 2.5, a.ui.DT))
+	if f.follow >= 0 {
+		// Framed on a body instead: its sphere of influence is what an approach
+		// is aiming at, so that is what fills the view.
+		fb := &f.s.Cfg.System.Bodies[f.follow]
+		span = fb.Radius * 6
+		if fb.SOI > 0 && !math.IsInf(fb.SOI, 1) {
+			span = math.Min(fb.SOI*2.6, fb.Radius*400)
+		}
 	}
-
-	// Frame everything off the eased zoom rather than the raw span, so that a
-	// step in the span — the orbit closing, say — does not jolt the framing
-	// while the zoom is still gliding towards it.
-	effSpan := math.Min(view.W, view.H) / f.cam.Scale
-
-	// The focus slides from the vehicle towards the planet's centre as the view
-	// widens. The blend has to stay pinned at zero while zoomed in: the target
-	// is the planet's centre thousands of kilometres away, so even a one part
-	// in ten thousand blend would shove the pad off a 1.5 km wide view.
-	// Nothing moves until the span is worth half a planet radius.
-	u := clamp((effSpan/b.Radius-0.5)/2.1, 0, 1)
-	u = u * u * (3 - 2*u)
-	// Close in, sit the vehicle a little below centre so it has sky to climb
-	// into rather than staring at the ground.
-	drawn := f.vehiclePos()
-	f.cam.Center = drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u))
-
-	// And the same ramp lets go of the local vertical. Held all the way out, the
-	// picture would spin with the orbit — a full turn every five seconds at
-	// ×1000 — and standing on a planet turns into looking at one somewhere
-	// around here anyway. At u = 0 this is exactly "point the vertical at the
-	// top of the screen", the way it has always been; the shortest-path delta is
-	// what keeps the wrap through pi from flipping the world over.
-	f.cam.Rot += (1 - u) * angleDelta(f.cam.Rot, drawn.Angle())
+	return math.Min(view.W, view.H) / span
 }
 
-// focusCamera looks at a body instead of at the vehicle: the body sits at the
-// centre, the picture holds still, and only the manual zoom decides how much of
-// it is in frame.
-func (f *FlightScreen) focusCamera(a *App, view Rect) {
-	b := &f.s.Cfg.System.Bodies[f.focus]
+// updateCamera places the camera for this frame. Scale, centre and rotation are
+// three separate decisions, and each of them is the user's the moment the user
+// touches it.
+func (f *FlightScreen) updateCamera(a *App, view Rect) {
+	f.cam.View = view
+	want := f.autoScale(view)
 
-	span := b.Radius * 6
-	if b.SOI > 0 && !math.IsInf(b.SOI, 1) {
-		// A moon is worth seeing with its sphere of influence around it, which
-		// is the thing an approach is actually aiming at.
-		span = math.Min(b.SOI*2.6, b.Radius*400)
+	switch {
+	case f.pendingZoom > 0:
+		f.cam.Scale, f.manualScale = want*f.pendingZoom, true
+		f.pendingZoom = 0
+	case f.cam.Scale == 0:
+		f.cam.Scale = want
+	case !f.manualScale:
+		// Eased in log space so that a factor of two takes the same time whatever
+		// the scale, and never snapped: a step in the automatic span — the orbit
+		// closing, say — should glide rather than jump.
+		f.cam.Scale = math.Exp(expLerp(math.Log(f.cam.Scale), math.Log(want), 2.5, a.ui.DT))
 	}
-	wantScale := math.Min(view.W, view.H) / span * f.zoomBias
 
-	if f.cam.Scale == 0 {
-		f.cam.Scale = wantScale
-	} else if !f.manualCam {
-		f.cam.Scale = math.Exp(expLerp(math.Log(f.cam.Scale), math.Log(wantScale), 2.5, a.ui.DT))
+	// Frame everything off the scale actually in force rather than off the
+	// automatic span, so a zoom in progress does not jolt the composition.
+	effSpan := math.Min(view.W, view.H) / f.cam.Scale
+	b := f.s.Center()
+
+	// How far the view has pulled back, from "standing on a planet" to "looking
+	// at one". It decides both how much of the vehicle's own position the centre
+	// follows and how hard the camera holds the local vertical.
+	u := clamp((effSpan/b.Radius-0.5)/2.1, 0, 1)
+	u = u * u * (3 - 2*u)
+
+	switch {
+	case f.follow == camFree:
+		f.cam.Center = f.freePos
+	case f.follow >= 0:
+		f.cam.Center = f.framePoint(sim.Vec2{}, f.follow, f.s.St.T)
+	default:
+		// The vehicle, with the centre sliding towards the planet's middle as the
+		// view widens. The blend has to stay pinned at zero while zoomed in: the
+		// target is thousands of kilometres away, so even a part in ten thousand
+		// would shove the pad off a 1.5 km wide view. Close in, the vehicle sits
+		// a little below centre so it has sky to climb into.
+		drawn := f.vehiclePos()
+		f.cam.Center = drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u))
 	}
-	f.cam.Center = sim.Vec2{}
-	f.cam.Rot += angleDelta(f.cam.Rot, math.Pi/2)
+
+	// Rotation tracks the local vertical only while following the vehicle, and
+	// only while close in. Held all the way out the picture would spin with the
+	// orbit — a full turn every five seconds at ×1000 — and in a body's frame or a
+	// dragged view there is no "up" to speak of. At u = 0 this is exactly "point
+	// the vertical at the top of the screen", the way it has always been; the
+	// shortest-path delta is what stops the wrap through pi flipping the world.
+	want = math.Pi / 2
+	hold := 1.0
+	if f.follow == -1 {
+		want, hold = f.vehiclePos().Angle(), 1-u
+	}
+	f.cam.Rot += hold * angleDelta(f.cam.Rot, want)
+}
+
+// handleCamera reads the panning and zooming gestures. It runs at the end of the
+// frame, after every widget has had its chance at the click: the flight plan panel
+// sits inside the view, and a press on it must not also grab the world.
+func (f *FlightScreen) handleCamera(u *UI, view Rect) {
+	if u.hover(view) && u.Wheel != 0 {
+		under := f.cam.Unproject(u.MX, u.MY)
+		f.cam.Scale = clamp(f.cam.Scale*math.Exp(u.Wheel*0.18), 1e-12, 1e4)
+		f.manualScale = true
+		if f.follow == camFree {
+			// Keep the point under the pointer where it was. Following something
+			// means it stays in the middle instead, which is the whole of what
+			// following is for.
+			after := f.cam.Unproject(u.MX, u.MY)
+			f.freePos = f.freePos.Add(under.Sub(after))
+		}
+	}
+
+	if u.Click && !u.consumed && u.hover(view) {
+		f.dragging, f.dragAnchor = true, f.cam.Unproject(u.MX, u.MY)
+	}
+	if !u.Down {
+		f.dragging = false
+	}
+	if !f.dragging {
+		return
+	}
+
+	shift := f.dragAnchor.Sub(f.cam.Unproject(u.MX, u.MY))
+	if shift.Len() == 0 {
+		return
+	}
+	if f.follow != camFree {
+		// Taking over from wherever the camera happened to be, so the picture does
+		// not jump on the first pixel of the drag.
+		f.freePos, f.follow = f.cam.Center, camFree
+		f.manualScale = true
+	}
+	f.freePos = f.freePos.Add(shift)
 }
 
 // angleDelta is the shortest way round from a to b, in radians.
@@ -250,9 +310,6 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	u := a.ui
 	panel(dst, view, colBG)
 
-	if u.hover(view) && u.Wheel != 0 {
-		f.zoomBias = clamp(f.zoomBias*math.Exp(u.Wheel*0.18), 1e-7, 200)
-	}
 	f.updateCamera(a, view)
 
 	clip := view.Sub(dst)
@@ -283,6 +340,8 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	f.drawScaleBar(clip, view, cam)
 	f.drawViewHUD(clip, view, tm)
 	f.drawNodePanel(a, clip, view)
+	f.drawCamPicker(a, clip, view)
+	f.handleCamera(u, view)
 }
 
 // nodePanelW is the width of the manoeuvre panel. It fits a time, a direction, a
@@ -905,11 +964,6 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 	drawText(dst, fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
 		fontUISm, x, y, c, alignLeft)
 
-	if f.focus >= 0 && f.focus < len(f.s.Cfg.System.Bodies) {
-		y += 20
-		name := bodyName(f.s.Cfg.System.Bodies[f.focus].Name)
-		drawText(dst, fmt.Sprintf(T("flight.focusOn"), name), fontUISm, x, y, colBodyText, alignLeft)
-	}
 	if f.s.Settled() {
 		y += 22
 		verdict := outcomeText(f.s.St.Outcome, bodyName(f.s.Cfg.System.Bodies[f.s.St.OutcomeBody].Name))
@@ -922,15 +976,54 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 		}
 		drawText(dst, verdict, fontHead, x, y, vc, alignLeft)
 	}
-	if f.manualCam || f.zoomBias != 1 {
-		drawText(dst, T("flight.manualCamera"), fontUISm, view.Right()-14, view.Y+12, colTextFaint, alignRight)
-	}
 
 	// A warp the current regime cannot deliver is worth saying out loud, or the
 	// setting looks broken: inside the atmosphere the step cannot grow, so a
 	// million times real time is not on offer at any price.
 	if f.s.WarpLimited && !f.paused {
 		drawText(dst, T("flight.warpLimited"), fontUISm, view.Right()-14, view.Y+30, colWarn, alignRight)
+	}
+}
+
+// camPickerW is the width of the camera's target picker.
+const camPickerW = 150
+
+// drawCamPicker is the camera's target: the vehicle, or any body in the system.
+// Cycling with Tab is fine for two bodies and hopeless for eighteen.
+func (f *FlightScreen) drawCamPicker(a *App, dst *ebiten.Image, view Rect) {
+	u := a.ui
+	bodies := f.s.Cfg.System.Bodies
+
+	items := make([]string, len(bodies)+1)
+	items[0] = T("flight.camVehicle")
+	for i := range bodies {
+		items[i+1] = bodyName(bodies[i].Name)
+	}
+	sel := 0
+	if f.follow >= 0 {
+		sel = f.follow + 1
+	}
+	// A dragged view is following nothing, and the picker has to say so: showing
+	// "the vehicle" while the camera sits half way to the Moon is a lie about the
+	// one thing this control exists to report. The free state gets its own entry
+	// at the top, which shifts everything else by one while it lasts.
+	free := f.follow == camFree
+	if free {
+		items = append([]string{T("flight.camFree")}, items...)
+		sel = 0
+	}
+
+	r := Rect{view.Right() - 14 - camPickerW, view.Y + 10, camPickerW, 22}
+	if picked := u.Dropdown(dst, r, "camera", items, sel); picked != sel {
+		if free {
+			picked--
+		}
+		f.lookAt(picked - 1)
+	}
+
+	if u.Button(dst, Rect{r.X, r.Bottom() + 4, camPickerW, 20}, T("flight.camReset"), ButtonNormal) {
+		f.lookAt(-1)
+		f.manualScale = false
 	}
 }
 
@@ -1047,7 +1140,8 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 	if u.Button(dst, Rect{x, by, 120, bh}, T("flight.restart"), ButtonNormal) {
 		f.s.Reset()
 		f.cam.Scale = 0
-		f.zoomBias = 1
+		f.lookAt(-1)
+		f.manualScale = false
 		f.paused = false
 	}
 	x += 128

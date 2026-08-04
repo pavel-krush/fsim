@@ -138,6 +138,19 @@ func (c *Camera) Project(p sim.Vec2) (float64, float64) {
 	return cx + d.X*c.Scale, cy - d.Y*c.Scale
 }
 
+// Unproject is Project run backwards: the world point under a screen position.
+// This is what makes dragging and zoom-to-cursor possible — both are statements
+// about a world point that has to stay under the pointer.
+func (c *Camera) Unproject(x, y float64) sim.Vec2 {
+	cx := c.View.X + c.View.W/2
+	cy := c.View.Y + c.View.H/2
+	if c.Scale == 0 {
+		return c.Center
+	}
+	d := sim.Vec2{X: (x - cx) / c.Scale, Y: -(y - cy) / c.Scale}
+	return d.Rotate(-(math.Pi/2 - c.Rot)).Add(c.Center)
+}
+
 // Dir maps a world direction onto screen axes, without translation or scale.
 func (c *Camera) Dir(v sim.Vec2) (float64, float64) {
 	d := v.Rotate(math.Pi/2 - c.Rot)

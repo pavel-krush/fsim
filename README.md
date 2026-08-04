@@ -90,8 +90,9 @@ a delay, or at apoapsis.
 Getting to orbit is a matter of pitching over neither too early, which flies you into the thick air,
 nor too late, which spends everything climbing. The Δv losses panel tells you which mistake you made.
 
-On the flight screen: `SPACE` pauses, `,` and `.` change the time warp, the wheel zooms, `TAB` moves the
-camera's focus from body to body, `C` puts it back on the vehicle.
+On the flight screen: `SPACE` pauses, `,` and `.` change the time warp. Drag to move the view anywhere,
+the wheel zooms about the pointer, the picker in the corner locks the camera to the vehicle or to any body
+in the system, `TAB` cycles it and `C` hands the whole thing back to the automatic framing.
 
 The graph screen puts the whole flight on one time axis, which for a lunar mission means four days with
 the ascent in the first two pixels — so the axis drags and zooms, and there is a button for the launch on

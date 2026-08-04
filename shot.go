@@ -54,6 +54,9 @@ type shotStep struct {
 	// graphAscent zooms the graph screen's time axis onto the launch, which on a
 	// four-day flight is the first two pixels of it.
 	graphAscent bool
+	// freeHalfway drops the camera into a free view, which no script can reach by
+	// dragging: there is no mouse.
+	freeHalfway bool
 }
 
 type shotRunner struct {
@@ -87,7 +90,9 @@ func newShotRunner(dir string) *shotRunner {
 			// the pad, the planet, the Moon's orbit, and the Moon itself.
 			{name: "8a-zoom-planet", screen: ScreenFlight, zoom: 0.15},
 			{name: "8b-zoom-system", screen: ScreenFlight, zoom: 0.015},
-			{name: "8c-focus-moon", screen: ScreenFlight, focus: 2},
+			{name: "8c-focus-moon", screen: ScreenFlight, focus: 10},
+			// A dragged view: following nothing, centred half way to the Moon.
+			{name: "8c2-free-view", screen: ScreenFlight, zoom: 0.02, freeHalfway: true},
 			// The translunar injection the preset ships with, before it fires: the
 			// panel shows the burn and the prediction shows where it goes.
 			{name: "8d-plan", screen: ScreenFlight, zoom: 0.06},
@@ -144,11 +149,16 @@ func (sr *shotRunner) step(a *App) bool {
 	}
 
 	if a.flight != nil {
-		a.flight.zoomBias = 1
+		a.flight.manualScale = false
 		if st.zoom > 0 {
-			a.flight.zoomBias = st.zoom
+			a.flight.pendingZoom = st.zoom
 		}
-		a.flight.focus = st.focus - 1
+		a.flight.lookAt(st.focus - 1)
+		if st.freeHalfway {
+			moon := a.flight.s.Cfg.System.IndexOf("moon")
+			a.flight.follow = camFree
+			a.flight.freePos = a.flight.framePoint(sim.Vec2{}, moon, a.flight.s.St.T).Scale(0.5)
+		}
 		// Only when a step brings its own, or every other step would wipe the plan
 		// the preset ships with — which is how the translunar burn quietly failed
 		// to happen and the capture shots came out in low Earth orbit.
