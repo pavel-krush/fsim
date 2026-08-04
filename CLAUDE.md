@@ -203,7 +203,13 @@ header and in the bottom bars of the flight and graph screens.
   `lang_test.go` no longer tries to catch them ahead of time — that took a source scanner that could
   not tell code from comments, and a second pass over every format string, to buy very little.
 - **`lang_test.go` checks the locale files against each other and nothing else**: the same key set in
-  every language, and no blank values. Orphaned keys are left to be noticed in passing.
+  every language, no blank values, and **the same substitutions per key** — a format string that loses a
+  verb in translation prints `%!(EXTRA string=11.0)` into the interface, and only in the language nobody
+  was testing in. Orphaned keys are left to be noticed in passing.
+- **Anything that reaches the screen goes through `T`, including the ones that look like symbols.**
+  "MAX Q" sat in `eventLabel` as a literal and "max q" was a hardcoded row label in two panels; they read
+  as notation rather than as prose, which is exactly how they stayed untranslated. Keyboard names
+  (`SPACE`, `TAB`, `ESC`) and `Isp` are the real exceptions.
 - **Text assembled from fragments must be a whole format string.** Word order differs between
   languages, so the max-q readout is `"%s на %s км"` / `"%s at %s km"` rather than a label glued to a
   unit. Same for anything numbered: `"СТУПЕНЬ %d"` / `"STAGE %d"`.

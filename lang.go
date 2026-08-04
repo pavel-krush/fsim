@@ -124,7 +124,7 @@ func eventLabel(e sim.Event, sys *sim.System) string {
 	case sim.EvLiftoff:
 		return T("event.liftoff")
 	case sim.EvMaxQ:
-		return "MAX Q"
+		return T("event.maxQ")
 	case sim.EvCutoff:
 		return T("event.cutoff")
 	case sim.EvSeparation:

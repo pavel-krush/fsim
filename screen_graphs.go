@@ -171,7 +171,7 @@ func (g *GraphScreen) drawHeader(dst *ebiten.Image, r Rect) {
 		{T("graph.gravityLoss"), speed(st.GravLoss)},
 		{T("graph.dragLoss"), speed(st.DragLoss)},
 		{T("graph.steeringLoss"), speed(st.SteerLoss)},
-		{"max q", fmtEng(q, T("unit.pa"))},
+		{T("common.maxQ"), fmtEng(q, T("unit.pa"))},
 		{T("graph.atAltitude"), fmt.Sprintf("%s %s", formatNum(qAlt/1000, 1), T("unit.km"))},
 		{T("common.maxAcceleration"), fmt.Sprintf("%s g", formatNum(g.s.MaxG(), 2))},
 	}

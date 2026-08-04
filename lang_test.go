@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -53,6 +55,31 @@ func TestLocalesHaveNoEmptyValues(t *testing.T) {
 			if strings.TrimSpace(v) == "" {
 				t.Errorf("%s.json: key %q is empty", name, k)
 			}
+		}
+	}
+}
+
+// The same key has to take the same substitutions in every language. A format
+// string that lost a verb in translation does not fail to compile and does not
+// fail to render — it prints "%!(EXTRA string=11.0)" into the middle of the
+// interface, and only in the language nobody was testing in.
+//
+// This is a locale-against-locale check, which is the only kind kept here: the
+// source scanner that used to look for missing keys could not tell code from
+// comments and cost more than it caught.
+func TestLocalesTakeTheSameSubstitutions(t *testing.T) {
+	verbs := regexp.MustCompile(`%[-+ #0-9.*]*[a-zA-Z]`)
+	ru := loadLocale(t, "ru")
+	en := loadLocale(t, "en")
+
+	for k, e := range en {
+		r, ok := ru[k]
+		if !ok {
+			continue // the missing-key test says so already
+		}
+		a, b := verbs.FindAllString(e, -1), verbs.FindAllString(r, -1)
+		if !slices.Equal(a, b) {
+			t.Errorf("key %q takes %v in en.json and %v in ru.json", k, a, b)
 		}
 	}
 }

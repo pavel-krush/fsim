@@ -1158,7 +1158,7 @@ func (f *FlightScreen) drawTelemetry(a *App, dst *ebiten.Image, r Rect) {
 	q, qAlt := f.s.MaxQ()
 	c.gap(8)
 	u.SectionHeader(dst, c.next(20), T("flight.secPeaks"))
-	row("max q", fmt.Sprintf(T("flight.maxQAt"), fmtEng(q, T("unit.pa")), formatNum(qAlt/1000, 1)), colTextDim)
+	row(T("common.maxQ"), fmt.Sprintf(T("flight.maxQAt"), fmtEng(q, T("unit.pa")), formatNum(qAlt/1000, 1)), colTextDim)
 	row(T("common.maxAcceleration"), fmt.Sprintf("%s g", formatNum(f.s.MaxG(), 2)), colTextDim)
 	row(T("flight.maxAltitude"), fmtEng(f.s.MaxAlt(), T("unit.m")), colTextDim)
 	row(T("flight.circularAtTarget"), speed(b.CircularSpeed(a.cfg.TargetOrbit)), colTextFaint)

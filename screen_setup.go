@@ -25,7 +25,11 @@ type SetupScreen struct {
 	selBody int
 }
 
-func NewSetupScreen() *SetupScreen { return &SetupScreen{} }
+// NewSetupScreen starts with no body selected — not with body zero, which is a
+// valid index and would therefore survive the clamp in Update. On a single planet
+// the two are the same thing; in the solar system it is the difference between
+// opening on the planet being launched from and opening on the Sun.
+func NewSetupScreen() *SetupScreen { return &SetupScreen{selBody: -1} }
 
 // Update draws the whole screen and handles its input.
 func (s *SetupScreen) Update(a *App, dst *ebiten.Image) {
