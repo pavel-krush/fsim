@@ -160,6 +160,8 @@ func outcomeText(o sim.Outcome, body string) string {
 		return T("outcome.suborbital")
 	case sim.OutcomeCrashed:
 		return T("outcome.crashed")
+	case sim.OutcomeReturned:
+		return T("outcome.returned")
 	case sim.OutcomeEscape:
 		return T("outcome.escape")
 	case sim.OutcomeTimeout:
@@ -209,6 +211,8 @@ func presetName(key string) string {
 		return T("preset.apolloSaturn")
 	case "apollo-lunar":
 		return T("preset.apolloLunar")
+	case "apollo-return":
+		return T("preset.apolloReturn")
 	case "proton-zvezda":
 		return T("preset.protonZvezda")
 	case "proton-geo":

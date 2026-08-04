@@ -1039,7 +1039,7 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 		verdict := outcomeText(f.s.St.Outcome, bodyName(f.s.Cfg.System.Bodies[f.s.St.OutcomeBody].Name))
 		vc := colBad
 		switch f.s.St.Outcome {
-		case sim.OutcomeOrbit:
+		case sim.OutcomeOrbit, sim.OutcomeReturned:
 			vc = colGood
 		case sim.OutcomeDecaying:
 			vc = colWarn

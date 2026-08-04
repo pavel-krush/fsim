@@ -67,8 +67,8 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), protonGeo(),
-		titanAscent(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), protonZvezda(),
+		protonGeo(), titanAscent(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -268,6 +268,34 @@ func apolloLunar() Preset {
 		{T: 15325, Frame: BurnPrograde, DeltaV: 3162, Separate: true},
 		{T: 286000, Frame: BurnRetrograde, DeltaV: 725},
 	}
+	return p
+}
+
+// apolloReturn is the trajectory Apollo 13 came home on: round the Moon and back
+// into the atmosphere, on the injection burn alone. Nothing is fired after the
+// translunar injection — the return is a property of the trajectory, which is what
+// "free" means, and the whole mission is a single number aimed four days ahead.
+//
+// Two things had to be true at once and there are only two knobs, the burn time and
+// its size, so it was found by search over both. Everything either side of the
+// answer is worse in an obvious way: a shade less delta-v and the swingby is too
+// close, whips the trajectory round and drops it on the Earth at fifty degrees below
+// the horizontal and three hundred g; a shade more and the vehicle comes back so
+// shallow that it skips off the atmosphere and spends another nine days about it.
+//
+// What it settles on: past the Moon at 3226 km, home at T+8.3 days, entry interface
+// at 10975 m/s and 7.4 degrees below the horizontal — Apollo's corridor was 6.5 —
+// and a peak of 14 g. The real thing pulled half that by flying its capsule as a
+// wing; there is no lift in this simulator, so a ballistic dive down the same
+// corridor is what there is.
+func apolloReturn() Preset {
+	p := apolloSaturn()
+	p.Name = "apollo-return"
+	cfg := &p.Cfg
+	cfg.Nodes = []Node{{T: 15295, Frame: BurnPrograde, DeltaV: 3192}}
+	// Nine days: the flight takes eight and a bit, and the limit has to be a real
+	// bound rather than something a verdict happens to switch off.
+	cfg.MaxTime = 9 * 86400
 	return p
 }
 

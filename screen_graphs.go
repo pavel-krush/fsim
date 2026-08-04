@@ -152,7 +152,7 @@ func (g *GraphScreen) drawHeader(dst *ebiten.Image, r Rect) {
 
 	vc := colBad
 	switch st.Outcome {
-	case sim.OutcomeOrbit:
+	case sim.OutcomeOrbit, sim.OutcomeReturned:
 		vc = colGood
 	case sim.OutcomeDecaying, sim.OutcomeSuborbital:
 		vc = colWarn

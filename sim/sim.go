@@ -34,6 +34,13 @@ const (
 	// verdict.
 	OutcomeCaptured
 	OutcomeImpact
+	// OutcomeReturned is coming down on the launch body after having been away
+	// from it — out of its sphere of influence, or inside somebody else's. That
+	// is a free return, and calling it a crash would be a strange way to
+	// describe the only outcome Apollo 13 was hoping for. There is no entry
+	// model behind it: the vehicle is flown down through the air it was launched
+	// through, and the g-load it pulls on the way is on the graph to be read.
+	OutcomeReturned
 )
 
 // outcomeRank orders the verdicts a flight can settle into by how much they say.
@@ -265,6 +272,9 @@ type Sim struct {
 	lastRecord   float64
 	prevRadialV  float64
 	reachedSpace bool
+	// leftHome is set once the vehicle has been somewhere other than the sphere
+	// of influence it launched into. It is what tells a return from a crash.
+	leftHome bool
 }
 
 // New builds a simulation ready to run from the given configuration. The
@@ -318,6 +328,7 @@ func (s *Sim) Reset() {
 	s.lastRecord = -1
 	s.prevRadialV = 0
 	s.reachedSpace = false
+	s.leftHome = false
 	s.mark(EvLiftoff)
 	s.record()
 }
@@ -412,6 +423,9 @@ func (s *Sim) refocus() {
 		s.markBody(EvSOIExit, s.St.Center)
 	}
 	s.St.Center = want
+	if want != s.Cfg.LaunchBody {
+		s.leftHome = true
+	}
 }
 
 // Altitude above the surface of the body the state is measured from, m.
@@ -874,6 +888,11 @@ func (s *Sim) checkEnd() {
 			// which body it was is most of the news.
 			s.St.OutcomeBody = s.St.Center
 			s.finish(OutcomeImpact)
+		case s.leftHome:
+			// It went away and came back. Whether anything aboard would have
+			// survived the entry is a question this simulator does not ask, but
+			// arriving at the planet it left is not a crash.
+			s.finish(OutcomeReturned)
 		case outcomeRank(s.St.Outcome) >= outcomeRank(OutcomeOrbit):
 			// It orbited and then came down. Calling that suborbital would be a
 			// claim that it never got there.

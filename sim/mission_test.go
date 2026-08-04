@@ -435,3 +435,71 @@ func TestTitanPresetReachesOrbit(t *testing.T) {
 		t.Errorf("insertion at T+%.0f s, expected the twenty-odd minutes this takes", s.St.T)
 	}
 }
+
+// The free return: round the Moon and back into the atmosphere on the injection
+// burn alone, which is the one thing a trajectory can do that no engine can be
+// asked to fix. Nothing fires after T+15295 s, so everything about the arrival
+// eight days later was decided by a five-and-a-half-minute burn on the first
+// morning — which is why the test checks the arrival and not just the departure.
+func TestApolloReturnPresetComesHome(t *testing.T) {
+	s := New(apolloReturn().Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+	top := s.Cfg.Atmo.Top
+
+	periSel := math.Inf(1)
+	var entryV, entryAng float64
+	for !s.St.Done {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+		if s.St.Center == moon {
+			periSel = math.Min(periSel, s.Altitude())
+			continue
+		}
+		// The entry interface, taken the first time it comes back down through the
+		// top of the air. The flight path angle here is the whole difference
+		// between an entry and an impact.
+		if entryV == 0 && s.St.T > 3600 && s.Altitude() < top {
+			r, v := s.St.Pos, s.St.Vel
+			entryV = v.Len()
+			sin := -(r.X*v.X + r.Y*v.Y) / (r.Len() * v.Len())
+			entryAng = math.Asin(math.Max(-1, math.Min(1, sin))) * 180 / math.Pi
+		}
+	}
+
+	t.Logf("past the Moon at %.0f km, home at T+%.2f days, entry %.0f m/s at %.1f deg, peak %.1f g",
+		periSel/1000, s.St.T/86400, entryV, entryAng, s.MaxG())
+
+	if s.St.Outcome != OutcomeReturned {
+		t.Fatalf("outcome %d at T+%.2f days, want a return", s.St.Outcome, s.St.T/86400)
+	}
+	if math.IsInf(periSel, 1) {
+		t.Fatal("never entered the Moon's sphere of influence")
+	}
+	if periSel < 0 {
+		t.Errorf("periselene %.0f km: that is not a flyby", periSel/1000)
+	}
+	// Nothing is fired after the injection, and the plan has nothing else in it.
+	// A free return that spent propellant on the way would be a different mission.
+	if len(s.Cfg.Nodes) != 1 {
+		t.Fatalf("%d nodes on the plan, want the injection alone", len(s.Cfg.Nodes))
+	}
+	if want := s.Cfg.Nodes[0].DeltaV; math.Abs(s.St.DeltaV-(8930+want)) > 400 {
+		t.Errorf("spent %.0f m/s in total, want the ascent plus the %.0f m/s injection",
+			s.St.DeltaV, want)
+	}
+	// The corridor. Apollo came in at 6.5 degrees below the horizontal; steeper
+	// than about fifteen and the deceleration runs to hundreds of g, shallower
+	// than about five and it skips back out and takes another week over it.
+	if entryAng < 5 || entryAng > 12 {
+		t.Errorf("entry at %.1f degrees below the horizontal, outside the corridor", entryAng)
+	}
+	if entryV < 10000 || entryV > 11500 {
+		t.Errorf("entry speed %.0f m/s, want the escape-speed arrival of a lunar return", entryV)
+	}
+	// A ballistic dive down that corridor, with no lift anywhere in the model,
+	// is about fifteen g. Three hundred means it came in nose-first.
+	if g := s.MaxG(); g > 25 {
+		t.Errorf("peak %.1f g: this is an impact, not an entry", g)
+	}
+}

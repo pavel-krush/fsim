@@ -220,6 +220,11 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   orbit as an escape.
 - **A flight that orbited and then came down is `OutcomeCrashed`, not `OutcomeSuborbital`** — the latter
   claims it never got there. It happens: the Moon's pull walks the perigee of a high ellipse down.
+- **Unless it had been away, in which case it is `OutcomeReturned`.** `Sim.leftHome` is set by `refocus`
+  the first time the centre is not the launch body, and it is the only thing that tells a free return from
+  a crash. There is no entry model behind the verdict: the vehicle is flown down through the air it was
+  launched through and the g-load is on the graph to be read — 14 g down Apollo's corridor, 300 g if it
+  arrives nose-first. What it does *not* claim is that anything aboard survived.
 - **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
   `eventLabel` takes the whole event so it can name it.
 - **`bodyName` is a lookup, not a switch.** Seventeen bodies is where a switch stops being worth writing;
@@ -245,6 +250,31 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
   1782 × 1921 km at e = 0.019, with the service module still half full.
 - **This one is forgiving where the translunar injection is sharp.** ±25 m/s on the insertion moves the
   periapsis by a couple of hundred kilometres; ±2 m/s on the injection moves the approach by two thousand.
+
+### The free return, which is one number aimed four days ahead
+
+`apollo-return` is the same Saturn V with one node on the plan and nothing after it. Two things have to be
+true at once — pass the Moon, come back into the atmosphere — and there are exactly two knobs, so it was
+searched over both. The landscape is not gentle:
+
+| | |
+|---|---|
+| the answer | T+15295 s, 3192 m/s → 3226 km past the Moon, entry at 7.4°, **14 g**, home at T+8.27 d |
+| −1 m/s | 2757 km, entry at 17.0°, **100 g** |
+| −5 m/s | 865 km, entry at 70.6°, **348 g** |
+| −7 m/s | hits the Moon |
+| +1 m/s | 3689 km, but it grazes the air and comes round again: **19 days** |
+
+- **The osculating perigee at the sphere-of-influence exit is not the entry.** The first cut was tuned on
+  it — aim the post-flyby perigee at 60 km and be done — and it produced a 34 km perigee that arrived at
+  74° below the horizontal. Three and a half days of lunar perturbation happen after that reading. Tune on
+  the flight path angle at the atmosphere's top, measured by flying the whole thing.
+- **Entry angle and periselene are coupled**, and the shallow corner of the family passes the Moon high:
+  7.4° comes with 3226 km, and the candidates that pass at a few hundred kilometres all arrive at seventy
+  degrees. A closer flyby is available at another injection time — 721 km and 4.6° — but it grazes the air
+  and comes round for another nine days.
+- **The flight is eight and a quarter days**, so `MaxTime` is nine. Every other preset gets its verdict in
+  the first ten minutes and the limit never applies; this one ends on it if the tuning ever drifts.
 
 ### Proton-K, and why not Soyuz
 

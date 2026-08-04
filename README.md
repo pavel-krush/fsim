@@ -71,13 +71,14 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Nine launchers, all of which actually reach orbit:
+Ten launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 43.1 kPa at 11 km | 14.4 g on entry |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 4.9 g |
@@ -100,6 +101,15 @@ dead payload and becomes the fourth stage, so the flight plan can brake with the
 braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and 725 m/s
 retrograde at the far end for a 1782 × 1921 km lunar orbit with the service module still half full. The
 mass on the pad is the same to the kilogram.
+
+The free return is the third Apollo, and the one that fires nothing after the injection. That burn is
+the entire mission: five and a half minutes on the first morning, and everything about the arrival eight
+days later follows from it. Past the Moon at 3226 km, back down through the top of the air at 10975 m/s
+and 7.4° below the horizontal — Apollo's corridor was 6.5° — for a peak of 14 g. The real thing pulled
+half that by flying its capsule as a wing; there is no lift anywhere in this model, so a ballistic dive
+down the same corridor is what there is. The verdict for coming down on the planet you left is
+`RETURNED HOME`, which took a new one: the vehicle has orbited, so calling it a crash claims it never got
+there, and it has been away, so it is not a launch that fell over.
 
 Proton-K is here because it is *serial* — three stages in a line — and a list of stages can describe that
 honestly. The R-7 family cannot be done that way: Vostok and Soyuz strap four boosters around a core and
