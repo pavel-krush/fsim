@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image/color"
 	"log"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/image/font/gofont/gomono"
@@ -84,6 +85,26 @@ var bodyColors = map[string]color.NRGBA{
 	"kerbin": colPlanet,
 }
 
+// ringBand is one annulus of a body's ring system, measured in the body's own
+// radii, with how solid it looks.
+type ringBand struct {
+	inner, outer float64
+	alpha        uint8
+}
+
+// bodyRings is decoration and nothing else: no mass, no shadow, no shepherding
+// moons, and nothing in sim knows they exist. The radii are the real ones — the C,
+// B and A rings, with the Cassini division as the gap between the last two — and
+// they are drawn face-on because everything in this simulator shares one plane and
+// a ring system lies in its planet's equator.
+var bodyRings = map[string][]ringBand{
+	"saturn": {
+		{1.24, 1.52, 0x1e}, // C, thin and dark
+		{1.52, 1.95, 0x52}, // B, the bright one
+		{2.03, 2.27, 0x38}, // A, past the Cassini division
+	},
+}
+
 // bodyPaint is the surface colour of a body, the rim that outlines it, and the dot
 // it collapses into at a distance. The rim and the dot are derived rather than
 // listed: eighteen bodies is where three hand-picked shades each stops being worth
@@ -94,6 +115,17 @@ func bodyPaint(name string) (surface, rim, dot color.NRGBA) {
 		surface = c
 	}
 	return surface, lighten(surface, 0.22), lighten(surface, 0.5)
+}
+
+// ringExtent is how far a body's rings reach, in its own radii, or 1 for a body
+// with none. The label placement needs it: a name printed at the planet's edge
+// lands in the middle of the ring system.
+func ringExtent(name string) float64 {
+	out := 1.0
+	for _, b := range bodyRings[name] {
+		out = math.Max(out, b.outer)
+	}
+	return out
 }
 
 // The plot series colours, kept distinguishable in the graph screen.

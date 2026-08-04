@@ -454,6 +454,13 @@ the time it was measured**.
 - **The rim and the dot are derived with `lighten`, not listed.** Eighteen bodies is where three
   hand-picked shades each stops being worth maintaining, and the fixed ratios are what make them read as
   the same body at different sizes.
+- **Saturn has rings, and they are decoration**: `bodyRings` in `theme.go`, no mass, no shadow, no
+  shepherding moons, and nothing in `sim` knows they exist. The radii are the real ones — C, B and A, with
+  the Cassini division as the gap between the last two — and they are drawn face-on as concentric bands,
+  which is what a plane seen from above gives. The same convention that makes every orbit here a circle
+  rather than an ellipse foreshortened by a viewing angle there is no room for.
+- **The name goes past the rings, not past the planet.** At the planet's own edge it lands in the middle of
+  them; `ringExtent` is what the label offset asks.
 - **A dot is sized by the logarithm of the real radius.** Phobos to the Sun is five orders of magnitude; on
   a linear scale everything but the Sun is one pixel.
 - **Names are drawn in a pass of their own, skipping anything already taken.** At system scale a moon and

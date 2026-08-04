@@ -602,6 +602,7 @@ func (f *FlightScreen) drawBody(dst *ebiten.Image, view Rect, cam *Camera, i int
 		f.drawAir(dst, cam, i, x, y)
 		circle(dst, x, y, rpx, surface)
 		ring(dst, x, y, rpx, 1.5, rim)
+		drawRings(dst, b.Name, x, y, rpx, lighten(surface, 0.38))
 
 	default:
 		// A dot. Anything smaller than a couple of pixels would otherwise
@@ -613,6 +614,27 @@ func (f *FlightScreen) drawBody(dst *ebiten.Image, view Rect, cam *Camera, i int
 			return
 		}
 		circle(dst, x, y, dotRadius(b.Radius), dot)
+	}
+}
+
+// drawRings paints a body's rings, if it has any. Pure decoration: the physics
+// does not know about them, and neither does anything that has to be correct.
+//
+// Face-on, as concentric bands, which is what a plane seen from above gives — the
+// same convention that makes every orbit in this simulator a circle rather than an
+// ellipse foreshortened by a viewing angle there is no room for.
+func drawRings(dst *ebiten.Image, name string, x, y, rpx float64, c color.NRGBA) {
+	// Under a few pixels the planet is a speck and its rings would be mush.
+	if rpx < 3 || rpx > maxRingPx/3 {
+		return
+	}
+	for _, band := range bodyRings[name] {
+		w := (band.outer - band.inner) * rpx
+		if w < 0.5 {
+			continue
+		}
+		mid := (band.inner + band.outer) / 2 * rpx
+		ring(dst, x, y, mid, w, color.NRGBA{c.R, c.G, c.B, band.alpha})
 	}
 }
 
@@ -647,7 +669,9 @@ func (f *FlightScreen) drawBodyLabel(dst *ebiten.Image, view Rect, cam *Camera, 
 		// is drawn above it. Go underneath.
 		r = Rect{x - w/2, y + 6, w, fontUISm.Size + 2}
 	} else {
-		r = Rect{x + rpx + 6, y - 8, w, fontUISm.Size + 2}
+		// Past the rings, if there are any: at the planet's own edge the name
+		// would be printed across the middle of them.
+		r = Rect{x + rpx*ringExtent(b.Name) + 6, y - 8, w, fontUISm.Size + 2}
 	}
 	for _, t := range *taken {
 		if r.X < t.Right() && t.X < r.Right() && r.Y < t.Bottom() && t.Y < r.Bottom() {

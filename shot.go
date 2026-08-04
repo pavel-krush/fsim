@@ -105,6 +105,8 @@ func newShotRunner(dir string) *shotRunner {
 			// The camera on the Sun, at two scales: the inner system and the lot.
 			{name: "8k-inner-system", screen: ScreenFlight, focus: 1, zoom: 0.008},
 			{name: "8l-outer-system", screen: ScreenFlight, focus: 1, zoom: 0.0004},
+			// Saturn, close enough for the rings.
+			{name: "8m-saturn", screen: ScreenFlight, focus: 7, zoom: 40},
 			{name: "8h-late", screen: ScreenFlight, advance: 360000, zoom: 0.02},
 			{name: "8i-graphs-lunar", screen: ScreenGraphs, graphs: true},
 			{name: "8j-graphs-ascent", screen: ScreenGraphs, graphs: true, graphAscent: true},
