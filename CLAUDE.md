@@ -213,7 +213,9 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   by a moon is a lunar mission, not a demotion. They are a high-water mark, not a running commentary: a
   temporary capture stays on the record after the vehicle has left.
 - **`OutcomeCaptured` and `OutcomeImpact` name their body** in `State.OutcomeBody`, because "captured"
-  without saying by what is not a verdict.
+  without saying by what is not a verdict. Both screens colour the verdict, and `OutcomeCaptured` was
+  missing from the good-news case for as long as it existed: "IN ORBIT AROUND MOON" in the same red as a
+  crater.
 - **Escape is only asked about the root, and only when the root holds the vehicle.** A craft in low lunar
   orbit is moving faster than Earth escape at that distance and is going nowhere; the Moon is on a rail
   and the vehicle is attached to the Moon. Asking the question in the wrong frame reported every lunar
@@ -280,6 +282,24 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
 - **Five metres a second either side of the injection is a crater.** 3700 m/s hits Mars; 3690 passes at
   95209 km. The gradient through the encounter is about 7000 km per m/s, so the preset ships the value that
   fails *gracefully* — a bad periapsis is a worse orbit, an impact is the end of the mission.
+
+### Io, where there is no room
+
+`io-jupiter` is the only preset where the sphere of influence is a design constraint rather than a
+bookkeeping detail. Io's is 7840 km — four and a third radii — so:
+
+- **The parking orbit has to be low**, and 58 x 43 km is not a stylistic choice. An orbit a few hundred
+  kilometres up is a significant fraction of the way to the edge, where Jupiter takes over.
+- **Leaving costs less than escape.** 738 m/s would be a proper escape from a 50 km orbit; 750 is spent
+  because the vehicle only has to get *out of the way*, and the edge is close enough that the difference
+  does not matter. The extra 12 m/s is what makes the departure clean.
+- **Which way out depends on where in the parking orbit the burn happens.** "Prograde" is prograde relative
+  to *Io*, and Io is going round Jupiter at 17 km/s: the same 750 m/s at T+2000 s drops the vehicle to
+  342 Mm, inside Io's orbit, and at T+4500 s lifts it to 532 Mm. Sweep the node time over one parking
+  period, as with the Mars injection, for the same reason.
+- **T+4500 s is also the value that does not come back.** The resulting orbit crosses Io's own, and 700 and
+  800 m/s both wander back through the sphere of influence within the month. The test counts frame changes
+  and wants exactly one.
 
 ### The Mun, and aiming at something small
 

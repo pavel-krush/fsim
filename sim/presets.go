@@ -68,7 +68,8 @@ func earthISA() []Layer {
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
 	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
-		protonZvezda(), protonGeo(), titanAscent(), marsAscent(), moonAscent(), kerbin()}
+		protonZvezda(), protonGeo(), titanAscent(), ioJupiter(), marsAscent(), moonAscent(),
+		kerbin(), kerbinMun()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -363,6 +364,79 @@ func apolloMars() Preset {
 	// Two hundred days, against a mission of a hundred and eighty-six.
 	cfg.MaxTime = 200 * 86400
 	return p
+}
+
+// ioJupiter launches from Io, which is the smallest thing here to leave and the
+// deepest gravity well to be standing in. Io itself is easy — 1809 m/s of circular
+// speed at the surface and no air at all — but Jupiter is 4.2e8 m away and 318 times
+// the Earth's mass, and Io's own sphere of influence is only 7840 km wide. Four and
+// a third radii. So an orbit round it is a thing you have barely got room for, and
+// leaving costs 750 m/s: less than the 738 of a proper escape would suggest, because
+// the sphere's edge is close enough that the vehicle does not have to get to
+// infinity, only out of the way.
+//
+// What it ends up in is an orbit round Jupiter — 432 x 532 Mm from the centre, which
+// crosses Io's own — and the verdict says Jupiter, because that is who has it now.
+// The vehicle is invented; two stages and a fifth of Apollo's lunar module.
+func ioJupiter() Preset {
+	sys := SolarSystem()
+	io := sys.IndexOf("io")
+
+	return Preset{
+		Name: "io-jupiter",
+		Cfg: Config{
+			System: sys, LaunchBody: io, Body: sys.Bodies[io],
+			// Io has an atmosphere of sulphur dioxide at a billionth of a bar,
+			// which is nothing to fly through. Treated as vacuum, like the Moon.
+			Atmo: Atmosphere{
+				Fractions:   mix("He", 1),
+				SurfaceTemp: 110,
+			},
+			Rocket: Rocket{
+				Payload: 300, Cd: 0.3, Diameter: 3.0,
+				Stages: []Stage{
+					{
+						DryMass: 900, PropMass: 1400,
+						ThrustVac: 12000, IspVac: 311, IspSL: 311,
+						Throttle: 1, SepDelay: 2,
+					},
+					{
+						// Shut down at 132 s with two thirds of the tank still in
+						// it: the rest is the trip to Jupiter, and there is 1803 m/s
+						// of it for a 750 m/s departure.
+						DryMass: 300, PropMass: 700,
+						ThrustVac: 5000, IspVac: 311, IspSL: 311,
+						Throttle: 1, CutoffTime: 132,
+						Ignition: IgniteImmediate,
+					},
+				},
+			},
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 20, Pitch: 90},
+				{Time: 47, Pitch: 76},
+				{Time: 75, Pitch: 63},
+				{Time: 102, Pitch: 52},
+				{Time: 129, Pitch: 41},
+				{Time: 156, Pitch: 31},
+				{Time: 184, Pitch: 23},
+				{Time: 211, Pitch: 15},
+				{Time: 238, Pitch: 9},
+				{Time: 265, Pitch: 5},
+				{Time: 293, Pitch: 1},
+				{Time: 320, Pitch: 0},
+			}},
+			// The departure has to leave *outwards*, which is a question of where in
+			// the parking orbit it happens: the same 750 m/s at T+2000 s drops the
+			// vehicle to 342 Mm, inside Io's orbit, and at T+4500 s lifts it to 532.
+			// It is also the one value in a hundred either side that does not come
+			// back through Io's sphere of influence within the month.
+			Nodes: []Node{{T: 4500, Frame: BurnPrograde, DeltaV: 750}},
+
+			TargetOrbit: 60000,
+			MaxTime:     12 * 3600,
+		},
+	}
 }
 
 // protonK is the vehicle both Proton presets fly: three stages in a line, which is

@@ -71,7 +71,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Twelve launchers, all of which actually reach orbit:
+Thirteen launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -83,6 +83,7 @@ Twelve launchers, all of which actually reach orbit:
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 4.9 g |
+| Io / off to Jupiter | 58 × 43 km, then 432 × 532 Mm round Jupiter | 2807 m/s in all | — | 3.3 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -142,6 +143,12 @@ of terminal velocity at 22 kN of thrust — and deep enough that a closed orbit 
 So the profile is seven and a half minutes of climbing straight up at a few hundred metres a second, a turn
 once the air is behind, and a kick stage at apoapsis. Drag still costs 622 m/s and gravity 1263, against the
 1682 it takes to be in orbit at all. The vehicle is invented; the numbers are Titan's.
+
+Io is the smallest sphere of influence anything launches into here: 7840 km, four and a third radii, so
+there is barely room for an orbit and the parking orbit has to be a low one. Getting off Io is easy — 1809
+m/s of circular speed at the surface and no air to speak of — and getting away from it is 750 m/s, which
+puts the vehicle in an orbit round Jupiter crossing Io's own, 432 × 532 Mm from the centre. The verdict
+names Jupiter, because that is who has it now.
 
 The Mun is the same launcher with 800 kg more propellant in the second stage, flown to a 111 × 121 km orbit
 round a body of 200 km radius — up in nine minutes, away at T+2000 s, there five hours later. Kerbin and

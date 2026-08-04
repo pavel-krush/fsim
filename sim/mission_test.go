@@ -645,3 +645,74 @@ func TestPlainKerbinHasNoMun(t *testing.T) {
 		t.Errorf("the kerbin preset flies in a system of %d bodies", n)
 	}
 }
+
+// Io: the smallest sphere of influence anything launches into here. Four and a
+// third radii, so an orbit round it is a thing there is barely room for, and
+// leaving is 750 m/s — after which Jupiter has the vehicle and the verdict says so.
+func TestIoPresetLeavesForJupiter(t *testing.T) {
+	s := New(ioJupiter().Cfg)
+	sys := &s.Cfg.System
+	io, jupiter := sys.IndexOf("io"), sys.IndexOf("jupiter")
+
+	// What makes it awkward, stated as data.
+	b := &sys.Bodies[io]
+	close(t, "Io's circular speed at the surface", b.CircularSpeed(0), 1809, 0.01)
+	if r := b.SOI / b.Radius; r < 4 || r > 4.6 {
+		t.Errorf("Io's sphere of influence is %.2f radii wide", r)
+	}
+
+	// The parking orbit has to fit inside it with room to spare, which is the
+	// constraint that does not exist anywhere else in the collection.
+	s.RunToEnd()
+	tm := s.Telemetry()
+	if s.St.Outcome != OutcomeOrbit {
+		t.Fatalf("the ascent ends with outcome %d", s.St.Outcome)
+	}
+	if tm.ApoAlt+b.Radius > b.SOI/4 {
+		t.Errorf("apoapsis %.0f km from the centre against a sphere of influence of %.0f km",
+			(tm.ApoAlt+b.Radius)/1000, b.SOI/1000)
+	}
+
+	// And then the departure. A month, because the thing worth checking is that it
+	// does not wander back in: the orbit it ends up in crosses Io's own, and the
+	// neighbouring values of the burn come back through the sphere of influence.
+	s = New(ioJupiter().Cfg)
+	var leftIo float64
+	crossings := 0
+	last := s.St.Center
+	for !s.St.Done && s.St.T < 30*86400 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+		if s.St.Center != last {
+			crossings++
+			last = s.St.Center
+		}
+		if leftIo == 0 && s.St.Center != io {
+			leftIo = s.St.T
+		}
+	}
+	o := ComputeOrbit(s.St.Pos, s.St.Vel, s.Center().Mu)
+	t.Logf("left Io at T+%.0f s, %d frame changes in thirty days, orbit round %s %.0f x %.0f Mm at e %.3f",
+		leftIo, crossings, s.Center().Name, o.PeriapsisAlt(s.Center().Radius)/1e6,
+		o.ApoapsisAlt(s.Center().Radius)/1e6, o.Eccentricity)
+
+	if s.St.Outcome != OutcomeCaptured || s.St.OutcomeBody != jupiter {
+		t.Fatalf("outcome %d about body %d, want captured by Jupiter", s.St.Outcome, s.St.OutcomeBody)
+	}
+	if s.St.Center != jupiter {
+		t.Errorf("ended in %s's frame", s.Center().Name)
+	}
+	if crossings != 1 {
+		t.Errorf("%d frame changes: the vehicle went back through Io's sphere of influence", crossings)
+	}
+	if !o.Bound() {
+		t.Error("the orbit round Jupiter is not closed")
+	}
+	// Outwards, not inwards. The same burn earlier in the parking orbit drops the
+	// vehicle to 342 Mm, inside Io's orbit, which is the wrong way to leave.
+	if apo := o.ApoapsisAlt(s.Center().Radius) + s.Center().Radius; apo < sys.Bodies[io].SemiMajor {
+		t.Errorf("apoapsis %.0f Mm, inside Io's own orbit at %.0f Mm",
+			apo/1e6, sys.Bodies[io].SemiMajor/1e6)
+	}
+}
