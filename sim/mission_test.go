@@ -390,3 +390,48 @@ func TestProtonGeoPresetReachesTheBelt(t *testing.T) {
 		t.Errorf("Blok DM has %.0f kg left: no margin at all", left)
 	}
 }
+
+// Titan is the awkward one: four times Earth's surface density under a seventh of
+// its gravity, and an atmosphere deep enough that a closed orbit starts at 600 km.
+// The preset exists to prove the atmosphere model holds up somewhere that is nothing
+// like Earth, so the test checks the things that make it strange.
+func TestTitanPresetReachesOrbit(t *testing.T) {
+	cfg := titanAscent().Cfg
+	cfg.EnsureSystem()
+	at := &cfg.Atmo
+	at.Prepare(cfg.Body.SurfaceG)
+
+	// The air first, because everything else follows from it.
+	st := at.State(0)
+	close(t, "surface density", st.Density, 5.14, 0.02)
+	close(t, "speed of sound", st.Sound, 199, 0.02)
+	close(t, "surface gravity", cfg.Body.SurfaceG, 1.354, 0.01)
+	if st.Density < 4*1.225 {
+		t.Errorf("surface density %.2f kg/m^3 is not four times Earth's", st.Density)
+	}
+
+	s := New(titanAscent().Cfg)
+	s.RunToEnd()
+	tm := s.Telemetry()
+	t.Logf("orbit %.0f x %.0f km at T+%.0f s, drag %.0f m/s, gravity %.0f m/s, circular %.0f m/s",
+		tm.ApoAlt/1000, tm.PeriAlt/1000, s.St.T, s.St.DragLoss, s.St.GravLoss,
+		cfg.Body.CircularSpeed(600000))
+
+	if s.St.Outcome != OutcomeOrbit {
+		t.Fatalf("outcome %d: %.0f x %.0f km", s.St.Outcome, tm.ApoAlt/1000, tm.PeriAlt/1000)
+	}
+	if tm.Ecc > 0.05 {
+		t.Errorf("eccentricity %.3f, want something near circular", tm.Ecc)
+	}
+	// Drag is the whole difficulty here, and a tenth of the budget going into it is
+	// the sign that the trajectory is still the tuned one. Ten times that is what
+	// happens when the turn comes early.
+	if s.St.DragLoss > 1200 {
+		t.Errorf("drag losses %.0f m/s: the turn is happening in the thick air", s.St.DragLoss)
+	}
+	// A seventh of Earth's gravity makes the vertical climb cheap in thrust and
+	// expensive in time: seven and a half minutes of it before the turn.
+	if s.St.T < 1200 || s.St.T > 3000 {
+		t.Errorf("insertion at T+%.0f s, expected the twenty-odd minutes this takes", s.St.T)
+	}
+}

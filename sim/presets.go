@@ -67,7 +67,8 @@ func earthISA() []Layer {
 
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
-	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), protonGeo(), marsAscent(), moonAscent(), kerbin()}
+	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), protonZvezda(), protonGeo(),
+		titanAscent(), marsAscent(), moonAscent(), kerbin()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -452,6 +453,86 @@ func protonGeo() Preset {
 			},
 			TargetOrbit: 35786000,
 			MaxTime:     6 * 86400,
+		},
+	}
+}
+
+// titanAscent launches from Titan, which is the strangest ascent in the system and
+// took the most work to make possible at all.
+//
+// Four times Earth's surface density under a seventh of its gravity. The air is so
+// thick that a rocket cannot go fast in it — at 22 kN of thrust the terminal
+// velocity at the surface is 173 m/s — and so deep that it is still worth 1e-9 of
+// the surface density at 435 km, which is where the atmosphere's nominal top has to
+// be. That in turn puts a closed orbit at 600 km, and every one of those facts fights
+// the launch.
+//
+// What comes out of it: seven and a half minutes of climbing straight up at a few
+// hundred metres a second, a turn once the air is behind, and a kick stage at
+// apoapsis. Drag costs 622 m/s and gravity 1263, against 1682 to be in orbit at all.
+// The vehicle is invented — nobody has built this — but the numbers are Titan's.
+func titanAscent() Preset {
+	sys := SolarSystem()
+	titan := sys.IndexOf("titan")
+	return Preset{
+		Name: "titan-ascent",
+		Cfg: Config{
+			System: sys, LaunchBody: titan, Body: sys.Bodies[titan],
+			Atmo: Atmosphere{
+				// Nitrogen with methane in it, which is the mixture the setup screen
+				// already offers under Titan's name.
+				Fractions: mix("N2", 0.9420, "CH4", 0.0565, "H2", 0.0010),
+				// Cooling to the tropopause at 44 km, then warming again through the
+				// stratosphere, which is the shape Huygens measured on the way down.
+				Layers:          []Layer{{0, -0.00053}, {44000, 0.00053}, {250000, 0}},
+				SurfaceTemp:     93.7,
+				SurfacePressure: 146700,
+				Top:             500000,
+			},
+			Rocket: Rocket{
+				Payload:  400,
+				Cd:       0.25,
+				Diameter: 1.6,
+				Stages: []Stage{
+					{
+						// Methane and oxygen, both of which Titan has lying about.
+						DryMass: 900, PropMass: 5000,
+						ThrustVac: 22000, IspVac: 340, IspSL: 300,
+						Throttle: 1, CutoffTime: 700, SepDelay: 2,
+					},
+					{
+						// The kick stage, lit at apoapsis, which is the only way to
+						// stop a single continuous burn from ending while still
+						// climbing — the first cut did exactly that and left the low
+						// side of the orbit at 50 km however it was tuned.
+						DryMass: 300, PropMass: 1300,
+						ThrustVac: 5000, IspVac: 340, IspSL: 340,
+						Throttle: 1, CutoffTime: 300,
+						Ignition: IgniteAtApoapsis,
+					},
+				},
+			},
+			// Seven and a half minutes of vertical. Anything less and the turn happens
+			// in air thick enough to eat two kilometres a second of drag; anything
+			// more and there is not enough propellant left to build the horizontal
+			// speed.
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 450, Pitch: 90},
+				{Time: 477, Pitch: 76},
+				{Time: 505, Pitch: 63},
+				{Time: 532, Pitch: 52},
+				{Time: 559, Pitch: 42},
+				{Time: 586, Pitch: 33},
+				{Time: 614, Pitch: 26},
+				{Time: 641, Pitch: 20},
+				{Time: 668, Pitch: 15},
+				{Time: 695, Pitch: 12},
+				{Time: 723, Pitch: 10},
+				{Time: 750, Pitch: 9},
+			}},
+			TargetOrbit: 600000,
+			MaxTime:     6 * 3600,
 		},
 	}
 }

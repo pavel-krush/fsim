@@ -124,6 +124,7 @@
   "preset.moon": "Луна / без атмосферы",
   "preset.protonGeo": "Протон-К / блок ДМ на геостационар",
   "preset.protonZvezda": "Протон-К / «Звезда» к МКС",
+  "preset.titanAscent": "Титан / густой воздух, слабая гравитация",
   "setup.addLayer": "+ слой",
   "setup.addMoon": "+ спутник",
   "setup.addPoint": "+ точка",

@@ -269,6 +269,29 @@ in the first thirty seconds of every flight.
   the first cut left 250 s in the shared vehicle — a number the stage never reaches, so it burned dry and
   the insertion came out 2235 x 325 km instead of 461 x 308. `protonInsertion(cutoff)` is the fix.
 
+### Titan, which was not the cheap one
+
+I called this preset cheap and it was the hardest of the lot. The numbers are why:
+
+| | |
+|---|---|
+| surface density | **5.14 kg/m³**, four times Earth's |
+| speed of sound | 199 m/s, so Mach 1 arrives at walking-pace-times-400 |
+| terminal velocity at the surface, 22 kN | **173 m/s** |
+| drag losses, first attempts | **1900–3800 m/s** |
+
+- **A rocket cannot go fast in air that thick, so it cannot turn low.** The first cuts turned at 150–300 s
+  and spent the entire propellant load on drag: 3849 m/s of it, then a crater.
+- **A single continuous burn cannot close the orbit however it is tuned.** It always ends while still
+  climbing, and the low side stays at 50 km — 4943 x 48, 14571 x 26, 1221 x 13. The answer is the one
+  Kerbin already uses: a kick stage on `IgniteAtApoapsis`.
+- **Titan's atmosphere is 435 km deep at Earth's own vacuum threshold** (1e-9 of surface density), so `Top`
+  is 500 km, and `settle` wants a periapsis above `Top`. That puts the target orbit at 600 km, which is a
+  much harder ask than the 185 km the Earth presets aim at. Every attempt that looked like an orbit was
+  coming out as `OutcomeDecaying` and the tuner was discarding it unseen.
+- **The vehicle had to be sized for the planet, not tuned into it.** Twice the first guess: 7.9 t, two
+  stages, 22 kN. 648 x 578 km came out of the first sweep with it.
+
 ### Proton to the belt
 
 `proton-geo` is the same launcher with a Blok DM on top, and it is the preset that needed the most from the

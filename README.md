@@ -71,7 +71,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Eight launchers, all of which actually reach orbit:
+Nine launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -80,6 +80,7 @@ Eight launchers, all of which actually reach orbit:
 | Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
+| Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 4.9 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
@@ -113,6 +114,13 @@ geostationary belt. Three burns — the third stage empties itself at the first 
 Blok DM lifts the far side to 35,786 km, and five and a half hours later it rounds the orbit off up there.
 The measure of success is not the altitude but the period: 23.95 hours against the sidereal day's 23.93,
 which for a real satellite is a slow drift east and a station-keeping budget.
+
+Titan is the strangest ascent in the system and the one that took the most work. Four times Earth's surface
+density under a seventh of its gravity: the air is thick enough that a rocket cannot go fast in it — 173 m/s
+of terminal velocity at 22 kN of thrust — and deep enough that a closed orbit does not start until 600 km.
+So the profile is seven and a half minutes of climbing straight up at a few hundred metres a second, a turn
+once the air is behind, and a kick stage at apoapsis. Drag still costs 622 m/s and gravity 1263, against the
+1682 it takes to be in orbit at all. The vehicle is invented; the numbers are Titan's.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.
