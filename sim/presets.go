@@ -746,6 +746,55 @@ func moonAscent() Preset {
 	}
 }
 
+// kerbinSystem is Kerbin with a Mun, which the single-planet kerbin preset does
+// not have — that one stays a system of one body so its figures keep meaning what
+// they meant. Both bodies are invented and these are the game's own numbers: a
+// 600 km planet at one g, a 200 km moon at a sixth of it, twelve thousand
+// kilometres out and tidally locked. The sphere of influence works out at 2430 km,
+// twelve lunar radii, which is what the game says too.
+func kerbinSystem() System {
+	sys := System{Bodies: []Body{
+		{Name: "kerbin", Radius: 600000, MassSource: FromMass, Mass: 5.2915158e22,
+			RotationPeriod: 21549.425},
+		// The mean anomaly is the launch window, solved the same way Mars's was:
+		// fly the transfer, take where and when it crosses the Mun's orbit, and
+		// put the Mun there — then step off it far enough to miss.
+		{Name: "mun", Radius: 200000, MassSource: FromMass, Mass: 9.7600236e20,
+			RotationPeriod: 138984, Parent: 0, SemiMajor: 1.2e7, MeanAnom0: 1.64313},
+	}}
+	sys.Normalize()
+	return sys
+}
+
+// kerbinMun is the same launcher with a stretched second stage, flown to an orbit
+// round the Mun: up in nine minutes, away at T+2000 s, and there five hours later.
+//
+// The whole trip after insertion costs 1218 m/s, and the stock upper stage has
+// 1194 — so it carries 800 kg more propellant, and the cutoff moves with it.
+// Everything else is the launcher that was already here.
+func kerbinMun() Preset {
+	p := kerbin()
+	p.Name = "kerbin-mun"
+	cfg := &p.Cfg
+	sys := kerbinSystem()
+	cfg.System, cfg.LaunchBody, cfg.Body = sys, 0, sys.Bodies[0]
+
+	cfg.Rocket.Stages[1].PropMass = 3400
+	cfg.Rocket.Stages[1].CutoffTime = 79
+
+	// 868 m/s away, and 350 to stay. The transfer is aimed *past* the Mun on
+	// purpose: a dead-centre intercept is a collision, and with 364 m/s of
+	// hyperbolic excess against a body this small the grazing impact parameter is
+	// 486 km — so 851 to 861 m/s all end in a crater, and the miss has to be
+	// bought with another 7.
+	cfg.Nodes = []Node{
+		{T: 2000, Frame: BurnPrograde, DeltaV: 868},
+		{T: 18312, Frame: BurnRetrograde, DeltaV: 350},
+	}
+	cfg.MaxTime = 12 * 3600
+	return p
+}
+
 func kerbin() Preset {
 	return Preset{
 		Name: "kerbin",

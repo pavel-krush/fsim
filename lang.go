@@ -227,6 +227,8 @@ func presetName(key string) string {
 		return T("preset.moon")
 	case "kerbin":
 		return T("preset.kerbin")
+	case "kerbin-mun":
+		return T("preset.kerbinMun")
 	default:
 		return key
 	}

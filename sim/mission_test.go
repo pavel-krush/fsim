@@ -583,3 +583,65 @@ func TestMarsWindowPhasing(t *testing.T) {
 		t.Errorf("Mars's mean anomaly is %.4f: the apollo-mars transfer is tuned to 5.9975", m.MeanAnom0)
 	}
 }
+
+// The Mun: the same machinery on a system nobody has to look up, and the smallest
+// target in the collection. Two hundred kilometres of radius and a sphere of
+// influence twelve radii wide, which is what makes the aiming interesting.
+func TestKerbinMunPresetEntersMunOrbit(t *testing.T) {
+	// The invented system first, because the mission is only as good as its data.
+	sys := kerbinSystem()
+	mun := &sys.Bodies[1]
+	close(t, "Kerbin's surface gravity", sys.Bodies[0].SurfaceG, 9.81, 0.001)
+	close(t, "the Mun's surface gravity", mun.SurfaceG, 1.6285, 0.001)
+	close(t, "the Mun's sphere of influence", mun.SOI, 2430000, 0.01)
+	close(t, "the Mun's orbital period", sys.Period(1), 138982, 0.01)
+
+	s := New(kerbinMun().Cfg)
+	var enter float64
+	peri := math.Inf(1)
+	for !s.St.Done && s.St.T < 12*3600 {
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			break
+		}
+		if s.St.Center == 1 {
+			if enter == 0 {
+				enter = s.St.T
+			}
+			peri = math.Min(peri, s.Altitude())
+		}
+	}
+
+	o := ComputeOrbit(s.St.Pos, s.St.Vel, s.Center().Mu)
+	pa, aa := o.PeriapsisAlt(s.Center().Radius), o.ApoapsisAlt(s.Center().Radius)
+	t.Logf("inside the Mun's sphere at T+%.0f s, closest %.0f km, orbit %.0f x %.0f km, e %.4f, period %.0f min, %.0f kg left",
+		enter, peri/1000, pa/1000, aa/1000, o.Eccentricity, o.Period/60, s.St.Prop[1])
+
+	if s.St.Outcome != OutcomeCaptured || s.St.OutcomeBody != 1 {
+		t.Fatalf("outcome %d about body %d, want captured by the Mun", s.St.Outcome, s.St.OutcomeBody)
+	}
+	if !o.Bound() || pa < 20000 {
+		t.Errorf("orbit %.0f x %.0f km: too close to call this an orbit", pa/1000, aa/1000)
+	}
+	if o.Eccentricity > 0.08 {
+		t.Errorf("eccentricity %.3f: the braking burn is not sized for this approach", o.Eccentricity)
+	}
+	// It has to fit inside the sphere of influence with room to spare, which on a
+	// body this small is the constraint that bites.
+	if aa+mun.Radius > mun.SOI/2 {
+		t.Errorf("apoapsis %.0f km from the centre against a sphere of influence of %.0f km",
+			(aa+mun.Radius)/1000, mun.SOI/1000)
+	}
+	if s.St.Prop[1] <= 0 {
+		t.Error("the second stage is dry, so it cannot have braked with what it had")
+	}
+}
+
+// The single-planet Kerbin stays single-planet. Its figures are quoted, and a Mun
+// three thousand kilometres away with a gravity of its own would move them.
+func TestPlainKerbinHasNoMun(t *testing.T) {
+	cfg := kerbin().Cfg
+	cfg.EnsureSystem()
+	if n := len(cfg.System.Bodies); n != 1 {
+		t.Errorf("the kerbin preset flies in a system of %d bodies", n)
+	}
+}

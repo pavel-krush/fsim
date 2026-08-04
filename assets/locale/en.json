@@ -123,6 +123,7 @@
   "preset.apolloSaturn": "Apollo / Saturn V",
   "preset.earthFalcon": "Earth / Falcon-9",
   "preset.kerbin": "Kerbin / KSP-like",
+  "preset.kerbinMun": "Kerbin / round the Mun",
   "preset.mars": "Mars / light launcher",
   "preset.moon": "Moon / no atmosphere",
   "preset.protonGeo": "Proton-K / Blok DM to geostationary",

@@ -123,6 +123,7 @@
   "preset.apolloSaturn": "Аполлон / Сатурн-5",
   "preset.earthFalcon": "Земля / Falcon-9",
   "preset.kerbin": "Кербин / KSP-подобный",
+  "preset.kerbinMun": "Кербин / орбита Муны",
   "preset.mars": "Марс / лёгкий носитель",
   "preset.moon": "Луна / без атмосферы",
   "preset.protonGeo": "Протон-К / блок ДМ на геостационар",

@@ -281,6 +281,21 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
   95209 km. The gradient through the encounter is about 7000 km per m/s, so the preset ships the value that
   fails *gracefully* — a bad periapsis is a worse orbit, an impact is the end of the mission.
 
+### The Mun, and aiming at something small
+
+`kerbin-mun` is the cheapest mission here to fly and the fiddliest to aim.
+
+- **A dead-centre intercept is a collision.** The window was solved the way Mars's was — fly the transfer,
+  take where and when it crosses the Mun's orbit, put the Mun there — and the result was a crater every
+  time. With 364 m/s of hyperbolic excess against a body of μ = 6.5e10 the grazing impact parameter is
+  486 km, so the *whole* of 851–861 m/s hits: focusing swallows anything closer. Another 7 m/s buys the
+  miss, and past that the periapsis climbs about 20 km per m/s.
+- **The verdict on the way through was `OutcomeReturned`**, before the braking burn was added — swing past
+  the Mun, come back to Kerbin, re-enter. The free-return verdict turned up in a preset that was not trying
+  to be one, which is the sort of thing that suggests it was the right shape.
+- **`kerbin` stays a system of one body.** Its numbers are quoted in the README, and a Mun with a gravity of
+  its own would move them. Same reasoning as `earth-falcon` against the solar system.
+
 ### The free return, which is one number aimed four days ahead
 
 `apollo-return` is the same Saturn V with one node on the plan and nothing after it. Two things have to be

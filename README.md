@@ -71,7 +71,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Eleven launchers, all of which actually reach orbit:
+Twelve launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -86,6 +86,7 @@ Eleven launchers, all of which actually reach orbit:
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 3.7 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 3.3 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
+| Kerbin / round the Mun | 111 × 121 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.6 g |
 
 The Earth figure comes in below the 9.3–9.5 km/s a real launcher spends because this one lifts off from
 the equator and is handed all 465 m/s of the planet's rotation.
@@ -141,6 +142,12 @@ of terminal velocity at 22 kN of thrust — and deep enough that a closed orbit 
 So the profile is seven and a half minutes of climbing straight up at a few hundred metres a second, a turn
 once the air is behind, and a kick stage at apoapsis. Drag still costs 622 m/s and gravity 1263, against the
 1682 it takes to be in orbit at all. The vehicle is invented; the numbers are Titan's.
+
+The Mun is the same launcher with 800 kg more propellant in the second stage, flown to a 111 × 121 km orbit
+round a body of 200 km radius — up in nine minutes, away at T+2000 s, there five hours later. Kerbin and
+the Mun are invented but the numbers are the game's: one g on a 600 km planet, a sixth of it on the moon,
+twelve thousand kilometres out, and a sphere of influence of 2430 km. The single-planet `kerbin` preset is
+left alone as a system of one body, because its figures are the ones quoted above.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km
 atmosphere does not yield to a direct ascent on a single burn.
