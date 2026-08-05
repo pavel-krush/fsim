@@ -639,7 +639,7 @@ func TestKerbinMunPresetEntersMunOrbit(t *testing.T) {
 // The single-planet Kerbin stays single-planet. Its figures are quoted, and a Mun
 // three thousand kilometres away with a gravity of its own would move them.
 func TestPlainKerbinHasNoMun(t *testing.T) {
-	cfg := kerbin().Cfg
+	cfg := kerbinAscent().Cfg
 	cfg.EnsureSystem()
 	if n := len(cfg.System.Bodies); n != 1 {
 		t.Errorf("the kerbin preset flies in a system of %d bodies", n)

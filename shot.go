@@ -183,10 +183,11 @@ type shotStep struct {
 	// openLang forces the language picker open, and hover parks the pointer at
 	// a fixed spot. Neither state can be reached by a scripted run otherwise:
 	// there is no mouse.
-	openLang bool
-	openMix  bool
-	openBody bool
-	hover    *struct{ X, Y float64 }
+	openLang   bool
+	openMix    bool
+	openBody   bool
+	openPreset bool
+	hover      *struct{ X, Y float64 }
 	// stages rebuilds the vehicle to this many stages, and scrollRocket winds
 	// the vehicle column down, which is the only way a capture can show the
 	// stages a two-stage preset does not have.
@@ -207,9 +208,6 @@ type shotStep struct {
 	// is going to, and "soi" is whichever one holds the vehicle at that instant.
 	zoom      float64
 	focusBody string
-	// plan drops a flight plan onto the running simulation, which is the only
-	// way a script can show the manoeuvre panel and the predicted path.
-	plan []sim.Node
 	// graphAscent zooms the graph screen's time axis onto the launch, which on a
 	// four-day flight is the first two pixels of it.
 	graphAscent bool
@@ -237,6 +235,7 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 		steps: []shotStep{
 			{name: "1-setup", screen: ScreenSetup},
 			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
+			{name: "1b2-setup-presets", screen: ScreenSetup, openPreset: true},
 			{name: "1c-setup-info", screen: ScreenSetup, hover: &struct{ X, Y float64 }{914, 105}},
 			{name: "1d-setup-info-atmo", screen: ScreenSetup, hover: &struct{ X, Y float64 }{542, 127}},
 			{name: "1e-setup-info-low", screen: ScreenSetup, hover: &struct{ X, Y float64 }{914, 355}},
@@ -371,12 +370,10 @@ func (sr *shotRunner) step(a *App) bool {
 			a.flight.follow = camFree
 			a.flight.freePos = a.flight.framePoint(sim.Vec2{}, sr.tl.crossing, a.flight.s.St.T).Scale(0.5)
 		}
-		// Only when a step brings its own, or every other step would wipe the plan
-		// the preset ships with — which is how the translunar burn quietly failed
-		// to happen and the capture shots came out in low Earth orbit.
-		if st.plan != nil {
-			a.flight.s.Cfg.Nodes = st.plan
-		}
+		// Nothing here writes Cfg.Nodes. A step used to be able to bring its own
+		// plan, and the assignment ran on every step, which wiped the one the
+		// preset ships with: the translunar burn quietly failed to happen and the
+		// deep-space captures all came out in low Earth orbit.
 		a.flight.pred = nil
 		a.flight.cam.Scale = 0 // snap, so the capture is not mid-zoom
 	}
@@ -415,6 +412,8 @@ func (sr *shotRunner) step(a *App) bool {
 		a.ui.openList = "mixture"
 	case st.openBody:
 		a.ui.openList = "body"
+	case st.openPreset:
+		a.ui.openList = "preset"
 	default:
 		a.ui.openList = nil
 	}

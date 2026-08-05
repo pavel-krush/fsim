@@ -24,6 +24,17 @@ go build ./... && go vet ./...
 way to render the UI headless. The flag drives the real loop through the script in `shot.go` and dumps
 the canvas to PNG. It is the only way to look at the interface without a human at the keyboard.
 
+- **A step names its moment; it does not count seconds.** T+45 is max q on a Saturn V and a fifth of the
+  way to it on Titan; T+232000 is a lunar flyby on one preset and an idle coast on another. `shotTimeline`
+  flies a throwaway copy of the same flight first and the steps resolve against its events — the flight is
+  deterministic, so every instant it finds is one the captured run hits exactly.
+- **A moment or a body the preset does not have skips its step** rather than saving the previous frame
+  under a new name. Airless bodies have no max q; a system of one body has no arrival.
+- **Bodies are named, not indexed**, for the reason everything else here is: `focus: 10` was the Moon until
+  Mars grew two of its own, and there is no index ten at all in a system of two.
+- **`TestShotStepsAreInOrderForEveryPreset` guards the one thing that can go wrong.** `FastForward` does
+  not rewind, so a step resolving to something already past would quietly capture the previous frame.
+
 ## Layout
 
 | File | Contents |
@@ -38,7 +49,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
-| `sim/presets.go` | Thirteen of them, and the invented Kerbin system. All reach orbit; six go somewhere afterwards |
+| `sim/presets.go` | Thirteen of them, and the invented Kerbin system. All reach orbit; eight carry a flight plan and six leave the body they launched from |
 | `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
@@ -235,8 +246,10 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   arrives nose-first. What it does *not* claim is that anything aboard survived.
 - **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
   `eventLabel` takes the whole event so it can name it.
-- **`bodyName` is a lookup, not a switch.** Seventeen bodies is where a switch stops being worth writing;
-  a missing entry renders as the identifier, which is the same safety net `T` has.
+- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and thirteen presets is where
+  a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
+  net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
+  slug-to-key mapping to keep in step with anything.
 
 ### Apollo goes to the Moon, twice
 
@@ -255,7 +268,9 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
 - **The insertion burn is five and a half minutes long**, so it is nothing like the impulse a textbook
   hands you: it has to start 200 s *before* closest approach and be sized against the integrated result,
   not against `v_peri − v_circ`. Found by search, like everything else here: T+286000 s and 725 m/s give
-  1782 × 1921 km at e = 0.019, with the service module still half full.
+  1926 × 1776 km at e = 0.021 where the run ends, with the service module still half full. A lunar orbit is
+  perturbed enough that those two numbers are a snapshot rather than a constant: the apoapsis swings through
+  some 150 km over the days that follow, so one instant is the best anything here can quote.
 - **This one is forgiving where the translunar injection is sharp.** ±25 m/s on the insertion moves the
   periapsis by a couple of hundred kilometres; ±2 m/s on the injection moves the approach by two thousand.
 
@@ -296,12 +311,13 @@ bookkeeping detail. Io's is 7840 km — four and a third radii — so:
 
 - **The parking orbit has to be low**, and 58 x 43 km is not a stylistic choice. An orbit a few hundred
   kilometres up is a significant fraction of the way to the edge, where Jupiter takes over.
-- **Leaving costs less than escape.** 738 m/s would be a proper escape from a 50 km orbit; 750 is spent
-  because the vehicle only has to get *out of the way*, and the edge is close enough that the difference
-  does not matter. The extra 12 m/s is what makes the departure clean.
+- **Leaving does not need escape, but the preset pays for it anyway.** From the parking orbit 417 m/s
+  reaches the edge of the sphere and 739 is a full escape — the edge being four radii up rather than at
+  infinity is the whole difference. The preset spends 750, eleven more than escape, because that is the
+  value whose Jupiter orbit does not wander back in; 700 and 800 both do.
 - **Which way out depends on where in the parking orbit the burn happens.** "Prograde" is prograde relative
   to *Io*, and Io is going round Jupiter at 17 km/s: the same 750 m/s at T+2000 s drops the vehicle to
-  342 Mm, inside Io's orbit, and at T+4500 s lifts it to 532 Mm. Sweep the node time over one parking
+  342 Mm, inside Io's orbit, and at T+4500 s lifts it above. Sweep the node time over one parking
   period, as with the Mars injection, for the same reason.
 - **T+4500 s is also the value that does not come back.** The resulting orbit crosses Io's own, and 700 and
   800 m/s both wander back through the sphere of influence within the month. The test counts frame changes
@@ -319,7 +335,7 @@ bookkeeping detail. Io's is 7840 km — four and a third radii — so:
 - **The verdict on the way through was `OutcomeReturned`**, before the braking burn was added — swing past
   the Mun, come back to Kerbin, re-enter. The free-return verdict turned up in a preset that was not trying
   to be one, which is the sort of thing that suggests it was the right shape.
-- **`kerbin` stays a system of one body.** Its numbers are quoted in the README, and a Mun with a gravity of
+- **`kerbin-ascent` stays a system of one body.** Its numbers are quoted in the README, and a Mun with a gravity of
   its own would move them. Same reasoning as `earth-falcon` against the solar system.
 
 ### The free return, which is one number aimed four days ahead
@@ -405,7 +421,8 @@ second and the third.
   something a flight does; blocking the whole mission over it is not something this should do.
 - **The measure of geostationary is the period, not the altitude.** The tuner scored candidates on
   |period − sidereal day| rather than on eccentricity, which moved the last burn by 2 m/s and the answer
-  from 0.11% off to 0.09%. `TestProtonGeoPresetReachesTheBelt` asserts half a per cent.
+  from 0.11% off to under a tenth of one. It reads 0.03% at the end of the run, and drifts the way every
+  other perturbed orbit here does. `TestProtonGeoPresetReachesTheBelt` asserts half a per cent.
 - **"Burn what is left" is written as the number, not as a huge one.** The first node asks for 422 m/s
   because that is exactly what 3.3 t buys at that mass, so the tank runs dry as the burn ends either way.
   The tuner used 9999 to find it; a preset should not ship with a magic number standing in for a
@@ -417,7 +434,7 @@ second and the third.
 
 The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking
 orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at **T+2.63 days**, passes
-**1789 km** over the surface and leaves again at T+4.0 days.
+**1791 km** over the surface and leaves again at T+4.0 days.
 
 - **The time and the delta-v were found by search**, the same way the pitch programmes were. The Moon has
   to be somewhere specific when the vehicle arrives, and a window is not a thing to guess at.
@@ -430,7 +447,7 @@ orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at 
   exactly what `apollo-lunar` models by making that module a stage. Same rocket, same approach, different
   bookkeeping.
 - **The osculating lunar orbit at the crossing can read as bound** while the integrated path is a flyby:
-  at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1789 km
+  at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1791 km
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
   conic and a trajectory.
 
@@ -479,11 +496,16 @@ a delta-v to spend. `sim/node.go`, edited on the flight screen, drawn as the pat
 
 ## Presets
 
-The pitch programmes and the final cutoffs were found by search (a profile generator,
-`pitch = (90+t)·(1-f)^p − t`, plus a bisection on the last stage's cutoff for a periapsis at the target).
+The identifiers say what a preset is: a plain ascent is `<body>-ascent`, and anything that goes somewhere
+is `<from>-<to>` or named for its launcher. So `mars-ascent` and `moon-ascent` rather than `mars` and
+`moon`, which is also what the doc comments had been calling them.
+
+The pitch programmes and the final cutoffs were found by search: a profile generator,
+`pitch = tail + (90 − tail)·(1 − f)^p` over the fraction f of the turn, plus a sweep or a bisection on the
+last stage's cutoff for a periapsis at the target.
 The tuner lived in `sim/zz_tune_test.go` and has been deleted — if the presets ever drift, writing it
-again beats tuning by hand. Note the tail term: the Apollo profile only works with a **positive**
-asymptote, so a generator that can only decay to zero (as the first one did) cannot express it.
+again beats tuning by hand. Note the tail: the Apollo profile only works with a **positive** asymptote of nine
+degrees, so the first generator — which could only decay to zero — could not express it at all.
 
 Earth/Falcon-9: a 304/239 km orbit, Δv 8995 m/s, max q 43 kPa at 11 km, peak 5.9 g. The Δv is below the
 real-world 9.3–9.5 km/s because launching from the equator hands over all 465 m/s of rotation.

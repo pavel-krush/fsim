@@ -702,7 +702,10 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 		s.preset = 0
 	}
 
-	const bw = 230.0
+	// Wide enough for the longest name in either language with the caret clear of
+	// it: "Proton-K / Blok DM to geostationary" ran under the caret at 230, and the
+	// Russian for it is longer still.
+	const bw = 310.0
 	box := Rect{r.Right() - 20 - langPickerW - bw, r.Y + 8, bw, r.H - 16}
 	drawText(dst, T("setup.presetLabel"), fontUISm, box.X-8,
 		r.Y+(r.H-fontUISm.Size)/2, colTextDim, alignRight)

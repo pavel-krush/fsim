@@ -202,36 +202,14 @@ func bodyName(key string) string {
 	return key
 }
 
-// presetName turns a preset identifier into display text.
+// presetName turns a preset identifier into display text. A lookup rather than a
+// switch, for the same reason bodyName is one: thirteen cases is past the point
+// where writing them out earns anything, and a missing entry renders as the
+// identifier instead of as nothing.
 func presetName(key string) string {
-	switch key {
-	case "earth-falcon":
-		return T("preset.earthFalcon")
-	case "apollo-saturn":
-		return T("preset.apolloSaturn")
-	case "apollo-lunar":
-		return T("preset.apolloLunar")
-	case "apollo-return":
-		return T("preset.apolloReturn")
-	case "apollo-mars":
-		return T("preset.apolloMars")
-	case "proton-zvezda":
-		return T("preset.protonZvezda")
-	case "proton-geo":
-		return T("preset.protonGeo")
-	case "titan-ascent":
-		return T("preset.titanAscent")
-	case "io-jupiter":
-		return T("preset.ioJupiter")
-	case "mars":
-		return T("preset.mars")
-	case "moon":
-		return T("preset.moon")
-	case "kerbin":
-		return T("preset.kerbin")
-	case "kerbin-mun":
-		return T("preset.kerbinMun")
-	default:
-		return key
+	full := "preset." + key
+	if s := T(full); s != full {
+		return s
 	}
+	return key
 }

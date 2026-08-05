@@ -69,7 +69,7 @@ func earthISA() []Layer {
 func Presets() []Preset {
 	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
 		protonZvezda(), protonGeo(), titanAscent(), ioJupiter(), marsAscent(), moonAscent(),
-		kerbin(), kerbinMun()}
+		kerbinAscent(), kerbinMun()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -346,14 +346,14 @@ func apolloMars() Preset {
 
 	// The injection has to happen at the one point in the parking orbit where the
 	// escape asymptote comes out along the Earth's own motion round the Sun.
-	// Anywhere else and the same 3695 m/s is thrown sideways: at T+3000 s it buys a
+	// Anywhere else and the same 3690 m/s is thrown sideways: at T+3000 s it buys a
 	// heliocentric aphelion of 1.07 AU instead of 1.62, which is to say nothing at
 	// all. Then the spent S-IVB goes overboard with 15 t still in it, because a
 	// hydrogen stage that has been in the cold for six months is not going to
 	// relight anyway.
 	//
-	// The braking burn is eleven minutes long and lands the vehicle in a 91217 x
-	// 95199 km orbit at e = 0.021. High, because a chemical stack arrives at 3 km/s
+	// The braking burn is eleven minutes long and lands the vehicle in a 95159 x
+	// 91139 km orbit at e = 0.021. High, because a chemical stack arrives at 3 km/s
 	// of hyperbolic excess and 2410 m/s is what the service module can spend on it.
 	cfg.Nodes = []Node{
 		{T: 4500, Frame: BurnPrograde, DeltaV: 3690, Separate: true},
@@ -370,13 +370,13 @@ func apolloMars() Preset {
 // deepest gravity well to be standing in. Io itself is easy — 1809 m/s of circular
 // speed at the surface and no air at all — but Jupiter is 4.2e8 m away and 318 times
 // the Earth's mass, and Io's own sphere of influence is only 7840 km wide. Four and
-// a third radii. So an orbit round it is a thing you have barely got room for, and
-// leaving costs 750 m/s: less than the 738 of a proper escape would suggest, because
-// the sphere's edge is close enough that the vehicle does not have to get to
-// infinity, only out of the way.
+// a third radii. So an orbit round it is a thing you have barely got room for.
+// Getting out of the sphere takes only 417 m/s, the edge being that close rather than
+// at infinity, against the 739 of a full escape; the preset spends 750 anyway, for
+// the reason given at the node below.
 //
-// What it ends up in is an orbit round Jupiter — 432 x 532 Mm from the centre, which
-// crosses Io's own — and the verdict says Jupiter, because that is who has it now.
+// What it ends up in is an orbit round Jupiter crossing Io's own, and the verdict says
+// Jupiter, because that is who has it now.
 // The vehicle is invented; two stages and a fifth of Apollo's lunar module.
 func ioJupiter() Preset {
 	sys := SolarSystem()
@@ -428,9 +428,10 @@ func ioJupiter() Preset {
 			}},
 			// The departure has to leave *outwards*, which is a question of where in
 			// the parking orbit it happens: the same 750 m/s at T+2000 s drops the
-			// vehicle to 342 Mm, inside Io's orbit, and at T+4500 s lifts it to 532.
-			// It is also the one value in a hundred either side that does not come
-			// back through Io's sphere of influence within the month.
+			// vehicle inside Io's orbit and at T+4500 s lifts it above. And 750
+			// rather than the 417 that gets out of the sphere or the 739 of a proper
+			// escape, because it is the value either side of which the resulting
+			// orbit wanders back through Io's sphere inside a month.
 			Nodes: []Node{{T: 4500, Frame: BurnPrograde, DeltaV: 750}},
 
 			TargetOrbit: 60000,
@@ -620,7 +621,10 @@ func protonGeo() Preset {
 				{T: 22711, Frame: BurnPrograde, DeltaV: 1472},
 			},
 			TargetOrbit: 35786000,
-			MaxTime:     6 * 86400,
+			// Two days, against a plan that finishes in six and a quarter hours: a
+			// belt satellite is one whose day matches the planet's, so the run wants
+			// room for a revolution of each to see that it does.
+			MaxTime: 2 * 86400,
 		},
 	}
 }
@@ -707,7 +711,7 @@ func titanAscent() Preset {
 
 func marsAscent() Preset {
 	return Preset{
-		Name: "mars",
+		Name: "mars-ascent",
 		Cfg: Config{
 			Body: Body{
 				Name:           "mars",
@@ -765,7 +769,7 @@ func marsAscent() Preset {
 
 func moonAscent() Preset {
 	return Preset{
-		Name: "moon",
+		Name: "moon-ascent",
 		Cfg: Config{
 			Body: Body{
 				Name:           "moon",
@@ -847,7 +851,7 @@ func kerbinSystem() System {
 // 1194 — so it carries 800 kg more propellant, and the cutoff moves with it.
 // Everything else is the launcher that was already here.
 func kerbinMun() Preset {
-	p := kerbin()
+	p := kerbinAscent()
 	p.Name = "kerbin-mun"
 	cfg := &p.Cfg
 	sys := kerbinSystem()
@@ -869,9 +873,9 @@ func kerbinMun() Preset {
 	return p
 }
 
-func kerbin() Preset {
+func kerbinAscent() Preset {
 	return Preset{
-		Name: "kerbin",
+		Name: "kerbin-ascent",
 		Cfg: Config{
 			Body: Body{
 				Name:           "kerbin",

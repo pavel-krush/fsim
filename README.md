@@ -77,20 +77,23 @@ Thirteen launchers, all of which actually reach orbit:
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
 | Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
-| Apollo / lunar orbit | 1782 × 1921 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / lunar orbit | 1926 × 1776 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 305 kPa at 32 km, on the way in | 14.5 g on entry |
-| Apollo / Mars orbit | 91139 × 95159 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
+| Apollo / Mars orbit | 95159 × 91139 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
-| Proton-K / Blok DM | 36045 × 35576 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
+| Proton-K / Blok DM | 36106 × 35465 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 0.68 g |
-| Io / off to Jupiter | 58 × 43 km, then 432 × 532 Mm round Jupiter | 2807 m/s in all | — | 0.60 g |
+| Io / off to Jupiter | 58 × 43 km, then a Jupiter orbit crossing Io's | 2807 m/s in all | — | 0.60 g |
 | Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
-| Kerbin / round the Mun | 111 × 121 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
+| Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
 
-The peak column is real g — 9.80665 m/s² — not local surface gravities, which is why a launch from Titan
-tops out at two thirds of one.
+Apoapsis first, and every figure is read where the run ends. That matters for the ones out at a moon or a
+planet: those orbits are perturbed, so their numbers are a snapshot rather than a constant — the lunar
+orbit above swings through some 150 km of apoapsis over the days it is watched. The peak column is real g
+— 9.80665 m/s² — not local surface gravities, which is why a launch from Titan tops out at two thirds of
+one.
 
 The Earth figure comes in below the 9.3–9.5 km/s a real launcher spends because this one lifts off from
 the equator and is handed all 465 m/s of the planet's rotation.
@@ -98,14 +101,14 @@ the equator and is handed all 465 m/s of the planet's rotation.
 Apollo is the one preset that can be checked against a flight that happened. Staging at T+159 s against
 the real T+161, insertion at T+604 s into 192 × 186 km against the real T+699 into 186 × 183. Then the
 flight plan fires the translunar injection with what the S-IVB kept back, and two and a half days later
-the vehicle is inside the Moon's sphere of influence, 1789 km over the surface. It leaves again: capturing
+the vehicle is inside the Moon's sphere of influence, 1791 km over the surface. It leaves again: capturing
 into lunar orbit needs 670 m/s and there are 540 left, which is the historical reason Apollo carried a
 service module with an engine of its own. The lunar module's ride off the surface is the Moon preset.
 
 The lunar-orbit preset is the same rocket, counted differently. The command and service module stops being
 dead payload and becomes the fourth stage, so the flight plan can brake with the engine Apollo actually
 braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and 725 m/s
-retrograde at the far end for a 1782 × 1921 km lunar orbit with the service module still half full. The
+retrograde at the far end for a 1926 × 1776 km lunar orbit with the service module still half full. The
 mass on the pad is the same to the kilogram.
 
 The free return is the third Apollo, and the one that fires nothing after the injection. That burn is
@@ -137,7 +140,7 @@ then it goes overboard and leaves the module with its own propellant untouched.
 The same launcher with a Blok DM on top is the other thing Proton did for thirty years: a comsat to the
 geostationary belt. Three burns — the third stage empties itself at the first periapsis and is dropped,
 Blok DM lifts the far side to 35,786 km, and five and a half hours later it rounds the orbit off up there.
-The measure of success is not the altitude but the period: 23.95 hours against the sidereal day's 23.93,
+The measure of success is not the altitude but the period: 23.927 hours against the sidereal day's 23.934,
 which for a real satellite is a slow drift east and a station-keeping budget.
 
 Titan is the strangest ascent in the system and the one that took the most work. Four times Earth's surface
@@ -149,14 +152,15 @@ once the air is behind, and a kick stage at apoapsis. Drag still costs 622 m/s a
 
 Io is the smallest sphere of influence anything launches into here: 7840 km, four and a third radii, so
 there is barely room for an orbit and the parking orbit has to be a low one. Getting off Io is easy — 1809
-m/s of circular speed at the surface and no air to speak of — and getting away from it is 750 m/s, which
-puts the vehicle in an orbit round Jupiter crossing Io's own, 432 × 532 Mm from the centre. The verdict
-names Jupiter, because that is who has it now.
+m/s of circular speed at the surface and no air to speak of — and getting out of the sphere takes only
+417 m/s, since the edge is four radii up rather than at infinity. The preset spends 750, a shade over the
+739 a full escape costs, because that is the value whose Jupiter orbit does not wander back through Io's
+sphere within the month. The verdict names Jupiter, because that is who has it now.
 
 The Mun is the same launcher with 800 kg more propellant in the second stage, flown to a 111 × 121 km orbit
 round a body of 200 km radius — up in nine minutes, away at T+2000 s, there five hours later. Kerbin and
 the Mun are invented but the numbers are the game's: one g on a 600 km planet, a sixth of it on the moon,
-twelve thousand kilometres out, and a sphere of influence of 2430 km. The single-planet `kerbin` preset is
+twelve thousand kilometres out, and a sphere of influence of 2430 km. The single-planet `kerbin-ascent` preset is
 left alone as a system of one body, because its figures are the ones quoted above.
 
 Kerbin needs its second stage set to ignite at apoapsis: a 600 km planet wearing an Earth-thick 70 km

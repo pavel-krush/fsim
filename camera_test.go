@@ -56,7 +56,7 @@ func TestZoomHoldsThePointUnderTheCursor(t *testing.T) {
 // A camera aimed at a body centres on it, and one that has been dragged centres on
 // nothing — the two are different states and the picker says which.
 func TestLookAtSetsBothFrameAndFollow(t *testing.T) {
-	s := sim.New(sim.Presets()[1].Cfg) // Apollo, which has a system worth aiming at
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg) // a system worth aiming at
 	f := NewFlightScreen(s)
 	moon := s.Cfg.System.IndexOf("moon")
 
@@ -77,4 +77,17 @@ func TestLookAtSetsBothFrameAndFollow(t *testing.T) {
 	if f.frameBody() != s.St.Center {
 		t.Error("a free view lost the frame it was dragged in")
 	}
+}
+
+// presetNamed finds a preset by its identifier. By position is how a test starts
+// depending on the order of a list that grows.
+func presetNamed(t *testing.T, name string) sim.Preset {
+	t.Helper()
+	for _, p := range sim.Presets() {
+		if p.Name == name {
+			return p
+		}
+	}
+	t.Fatalf("no preset named %q", name)
+	return sim.Preset{}
 }
