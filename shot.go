@@ -138,6 +138,45 @@ func atCoast() shotAt {
 	}
 }
 
+// atCruise is the middle of the coast between the departure burn and the arrival,
+// which on the interplanetary presets is three months of flight with nothing in it
+// — and the only phase the script had no step for, so the one place a drawing bug
+// could live unseen.
+func atCruise() shotAt {
+	return func(tl *shotTimeline) (float64, bool) {
+		enter, ok := tl.at(sim.EvSOIEnter)
+		if !ok || len(tl.nodes) == 0 {
+			return 0, false
+		}
+		from := tl.nodes[0].T
+		if from >= enter {
+			return 0, false
+		}
+		return from + (enter-from)/2, true
+	}
+}
+
+// beforeArrival is the approach: three hours before the vehicle enters the target's
+// sphere of influence, or the last eighth of the coast when the coast is shorter
+// than a day. Neither on its own works for both — three hours before the Mun is
+// before the transfer's own midpoint, and an eighth of the way to Mars is
+// twenty-three days out with the planet nowhere in the picture.
+func beforeArrival() shotAt {
+	return func(tl *shotTimeline) (float64, bool) {
+		enter, ok := tl.at(sim.EvSOIEnter)
+		if !ok {
+			return 0, false
+		}
+		lead := 3 * 3600.0
+		if len(tl.nodes) > 0 && tl.nodes[0].T < enter {
+			if eighth := (enter - tl.nodes[0].T) / 8; eighth < lead {
+				lead = eighth
+			}
+		}
+		return enter - lead, true
+	}
+}
+
 // atNode is off seconds either side of a scheduled burn, negative for before it:
 // the manoeuvre panel and the predicted path are only worth a capture while the
 // burn is still ahead.
@@ -266,9 +305,13 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// and the prediction shows where it goes.
 			{name: "8d-plan", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.06},
 			{name: "8e-plan-wide", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.012},
+			// The middle of the cruise, at both scales that make sense there: the
+			// system, and the frame the vehicle is actually in.
+			{name: "8e2-cruise", screen: ScreenFlight, at: atCruise(), focusBody: "root", zoom: 0.004},
+			{name: "8e3-cruise-close", screen: ScreenFlight, at: atCruise(), focusBody: "soi", zoom: 0.5},
 			// And after it: three hours out from the target, in its own frame.
 			{name: "8f-approach", screen: ScreenFlight,
-				at: afterEvent(sim.EvSOIEnter, -3*3600), focusBody: "crossing", zoom: 0.4},
+				at: beforeArrival(), focusBody: "crossing", zoom: 0.4},
 			{name: "8g-flyby", screen: ScreenFlight, at: atFlyby(), focusBody: "crossing", zoom: 3},
 			// The camera on the Sun, at two scales: the inner system and the lot.
 			{name: "8k-inner-system", screen: ScreenFlight, focusBody: "sun", zoom: 0.008},

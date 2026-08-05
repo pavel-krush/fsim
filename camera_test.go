@@ -91,3 +91,65 @@ func presetNamed(t *testing.T, name string) sim.Preset {
 	t.Fatalf("no preset named %q", name)
 	return sim.Preset{}
 }
+
+// The ground-track rotation belongs to the launch pad. Applied with the frame
+// body's rotation instead of the pad's, and to samples measured from somewhere
+// else entirely, it turned the ascent's markers around whatever the camera
+// happened to be centred on: ninety days into the Mars transfer, drawn in the
+// Sun's frame, max q came out forty-six radians round the Sun — over by Venus.
+func TestTrackPointLeavesOldSamplesWhereTheyHappened(t *testing.T) {
+	s := sim.New(presetNamed(t, "apollo-mars").Cfg)
+	s.FastForward(90 * 86400)
+	f := NewFlightScreen(s)
+
+	if f.frameBody() != 0 {
+		t.Fatalf("mid-cruise the frame body is %d, expected the root", f.frameBody())
+	}
+	earth := s.Cfg.System.IndexOf("earth")
+
+	// An early sample: measured from the Earth, a couple of hundred kilometres up.
+	var sm sim.Sample
+	for _, h := range s.Hist {
+		if h.T > 100 {
+			sm = h
+			break
+		}
+	}
+	if sm.Center != earth {
+		t.Fatalf("the sample at T+%.0f s is measured from body %d", sm.T, sm.Center)
+	}
+
+	// Drawn in the Sun's frame it has to land where the Earth was when it
+	// happened, give or take the couple of hundred kilometres it was up.
+	want, _ := s.Cfg.System.StateAt(earth, sm.T)
+	got := f.trackPoint(sm)
+	if d := got.Sub(want).Len(); d > 3*s.Cfg.System.Bodies[earth].Radius {
+		t.Errorf("an ascent sample lands %.3g m from where the Earth was, %.4f of an AU",
+			d, d/1.496e11)
+	}
+}
+
+// A trail measured in seconds cannot serve both an ascent and an interplanetary
+// cruise: fifteen minutes of a transfer is a tenth of a pixel, which is why the
+// flown path was invisible out there. The bound is one revolution, and a
+// trajectory that is not coming back round has none to repeat.
+func TestTrailSpanFollowsTheOrbitNotTheClock(t *testing.T) {
+	s := sim.New(presetNamed(t, "apollo-mars").Cfg)
+	f := NewFlightScreen(s)
+
+	// In the parking orbit: one revolution, so the trail cannot smear.
+	s.RunToEnd()
+	period := s.Telemetry().Orbit.Period
+	if period < 60 {
+		t.Fatalf("the parking orbit has a period of %.0f s", period)
+	}
+	if span := f.trailSpan(); math.Abs(span-period) > 1 && span != trailWindow {
+		t.Errorf("in orbit the trail spans %.0f s against a period of %.0f", span, period)
+	}
+
+	// Mid-cruise: longer than the flight so far, so the whole path stays drawn.
+	s.FastForward(90 * 86400)
+	if span := f.trailSpan(); span < s.St.T {
+		t.Errorf("mid-cruise the trail spans %.3g s of a %.3g s flight", span, s.St.T)
+	}
+}

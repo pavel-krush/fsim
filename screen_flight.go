@@ -74,19 +74,27 @@ func (f *FlightScreen) framePoint(p sim.Vec2, from int, t float64) sim.Vec2 {
 	return p.Add(d)
 }
 
-// trackPoint maps a recorded sample into the drawn frame and turns it forward
-// with the frame body's rotation, so that a launch reads as a climb off the pad
-// instead of the 6 km sideways drift the inertial frame shows: the vehicle
-// carries the launch site's eastward velocity, which is real but unhelpful to
-// look at. In orbit the track lags the ellipse by omega*T — that is the ground
-// track, and it should.
+// trackPoint maps a recorded sample into the drawn frame, turning it forward with
+// the launch body's rotation first, so that a launch reads as a climb off the pad
+// instead of the 6 km sideways drift the inertial frame shows: the vehicle carries
+// the launch site's eastward velocity, which is real but unhelpful to look at. In
+// orbit the track lags the ellipse by omega*T — that is the ground track, and it
+// should.
+//
+// The rotation belongs to the pad, so it is applied about the body the pad is on
+// and only to samples measured from it — before the shift into the drawn frame,
+// never after. Turning the *frame* body's rotation on everything, which is what
+// this used to do, put a ground track where there is no ground: an ascent marker
+// drawn in the Sun's frame ninety days into a transfer came out forty-six radians
+// round the Sun, so max q ended up near the orbit of Venus.
 func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
-	p := f.framePoint(sm.Pos, sm.Center, sm.T)
-	w := f.s.Cfg.System.Bodies[f.frameBody()].AngularVelocity()
-	if w == 0 {
-		return p
+	p := sm.Pos
+	if lb := f.s.Cfg.LaunchBody; sm.Center == lb {
+		if w := f.s.Cfg.System.Bodies[lb].AngularVelocity(); w != 0 {
+			p = p.Rotate(w * (f.s.St.T - sm.T))
+		}
 	}
-	return p.Rotate(w * (f.s.St.T - sm.T))
+	return f.framePoint(p, sm.Center, sm.T)
 }
 
 // vehiclePos is where the vehicle is in the drawn frame, now.
@@ -518,10 +526,27 @@ func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64
 	}
 }
 
-// trailWindow is how much of the flight, in seconds, stays drawn behind the
-// vehicle. Longer than any ascent in the presets, so nothing is trimmed on the
-// way up; in orbit it becomes an arc that follows the craft round.
+// trailWindow is the shortest stretch of flight, in seconds, that stays drawn
+// behind the vehicle. Longer than any ascent in the presets, so nothing is
+// trimmed on the way up.
 const trailWindow = 900
+
+// trailSpan is how far back the trail actually reaches. A fixed number of seconds
+// cannot serve both ends of this: fifteen minutes covers an ascent and is a tenth
+// of a pixel of an interplanetary cruise, where it left the flown path invisible
+// and the vehicle apparently drawn from nowhere.
+//
+// What the window is really guarding against is *revolutions* — a trail that wraps
+// the same orbit over and over is one smear — so the bound is one period of the
+// orbit the vehicle is on. A trajectory that is not coming back round has no
+// revolutions to repeat, and gets the whole flight.
+func (f *FlightScreen) trailSpan() float64 {
+	o := f.s.Telemetry().Orbit
+	if !o.Bound() || o.Period <= 0 {
+		return math.Inf(1)
+	}
+	return math.Max(o.Period, trailWindow)
+}
 
 // maxStackedLabels is how many event labels may pile up on one spot before the
 // rest go unlabelled.
@@ -890,12 +915,11 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	// a frame, and it grew for as long as the flight lasted.
 	const minSeg = 1.5
 
-	// Once in orbit the flight has no end, so neither would the trail: it
-	// would wrap the planet again and again until the whole picture is one
-	// smear. Keep a window that comfortably covers a full ascent, and let
-	// anything older drop off the back.
+	// Once in orbit the flight has no end, so neither would the trail: it would
+	// wrap the planet again and again until the whole picture is one smear. One
+	// revolution of the current orbit is the bound; see trailSpan.
 	first := 0
-	if cutoff := f.s.St.T - trailWindow; cutoff > 0 {
+	if cutoff := f.s.St.T - f.trailSpan(); cutoff > 0 {
 		first = sampleAt(h, cutoff)
 	}
 	n := len(h)

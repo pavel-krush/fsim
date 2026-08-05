@@ -205,10 +205,22 @@ first 15 seconds while climbing 400 m. Physically correct, reads as the rocket b
 
 - **Downrange** is measured from the pad in the frame rotating with the planet: the launch site's angle
   is advanced by `ω·t`. Without that the field reported the planet's own rotation as distance flown.
-- **The trail and the event markers** are drawn through `FlightScreen.trackPoint` — a sample taken at
-  time `t` is shifted into the frame being drawn *as of its own time*, then rotated forward by `ω·(T−t)`. The current point does not move, so the orbit ellipse and the rings,
-  which all refer to instant `T`, stay consistent. In orbit the trail lags the ellipse by `ω·T` (2° over
-  500 s) — that is the ground track, and it should.
+- **The trail and the event markers** are drawn through `FlightScreen.trackPoint`: a sample taken at time
+  `t` is turned forward by `ω·(T−t)` and then shifted into the frame being drawn *as of its own time*. The
+  current point does not move, so the orbit ellipse and the rings, which all refer to instant `T`, stay
+  consistent. In orbit the trail lags the ellipse by `ω·T` (2° over 500 s) — that is the ground track, and
+  it should.
+- **The rotation belongs to the pad, so `ω` is the launch body's and it is applied only to samples measured
+  from the launch body, before the shift rather than after.** Using the *frame* body's rotation on
+  everything — which is what the first cut did — puts a ground track where there is no ground: ninety days
+  into the Mars transfer, drawn in the Sun's frame, `ω_sun·(T−t)` is forty-six radians, and the ascent's
+  markers came out round by the orbit of Venus. In the Sun's frame they now sit on the Earth's rail at the
+  point the launch happened, which is where they happened.
+- **The trail reaches back one revolution, not a fixed number of seconds** (`trailSpan`). Fifteen minutes
+  covers an ascent and is a tenth of a pixel of an interplanetary cruise, where it left the flown path
+  invisible and the vehicle apparently drawn from nowhere. What the window guards against is *revolutions*
+  — a trail that wraps the same orbit over and over is one smear — so the bound is one period of the orbit
+  the vehicle is on, and a trajectory that is not coming back round gets the whole flight.
 - **`Telemetry.Speed` is inertial; `SurfSpeed`/`VertSpeed`/`HorizSpeed` are relative to the ground.**
   The panel shows both. Mixing them in one column produces 475 m/s next to a vertical 65 and a
   horizontal 6.
@@ -689,9 +701,10 @@ the time it was measured**.
   orbital scale it lands on top of the cutoff marker.
 - **The mission clock rounds before it splits.** Taking the minutes off first turned 11999.98 s into
   "T+199:60.0". Only visible once flights could run for hours.
-- **The trail is trimmed to `trailWindow` seconds.** With the flight no longer ending at orbit, an
-  unbounded trail wraps the planet over and over until the picture is one smear. The window is longer
-  than any ascent in the presets, so nothing is lost on the way up.
+- **The trail is trimmed to one revolution of the current orbit**, with `trailWindow` as the floor so that
+  no ascent is cut short. With the flight no longer ending at orbit, an unbounded trail wraps the planet
+  over and over until the picture is one smear; a fixed window instead loses the whole of a transfer. See
+  the frames section.
 - **The number of atmosphere bands follows the scale.** From orbit the whole atmosphere is a few pixels
   deep, and sixteen sub-pixel rings simply vanish.
 - **The toolkit identifies a widget by the address of the value it edits.** Do not bind `NumField` to a
