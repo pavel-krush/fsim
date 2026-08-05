@@ -42,15 +42,12 @@ type FlightScreen struct {
 	// on the pad to 0 once the view has pulled back off the planet. Set by
 	// updateCamera, read by trackPoint.
 	groundHold float64
-	// frameShown is the frame the picture is being drawn in, framePrev the one it
-	// is handing over from, and frameBlend how far through that hand-over it is.
+	// frameShown is the frame the picture is being drawn in, noticed by handOver.
 	frameShown int
-	framePrev  int
-	frameBlend float64
-	// The frozen per-leg offsets, and what they were built for.
-	legs       []frameLeg
-	legsFor    int
-	legsCenter int
+	// camHold is where the view was, written from the new centre, and camHoldK how
+	// much of it is still being held on to.
+	camHold  sim.Vec2
+	camHoldK float64
 
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
@@ -89,39 +86,51 @@ func (f *FlightScreen) frameShift(from, center int, t float64) sim.Vec2 {
 // framePoint maps a position measured from body `from` into the frame the picture
 // is drawn in, using where the bodies are at time t.
 //
-// And it is taken between *both* frames while one is handing over to the other.
-// The vehicle crossing into the Moon's sphere of influence changes what these
-// coordinates mean, and changing it in one frame teleported everything drawn
-// through here — the whole flown path, every marker on it, the rails and the
-// bodies — by the Earth-Moon distance. Nothing about the flight happens at that
-// instant; it is a bookkeeping change, and the picture should glide through it
-// the way it already glides through the change of scale that comes with it.
+// The change of frame itself is instant, as a change of coordinates has to be: what
+// must not move is the *picture*, and that is the camera's business. See handOver.
 func (f *FlightScreen) framePoint(p sim.Vec2, from int, t float64) sim.Vec2 {
-	center := f.frameBody()
-	d := f.frameShift(from, center, t)
-	if f.frameBlend < 1 && f.framePrev != center {
-		k := f.frameBlend * f.frameBlend * (3 - 2*f.frameBlend)
-		prev := f.frameShift(from, f.framePrev, t)
-		d = prev.Add(d.Sub(prev).Scale(k))
-	}
-	return p.Add(d)
+	return p.Add(f.frameShift(from, f.frameBody(), t))
 }
 
-// handOver notices that the frame has changed and starts the glide. Called once a
-// frame, before anything is placed.
+// handOver is the change of frame, which happens when the vehicle crosses into or
+// out of a sphere of influence. Everything drawn is written from the new centre from
+// this instant on — including the camera, whose own centre is a point in the frame's
+// coordinates, and a dragged view, which is stored as one.
+//
+// So the view is carried across too: the same point in space, written from the new
+// centre, and then eased back to whatever the automatic framing wants. Without that
+// the whole picture slides by the distance between the two bodies — 384,000 km on
+// the way to the Moon — over a bookkeeping change that nothing in the flight marks.
+// Easing the *world* instead, which was the first attempt, is worse: it slides the
+// picture by the same amount and takes longer over it.
 func (f *FlightScreen) handOver(dt float64) {
+	// Decay first, so that the frame a change is noticed on holds the whole of the
+	// old view rather than the first step's worth less.
+	if f.camHoldK > 0 {
+		f.camHoldK = math.Max(0, f.camHoldK-dt/frameEase)
+	}
 	if want := f.frameBody(); want != f.frameShown {
-		f.framePrev, f.frameShown, f.frameBlend = f.frameShown, want, 0
+		d := f.frameShift(f.frameShown, want, f.s.St.T)
+		f.freePos = f.freePos.Add(d)
+		f.camHold, f.camHoldK = f.cam.Center.Add(d), 1
+		f.frameShown = want
 	}
-	if f.frameBlend < 1 {
-		f.frameBlend = math.Min(1, f.frameBlend+dt/frameEase)
+}
+
+// holdView keeps the picture where it was through a hand-over, easing back to the
+// framing the flight would have chosen for itself.
+func (f *FlightScreen) holdView(natural sim.Vec2) sim.Vec2 {
+	if f.camHoldK <= 0 {
+		return natural
 	}
+	k := f.camHoldK * f.camHoldK * (3 - 2*f.camHoldK)
+	return natural.Add(f.camHold.Sub(natural).Scale(k))
 }
 
 // snapFrame lands the hand-over immediately, for a scripted capture: a screenshot
-// taken mid-glide is a screenshot of neither frame.
+// taken mid-glide is a screenshot of neither framing.
 func (f *FlightScreen) snapFrame() {
-	f.frameShown, f.framePrev, f.frameBlend = f.frameBody(), f.frameBody(), 1
+	f.frameShown, f.camHoldK = f.frameBody(), 0
 }
 
 // trackPoint maps a recorded sample into the drawn frame, turning it forward with
@@ -131,17 +140,7 @@ func (f *FlightScreen) snapFrame() {
 // orbit the track lags the ellipse by omega*T — that is the ground track, and it
 // should.
 //
-// Everything recorded before a change of frame is carried across by an offset frozen
-// at the crossing (`legOffset`), not recomputed each frame. That is the whole of the
-// difference between a flown path and a smear. Recomputed at the sample's own time
-// it is the true path relative to the drawn body, and when that body is moving the
-// true path is a spiral: the few revolutions flown around the Earth while waiting
-// for the Moon came out spread over three hundred thousand kilometres of the Moon's
-// own orbit, because the Moon was somewhere else each time round. Frozen at the
-// crossing, each leg keeps the shape it had when it was drawn, the seam between two
-// legs stays joined — the two frames agreed at that instant — and the whole picture
-// is unchanged by the hand-over, because everything in it moves by the same
-// constant as the camera.
+// Only samples flown in the frame being drawn are drawn at all; see inFrame.
 //
 // The rotation belongs to the pad, so it is applied about the body the pad is on
 // and only to samples measured from it — before the shift into the drawn frame,
@@ -156,67 +155,27 @@ func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
 			p = p.Rotate(f.groundHold * w * (f.s.St.T - sm.T))
 		}
 	}
-	return f.framePoint(p.Add(f.legOffset(sm.T)), f.s.St.Center, f.s.St.T)
+	return f.framePoint(p, sm.Center, sm.T)
 }
 
-// frameLeg is the offset that carries everything recorded before untilT into the
-// coordinates the vehicle's frame uses now.
-type frameLeg struct {
-	untilT float64
-	off    sim.Vec2
-}
-
-// legOffset is that offset for a sample recorded at time t. Zero for the leg being
-// flown now, which is the one being looked at and the one that has to be exact.
-func (f *FlightScreen) legOffset(t float64) sim.Vec2 {
-	for _, l := range f.frameLegs() {
-		if t < l.untilT {
-			return l.off
-		}
-	}
-	return sim.Vec2{}
-}
-
-// frameLegs walks the crossings and accumulates, from the current frame backwards,
-// what each earlier leg has to be shifted by. Built off the event list rather than
-// the history because there are only ever a handful of crossings, whatever the
-// length of the flight.
+// inFrame reports whether a recorded sample was flown in the frame the picture is
+// drawn in. Only those are drawn, and they need no mapping at all — a sample
+// measured from the body in the middle is already in the coordinates being drawn, so
+// it cannot be smeared, kinked or displaced, and it never moves again.
 //
-// A leg the flight comes back to — the free return passes the Moon and returns to
-// the Earth it launched from — carries the offset of the excursion rather than
-// landing back exactly on its earlier self. Two hops out and back do not compose to
-// nothing, because the bodies moved in between. The seams stay joined, which is the
-// property worth keeping.
-func (f *FlightScreen) frameLegs() []frameLeg {
-	ev := f.s.Events
-	if f.legsFor == len(ev) && f.legsCenter == f.s.St.Center {
-		return f.legs
-	}
-	f.legsFor, f.legsCenter = len(ev), f.s.St.Center
-
-	sys := &f.s.Cfg.System
-	type crossing struct {
-		t        float64
-		from, to int
-	}
-	var cs []crossing
-	for _, e := range ev {
-		switch e.Kind {
-		case sim.EvSOIEnter:
-			cs = append(cs, crossing{e.T, sys.Bodies[e.Body].Parent, e.Body})
-		case sim.EvSOIExit:
-			cs = append(cs, crossing{e.T, e.Body, sys.Bodies[e.Body].Parent})
-		}
-	}
-
-	f.legs = make([]frameLeg, len(cs))
-	off := sim.Vec2{}
-	for i := len(cs) - 1; i >= 0; i-- {
-		d, _ := sys.RelState(cs[i].from, cs[i].to, cs[i].t)
-		off = off.Add(d)
-		f.legs[i] = frameLeg{untilT: cs[i].t, off: off}
-	}
-	return f.legs
+// Everything else tried here was worse. Mapped at each sample's own time, which is
+// the only mapping that gives a trajectory in the drawn frame, the history flown
+// around the Earth becomes the true path relative to the Moon — and the true path
+// relative to a moving body is a spiral: the revolutions flown while waiting for the
+// Moon spread over three hundred thousand kilometres of its orbit. Carried across by
+// an offset frozen at the crossing, each leg keeps its own shape but wears the wrong
+// one for the frame it is drawn in: positions match at the seam and directions do
+// not, so the trail reaches the sphere of influence and turns forty-five degrees,
+// and the launch markers end up a hundred and fifty thousand kilometres off the
+// Earth. Leaving a hole where the flight was measured from somewhere else costs a
+// gap in the trail and buys a trail that is never wrong.
+func (f *FlightScreen) inFrame(sm sim.Sample) bool {
+	return sm.Center == f.frameBody()
 }
 
 // vehiclePos is where the vehicle is in the drawn frame, now.
@@ -370,9 +329,9 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 
 	switch {
 	case f.follow == camFree:
-		f.cam.Center = f.freePos
+		f.cam.Center = f.holdView(f.freePos)
 	case f.follow >= 0:
-		f.cam.Center = f.framePoint(sim.Vec2{}, f.follow, f.s.St.T)
+		f.cam.Center = f.holdView(f.framePoint(sim.Vec2{}, f.follow, f.s.St.T))
 	default:
 		// The vehicle, with the centre sliding towards the planet's middle as the
 		// view widens. The blend has to stay pinned at zero while zoomed in: the
@@ -380,7 +339,7 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 		// would shove the pad off a 1.5 km wide view. Close in, the vehicle sits
 		// a little below centre so it has sky to climb into.
 		drawn := f.vehiclePos()
-		f.cam.Center = drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u))
+		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u)))
 	}
 
 	// Rotation tracks the local vertical only while following the vehicle, and
@@ -1061,9 +1020,21 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 		return
 	}
 
-	px, py := cam.Project(f.trackPoint(h[first]))
-	for i := first + 1; i < n; i++ {
+	// The pen lifts over anything flown in another frame rather than drawing a line
+	// across the hole it leaves: the two ends of that hole are hundreds of thousands
+	// of kilometres apart and the vehicle did not fly between them in a straight line.
+	var px, py float64
+	pen := false
+	for i := first; i < n; i++ {
+		if !f.inFrame(h[i]) {
+			pen = false
+			continue
+		}
 		x, y := cam.Project(f.trackPoint(h[i]))
+		if !pen {
+			px, py, pen = x, y, true
+			continue
+		}
 		if i < n-1 && math.Abs(x-px)+math.Abs(y-py) < minSeg {
 			continue
 		}
@@ -1100,7 +1071,10 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 			continue
 		}
 		i := sampleAt(hist, e.T)
-		if i < 0 {
+		// Only what happened in the frame being drawn, for the same reason the trail
+		// skips it: a marker from a leg flown somewhere else could only be placed by
+		// a mapping that is a spiral or a lie.
+		if i < 0 || !f.inFrame(hist[i]) {
 			continue
 		}
 		x, y := cam.Project(f.trackPoint(hist[i]))
