@@ -153,3 +153,47 @@ func TestTrailSpanFollowsTheOrbitNotTheClock(t *testing.T) {
 		t.Errorf("mid-cruise the trail spans %.3g s of a %.3g s flight", span, s.St.T)
 	}
 }
+
+// An already-flown path must not change. The ground-track rotation is the one
+// thing that makes it change — it is measured from now, so as the clock runs the
+// Earth-centred part of the path winds up about the Earth while the current point
+// stays pinned, which on the way to the Moon looks like the trail being wound like
+// a spring. That reading is only worth having while the picture is about the
+// ground, so the same ramp that lets the camera go of the local vertical lets go
+// of it too.
+func TestFlownPathStopsMovingOnceTheViewPullsBack(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	s.RunToEnd() // to the parking orbit
+	f := NewFlightScreen(s)
+
+	// Standing on the planet: the trail is a ground track, and it should be.
+	f.pendingZoom, f.manualScale = 0, false
+	f.cam.Scale = math.Min(view.W, view.H) / 3000 // a 3 km view
+	f.manualScale = true
+	f.updateCamera(a, view)
+	if f.groundHold < 0.99 {
+		t.Errorf("on the pad the ground track is held at %.3f, want all of it", f.groundHold)
+	}
+
+	// Pulled back to the Moon's orbit: no ground anywhere in the picture.
+	f.cam.Scale = math.Min(view.W, view.H) / 8e8
+	f.updateCamera(a, view)
+	if f.groundHold != 0 {
+		t.Fatalf("at the Moon's orbit the ground track is still held at %.3f", f.groundHold)
+	}
+
+	// And there, the same sample lands in the same place however long the flight
+	// has been running: two and a half days of it, in the frame it is drawn in.
+	sm := s.Hist[len(s.Hist)/2]
+	before := f.trackPoint(sm)
+	s.FastForward(2.5 * 86400)
+	f.updateCamera(a, view)
+	if after := f.trackPoint(sm); after.Sub(before).Len() > 1e-6 {
+		t.Errorf("a sample from T+%.0f s moved %.3g m over two and a half days of flight",
+			sm.T, after.Sub(before).Len())
+	}
+}

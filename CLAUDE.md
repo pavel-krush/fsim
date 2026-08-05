@@ -216,6 +216,14 @@ first 15 seconds while climbing 400 m. Physically correct, reads as the rocket b
   into the Mars transfer, drawn in the Sun's frame, `ω_sun·(T−t)` is forty-six radians, and the ascent's
   markers came out round by the orbit of Venus. In the Sun's frame they now sit on the Earth's rail at the
   point the launch happened, which is where they happened.
+- **And it is weighted by `groundHold`, the same ramp that lets the camera go of the local vertical.** The
+  angle is measured from *now*, so as the clock runs the Earth-centred part of the path turns about the
+  Earth while the current point stays pinned: on the way to the Moon that reads as the trail being wound up
+  like a spring, and a path already flown has no business changing. The ground track is only worth having
+  while the picture is about the ground, so it fades out over the same stretch where standing on a planet
+  becomes looking at one — full on the pad, nothing at all by the Moon's orbit or in another body's frame.
+  The cost is that the `ω·T` lag in low orbit is scaled down with everything else; the gain is that nothing
+  that has already happened moves again.
 - **The trail reaches back one revolution, not a fixed number of seconds** (`trailSpan`). Fifteen minutes
   covers an ascent and is a tenth of a pixel of an interplanetary cruise, where it left the flown path
   invisible and the vehicle apparently drawn from nowhere. What the window guards against is *revolutions*

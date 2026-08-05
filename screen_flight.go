@@ -38,6 +38,10 @@ type FlightScreen struct {
 	// gesture sets it; C clears it.
 	manualScale bool
 	pendingZoom float64 // a scripted zoom, applied once the view size is known
+	// groundHold is how much of a ground track the flown path is drawn as, from 1
+	// on the pad to 0 once the view has pulled back off the planet. Set by
+	// updateCamera, read by trackPoint.
+	groundHold float64
 
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
@@ -89,9 +93,9 @@ func (f *FlightScreen) framePoint(p sim.Vec2, from int, t float64) sim.Vec2 {
 // round the Sun, so max q ended up near the orbit of Venus.
 func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
 	p := sm.Pos
-	if lb := f.s.Cfg.LaunchBody; sm.Center == lb {
+	if lb := f.s.Cfg.LaunchBody; sm.Center == lb && f.groundHold > 0 {
 		if w := f.s.Cfg.System.Bodies[lb].AngularVelocity(); w != 0 {
-			p = p.Rotate(w * (f.s.St.T - sm.T))
+			p = p.Rotate(f.groundHold * w * (f.s.St.T - sm.T))
 		}
 	}
 	return f.framePoint(p, sm.Center, sm.T)
@@ -103,7 +107,7 @@ func (f *FlightScreen) vehiclePos() sim.Vec2 {
 }
 
 func NewFlightScreen(s *sim.Sim) *FlightScreen {
-	f := &FlightScreen{s: s, frame: -1, follow: -1}
+	f := &FlightScreen{s: s, frame: -1, follow: -1, groundHold: 1}
 	f.cam.Scale = 0
 	return f
 }
@@ -233,6 +237,16 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 	// follows and how hard the camera holds the local vertical.
 	u := clamp((effSpan/b.Radius-0.5)/2.1, 0, 1)
 	u = u * u * (3 - 2*u)
+
+	// The same ramp decides how much of a ground track the flown path is drawn as.
+	// It is only a ground track while the picture is about the ground: see
+	// trackPoint. Following a body rather than the vehicle means there is no
+	// "standing on it" to speak of, and a track relative to a surface the picture
+	// is not looking at is worth nothing.
+	f.groundHold = 0
+	if f.follow == -1 && f.frameBody() == f.s.Cfg.LaunchBody {
+		f.groundHold = 1 - u
+	}
 
 	switch {
 	case f.follow == camFree:
