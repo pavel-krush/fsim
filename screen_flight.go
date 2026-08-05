@@ -48,6 +48,12 @@ type FlightScreen struct {
 	// much of it is still being held on to.
 	camHold  sim.Vec2
 	camHoldK float64
+	// The frame just left, and what is still being shown of it: the offset that
+	// keeps it where it was drawn, frozen at the crossing, and how much is left to
+	// fade. ghostFrom is -1 when there is nothing to let go of.
+	ghostFrom int
+	ghostOff  sim.Vec2
+	ghostK    float64
 
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
@@ -109,10 +115,17 @@ func (f *FlightScreen) handOver(dt float64) {
 	if f.camHoldK > 0 {
 		f.camHoldK = math.Max(0, f.camHoldK-dt/frameEase)
 	}
+	if f.ghostK > 0 {
+		f.ghostK = math.Max(0, f.ghostK-dt/ghostFade)
+	}
 	if want := f.frameBody(); want != f.frameShown {
 		d := f.frameShift(f.frameShown, want, f.s.St.T)
 		f.freePos = f.freePos.Add(d)
 		f.camHold, f.camHoldK = f.cam.Center.Add(d), 1
+		// And what is being let go of, held exactly where it was drawn: the offset
+		// is taken once, here, and never recomputed — at this instant the two frames
+		// agree, so nothing moves as the picture changes hands.
+		f.ghostFrom, f.ghostOff, f.ghostK = f.frameShown, d, 1
 		f.frameShown = want
 	}
 }
@@ -131,6 +144,7 @@ func (f *FlightScreen) holdView(natural sim.Vec2) sim.Vec2 {
 // taken mid-glide is a screenshot of neither framing.
 func (f *FlightScreen) snapFrame() {
 	f.frameShown, f.camHoldK = f.frameBody(), 0
+	f.ghostFrom, f.ghostK = -1, 0
 }
 
 // trackPoint maps a recorded sample into the drawn frame, turning it forward with
@@ -140,7 +154,8 @@ func (f *FlightScreen) snapFrame() {
 // orbit the track lags the ellipse by omega*T — that is the ground track, and it
 // should.
 //
-// Only samples flown in the frame being drawn are drawn at all; see inFrame.
+// Only samples of the frame being drawn, and of the one just left, are drawn at
+// all; see showTrack.
 //
 // The rotation belongs to the pad, so it is applied about the body the pad is on
 // and only to samples measured from it — before the shift into the drawn frame,
@@ -155,27 +170,43 @@ func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
 			p = p.Rotate(f.groundHold * w * (f.s.St.T - sm.T))
 		}
 	}
+	if sm.Center != f.frameBody() {
+		// The frame just left, held where it was drawn. See showTrack.
+		return p.Add(f.ghostOff)
+	}
 	return f.framePoint(p, sm.Center, sm.T)
 }
 
-// inFrame reports whether a recorded sample was flown in the frame the picture is
-// drawn in. Only those are drawn, and they need no mapping at all — a sample
-// measured from the body in the middle is already in the coordinates being drawn, so
-// it cannot be smeared, kinked or displaced, and it never moves again.
+// ghostFade is how long the picture keeps showing the frame it has just left, in
+// seconds of real time.
+const ghostFade = 1.2
+
+// showTrack says whether a recorded sample is drawn, and how solidly.
 //
-// Everything else tried here was worse. Mapped at each sample's own time, which is
-// the only mapping that gives a trajectory in the drawn frame, the history flown
-// around the Earth becomes the true path relative to the Moon — and the true path
-// relative to a moving body is a spiral: the revolutions flown while waiting for the
-// Moon spread over three hundred thousand kilometres of its orbit. Carried across by
-// an offset frozen at the crossing, each leg keeps its own shape but wears the wrong
-// one for the frame it is drawn in: positions match at the seam and directions do
-// not, so the trail reaches the sphere of influence and turns forty-five degrees,
-// and the launch markers end up a hundred and fifty thousand kilometres off the
-// Earth. Leaving a hole where the flight was measured from somewhere else costs a
-// gap in the trail and buys a trail that is never wrong.
-func (f *FlightScreen) inFrame(sm sim.Sample) bool {
-	return sm.Center == f.frameBody()
+// A sample flown in the frame being drawn is drawn whole, and needs no mapping at
+// all: it is already in the coordinates being drawn, so it cannot be smeared,
+// kinked or displaced, and it never moves again.
+//
+// A sample flown in the frame just left is drawn fading, held by the offset frozen
+// at the crossing so that it stays exactly where it was drawn. It cannot stay. The
+// shape a leg has is the shape it has in *its own* frame, so held there it wears the
+// wrong one for the frame it is now in: positions match at the seam and directions
+// do not, and left up it reaches the sphere of influence and turns forty-five
+// degrees while the launch markers sit a hundred and fifty thousand kilometres off
+// the Earth. Redrawing it in the new frame instead is worse: the true path relative
+// to a moving body is a spiral, and the revolutions flown while waiting for the Moon
+// spread over the 229,000 km the Moon travelled meanwhile. Neither kept nor redrawn,
+// then — let go of, over a second, from where it was.
+//
+// Anything older than that is not drawn at all. The graph screen keeps the flight.
+func (f *FlightScreen) showTrack(sm sim.Sample) (weight float64, ok bool) {
+	switch {
+	case sm.Center == f.frameBody():
+		return 1, true
+	case f.ghostK > 0 && sm.Center == f.ghostFrom:
+		return f.ghostK * f.ghostK * (3 - 2*f.ghostK), true
+	}
+	return 0, false
 }
 
 // vehiclePos is where the vehicle is in the drawn frame, now.
@@ -1026,7 +1057,8 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	var px, py float64
 	pen := false
 	for i := first; i < n; i++ {
-		if !f.inFrame(h[i]) {
+		w, ok := f.showTrack(h[i])
+		if !ok {
 			pen = false
 			continue
 		}
@@ -1039,13 +1071,14 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 			continue
 		}
 		// Older samples fade out, so the recent path stays legible even after
-		// the trajectory has wrapped a long way around the planet.
+		// the trajectory has wrapped a long way around the planet. And a leg the
+		// picture is letting go of fades out as a whole, on top of that.
 		t := float64(i-first) / float64(n-first)
 		c := color.NRGBA{
 			uint8(float64(colTrailOld.R) + (float64(colTrail.R)-float64(colTrailOld.R))*t),
 			uint8(float64(colTrailOld.G) + (float64(colTrail.G)-float64(colTrailOld.G))*t),
 			uint8(float64(colTrailOld.B) + (float64(colTrail.B)-float64(colTrailOld.B))*t),
-			0xff,
+			uint8(255 * w),
 		}
 		line(dst, px, py, x, y, 1.6, c)
 		px, py = x, y
@@ -1071,10 +1104,13 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 			continue
 		}
 		i := sampleAt(hist, e.T)
-		// Only what happened in the frame being drawn, for the same reason the trail
-		// skips it: a marker from a leg flown somewhere else could only be placed by
-		// a mapping that is a spiral or a lie.
-		if i < 0 || !f.inFrame(hist[i]) {
+		if i < 0 {
+			continue
+		}
+		// A marker sits on the trail, so it comes and goes with it: whole in the
+		// frame being drawn, fading with the one just left, gone after that.
+		w, ok := f.showTrack(hist[i])
+		if !ok {
 			continue
 		}
 		x, y := cam.Project(f.trackPoint(hist[i]))
@@ -1088,6 +1124,7 @@ func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, s
 		case sim.EvMaxQ:
 			c = colMaxQ
 		}
+		c.A = uint8(255 * w)
 		ring(dst, x, y, 4, 1.5, c)
 
 		label := eventLabel(e, &f.s.Cfg.System)

@@ -622,19 +622,25 @@ the time it was measured**.
 - **The shift is taken at the sample's own time**, which is the only mapping that gives a *trajectory* in
   the drawn frame: one curve, no kinks, and nothing that depends on the clock, so a sample once drawn never
   moves again.
-- **Only what was flown *in* the drawn frame is drawn at all** (`inFrame`), and it needs no mapping: a
-  sample measured from the body in the middle is already in the coordinates being drawn, so it cannot be
-  smeared, kinked or displaced. The rest is left as a hole, with the pen lifted across it rather than a
-  straight line drawn over hundreds of thousands of kilometres the vehicle did not fly straight through. In
-  the Earth's frame that is everything flown around the Earth — both sides of a lunar flyby, launch markers
-  included — with a gap where the flight was being measured from the Moon.
-- **Both of the other ways of drawing it are worse, and both were tried.** Map an earlier leg at each
-  sample's own time and it becomes the true path relative to the drawn body — and the true path relative to
-  a *moving* body is a spiral: the revolutions flown around the Earth while waiting for the Moon spread over
-  three hundred thousand kilometres of its orbit. Carry it across by an offset frozen at the crossing and
-  each leg keeps its own shape but wears the wrong one for the frame it is drawn in: positions match at the
-  seam and directions do not, so the trail reaches the sphere of influence and turns forty-five degrees, and
-  the launch markers sit a hundred and fifty thousand kilometres off the Earth.
+- **What was flown in the drawn frame is drawn whole; what was flown in the frame just left is let go of**
+  (`showTrack`, `ghostFade`, 1.2 s). A sample of the current frame needs no mapping — it is already in the
+  coordinates being drawn, so it cannot be smeared, kinked or displaced. A sample of the frame just left is
+  held by an offset frozen at the crossing, which puts it exactly where it was drawn, and fades out from
+  there. Anything older is not drawn; the graph screen keeps the whole flight.
+- **Both of the other ways of drawing the past are worse, and both were tried.** Map it at each sample's
+  own time and you get the true path relative to the drawn body — and the true path relative to a *moving*
+  body is a spiral: the revolutions flown around the Earth while waiting for the Moon spread over the
+  229,000 km the Moon travelled meanwhile. Leave it held by the frozen offset instead and it keeps its own
+  shape but wears the wrong one for the frame it is now in: positions match at the seam and directions do
+  not, so the trail reaches the sphere of influence and turns forty-five degrees while the launch markers
+  sit a hundred and fifty thousand kilometres off the Earth. Hence neither: held, then let go.
+- **A frame change is legitimately a change of picture, and this is the honest way to say so.** The events
+  are invariant — where the vehicle was relative to each body, when, how fast, what it spent — but the
+  *shape of the curve* is not, and no recomputation makes it so. That is the same fact as a ball in a
+  train falling straight down and tracing a parabola from the platform, and the same fact the ascent
+  already shows: six kilometres of sideways drift in the inertial frame, a vertical climb in the rotating
+  one. So the drawn past is not silently rewritten into a shape it never had; it is shown where it was and
+  then released.
 - **The change of frame carries the *view* across** (`handOver`, `camHold`, 0.6 s). Everything is written
   from the new centre from that instant, the camera's own centre included, and a dragged view is stored as a
   point in the frame's coordinates — so without carrying it over, the whole picture slides by the 384,000 km

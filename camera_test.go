@@ -182,7 +182,7 @@ func TestTheTrailOnlyShowsWhatWasFlownInItsFrame(t *testing.T) {
 
 	var drawn, held int
 	for _, h := range s.Hist {
-		if !f.inFrame(h) {
+		if w, ok := f.showTrack(h); !ok || w != 1 {
 			held++
 			continue
 		}
@@ -205,7 +205,8 @@ func TestTheTrailOnlyShowsWhatWasFlownInItsFrame(t *testing.T) {
 		if h.Center != s.Cfg.LaunchBody {
 			continue
 		}
-		if !f.inFrame(h) {
+		if w, ok := f.showTrack(h); !ok || w != 1 {
+			_ = w
 			t.Fatal("a sample flown around the Earth is left out of the Earth's frame")
 		}
 		if d := f.trackPoint(h).Sub(h.Pos).Len(); d > 1e-9 {
@@ -255,5 +256,70 @@ func TestFrameHandOverKeepsTheViewStill(t *testing.T) {
 
 	if d := math.Hypot(x1-x0, y1-y0); d > 1 {
 		t.Errorf("the vehicle moved %.0f px across the change of frame", d)
+	}
+}
+
+// The frame just left is let go of, not kept and not redrawn: held exactly where it
+// was drawn while it fades, and gone after that. Held there it wears the wrong shape
+// for the frame it is now in, so it cannot stay — but at the instant of the crossing
+// the two frames agree, which is why nothing moves as the picture changes hands.
+func TestThePastFadesInPlaceAfterACrossing(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+	for !s.St.Done && s.St.Center != moon {
+		s.FastForward(s.St.T + 60)
+	}
+	cross := s.St.T
+
+	s = sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	s.FastForward(cross - 120)
+	f := NewFlightScreen(s)
+	for range 90 {
+		f.updateCamera(a, view)
+	}
+	f.groundHold = 0 // pulled back, so no ground track in the way
+
+	// A sample from the parking orbit: whole, and where it was recorded.
+	sm := s.Hist[sampleAt(s.Hist, 3000)]
+	if w, ok := f.showTrack(sm); !ok || w != 1 {
+		t.Fatalf("before the crossing a parking-orbit sample has weight %g, ok %v", w, ok)
+	}
+	x0, y0 := f.cam.Project(f.trackPoint(sm))
+
+	// Across the crossing: still drawn, still at full strength, and — the whole
+	// point — still in the same place on screen. The coordinates it is written in
+	// have changed by 384,000 km; the picture has not moved.
+	s.FastForward(cross + 1)
+	f.updateCamera(a, view)
+	w, ok := f.showTrack(sm)
+	if !ok {
+		t.Fatal("the frame just left is not drawn at all")
+	}
+	if w != 1 {
+		t.Errorf("weight %g on the frame the crossing happened, want the fade to start whole", w)
+	}
+	x1, y1 := f.cam.Project(f.trackPoint(sm))
+	if d := math.Hypot(x1-x0, y1-y0); d > 4 {
+		t.Errorf("it moved %.1f px as the picture changed hands", d)
+	}
+
+	// Then it fades.
+	for range 20 {
+		f.updateCamera(a, view)
+	}
+	if w, ok := f.showTrack(sm); !ok || w >= 1 || w <= 0 {
+		t.Errorf("weight %g a third of a second later, want it fading", w)
+	}
+
+	// And after the fade it is gone, rather than left up in the wrong shape.
+	for range int(ghostFade/a.ui.DT) + 2 {
+		f.updateCamera(a, view)
+	}
+	if _, ok := f.showTrack(sm); ok {
+		t.Error("the frame just left is still drawn a second and a half later")
 	}
 }
