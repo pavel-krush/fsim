@@ -47,6 +47,10 @@ type FlightScreen struct {
 	frameShown int
 	framePrev  int
 	frameBlend float64
+	// The frozen per-leg offsets, and what they were built for.
+	legs       []frameLeg
+	legsFor    int
+	legsCenter int
 
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
@@ -82,11 +86,8 @@ func (f *FlightScreen) frameShift(from, center int, t float64) sim.Vec2 {
 	return d
 }
 
-// framePoint maps a position measured from body `from` at time t into the frame
-// the picture is drawn in. The shift is taken at the sample's own time, because
-// that is where the bodies were then: a track relative to a moving body is what
-// "in the Moon's frame" means, and it is a different shape from the same track
-// drawn around the Earth.
+// framePoint maps a position measured from body `from` into the frame the picture
+// is drawn in, using where the bodies are at time t.
 //
 // And it is taken between *both* frames while one is handing over to the other.
 // The vehicle crossing into the Moon's sphere of influence changes what these
@@ -130,6 +131,18 @@ func (f *FlightScreen) snapFrame() {
 // orbit the track lags the ellipse by omega*T — that is the ground track, and it
 // should.
 //
+// Everything recorded before a change of frame is carried across by an offset frozen
+// at the crossing (`legOffset`), not recomputed each frame. That is the whole of the
+// difference between a flown path and a smear. Recomputed at the sample's own time
+// it is the true path relative to the drawn body, and when that body is moving the
+// true path is a spiral: the few revolutions flown around the Earth while waiting
+// for the Moon came out spread over three hundred thousand kilometres of the Moon's
+// own orbit, because the Moon was somewhere else each time round. Frozen at the
+// crossing, each leg keeps the shape it had when it was drawn, the seam between two
+// legs stays joined — the two frames agreed at that instant — and the whole picture
+// is unchanged by the hand-over, because everything in it moves by the same
+// constant as the camera.
+//
 // The rotation belongs to the pad, so it is applied about the body the pad is on
 // and only to samples measured from it — before the shift into the drawn frame,
 // never after. Turning the *frame* body's rotation on everything, which is what
@@ -143,7 +156,67 @@ func (f *FlightScreen) trackPoint(sm sim.Sample) sim.Vec2 {
 			p = p.Rotate(f.groundHold * w * (f.s.St.T - sm.T))
 		}
 	}
-	return f.framePoint(p, sm.Center, sm.T)
+	return f.framePoint(p.Add(f.legOffset(sm.T)), f.s.St.Center, f.s.St.T)
+}
+
+// frameLeg is the offset that carries everything recorded before untilT into the
+// coordinates the vehicle's frame uses now.
+type frameLeg struct {
+	untilT float64
+	off    sim.Vec2
+}
+
+// legOffset is that offset for a sample recorded at time t. Zero for the leg being
+// flown now, which is the one being looked at and the one that has to be exact.
+func (f *FlightScreen) legOffset(t float64) sim.Vec2 {
+	for _, l := range f.frameLegs() {
+		if t < l.untilT {
+			return l.off
+		}
+	}
+	return sim.Vec2{}
+}
+
+// frameLegs walks the crossings and accumulates, from the current frame backwards,
+// what each earlier leg has to be shifted by. Built off the event list rather than
+// the history because there are only ever a handful of crossings, whatever the
+// length of the flight.
+//
+// A leg the flight comes back to — the free return passes the Moon and returns to
+// the Earth it launched from — carries the offset of the excursion rather than
+// landing back exactly on its earlier self. Two hops out and back do not compose to
+// nothing, because the bodies moved in between. The seams stay joined, which is the
+// property worth keeping.
+func (f *FlightScreen) frameLegs() []frameLeg {
+	ev := f.s.Events
+	if f.legsFor == len(ev) && f.legsCenter == f.s.St.Center {
+		return f.legs
+	}
+	f.legsFor, f.legsCenter = len(ev), f.s.St.Center
+
+	sys := &f.s.Cfg.System
+	type crossing struct {
+		t        float64
+		from, to int
+	}
+	var cs []crossing
+	for _, e := range ev {
+		switch e.Kind {
+		case sim.EvSOIEnter:
+			cs = append(cs, crossing{e.T, sys.Bodies[e.Body].Parent, e.Body})
+		case sim.EvSOIExit:
+			cs = append(cs, crossing{e.T, e.Body, sys.Bodies[e.Body].Parent})
+		}
+	}
+
+	f.legs = make([]frameLeg, len(cs))
+	off := sim.Vec2{}
+	for i := len(cs) - 1; i >= 0; i-- {
+		d, _ := sys.RelState(cs[i].from, cs[i].to, cs[i].t)
+		off = off.Add(d)
+		f.legs[i] = frameLeg{untilT: cs[i].t, off: off}
+	}
+	return f.legs
 }
 
 // vehiclePos is where the vehicle is in the drawn frame, now.

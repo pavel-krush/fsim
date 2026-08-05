@@ -119,12 +119,24 @@ func TestTrackPointLeavesOldSamplesWhereTheyHappened(t *testing.T) {
 		t.Fatalf("the sample at T+%.0f s is measured from body %d", sm.T, sm.Center)
 	}
 
-	// Drawn in the Sun's frame it has to land where the Earth was when it
-	// happened, give or take the couple of hundred kilometres it was up.
-	want, _ := s.Cfg.System.StateAt(earth, sm.T)
+	// Drawn in the Sun's frame it has to land at the Earth, give or take the couple
+	// of hundred kilometres it was up — at the Earth as it was when the vehicle left
+	// its sphere of influence, which is the instant the two frames were carried
+	// across at and the point the departure happened.
+	var exit float64
+	for _, e := range s.Events {
+		if e.Kind == sim.EvSOIExit && e.Body == earth {
+			exit = e.T
+			break
+		}
+	}
+	if exit == 0 {
+		t.Fatal("the flight never left the Earth's sphere of influence")
+	}
+	want, _ := s.Cfg.System.StateAt(earth, exit)
 	got := f.trackPoint(sm)
 	if d := got.Sub(want).Len(); d > 3*s.Cfg.System.Bodies[earth].Radius {
-		t.Errorf("an ascent sample lands %.3g m from where the Earth was, %.4f of an AU",
+		t.Errorf("an ascent sample lands %.3g m from the departure point, %.4f of an AU",
 			d, d/1.496e11)
 	}
 }
@@ -242,7 +254,7 @@ func TestFrameHandOverGlidesInsteadOfJumping(t *testing.T) {
 	step := f.trackPoint(sm).Sub(before).Len()
 
 	// What the jump used to be: the whole distance between the two frames.
-	full := f.frameShift(sm.Center, moon, sm.T).Sub(f.frameShift(sm.Center, f.framePrev, sm.T)).Len()
+	full := f.frameShift(f.framePrev, moon, s.St.T).Len()
 	if full < 1e8 {
 		t.Fatalf("the two frames are only %.3g m apart, so this proves nothing", full)
 	}
@@ -255,8 +267,100 @@ func TestFrameHandOverGlidesInsteadOfJumping(t *testing.T) {
 	for range 60 {
 		f.updateCamera(a, view)
 	}
-	want := f.frameShift(sm.Center, moon, sm.T).Add(sm.Pos)
+	want := sm.Pos.Add(f.legOffset(sm.T))
 	if d := f.trackPoint(sm).Sub(want).Len(); d > 1 {
 		t.Errorf("after the hand-over the sample is %.3g m from where the Moon's frame puts it", d)
+	}
+}
+
+// The revolutions flown around the Earth while waiting for the Moon have to stay
+// revolutions once the picture is in the Moon's frame. Placing each sample where it
+// was relative to the Moon *at its own time* is the true path in that frame, and
+// the true path is a spiral: the Moon was a different place each time round, so a
+// 13,000 km parking orbit came out smeared over three hundred thousand kilometres
+// of the Moon's own orbit. A leg is placed where its own body is instead.
+func TestEarthOrbitStaysAnOrbitInTheMoonsFrame(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+	for !s.St.Done && s.St.Center != moon {
+		s.FastForward(s.St.T + 300)
+	}
+	if s.St.Center != moon {
+		t.Fatal("the flight never reached the Moon's sphere of influence")
+	}
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	f.snapFrame()
+
+	// Every sample from before the translunar burn: the parking orbit, whose true
+	// size is a couple of hundred kilometres of altitude over a 6371 km planet.
+	burn := s.Cfg.Nodes[0].T
+	var lo, hi sim.Vec2
+	first := true
+	for _, h := range s.Hist {
+		if h.T > burn {
+			break
+		}
+		p := f.trackPoint(h)
+		if first {
+			lo, hi, first = p, p, false
+			continue
+		}
+		lo = sim.Vec2{X: math.Min(lo.X, p.X), Y: math.Min(lo.Y, p.Y)}
+		hi = sim.Vec2{X: math.Max(hi.X, p.X), Y: math.Max(hi.Y, p.Y)}
+	}
+	if first {
+		t.Fatal("no samples from before the translunar burn")
+	}
+	span := math.Max(hi.X-lo.X, hi.Y-lo.Y)
+	orbit := 2 * (s.Cfg.System.Bodies[s.Cfg.LaunchBody].Radius + 200e3)
+	if span > 1.2*orbit {
+		t.Errorf("the parking orbit is drawn %.0f km across against the %.0f km it is",
+			span/1000, orbit/1000)
+	}
+}
+
+// The seam between two legs stays joined. The offset that carries an earlier leg
+// across is frozen at the crossing, and at that instant the two frames agree, so
+// the last sample before it and the first after it are drawn in the same place —
+// which is also why the hand-over moves nothing on screen.
+func TestTheSeamBetweenFramesStaysJoined(t *testing.T) {
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+	for !s.St.Done && s.St.Center != moon {
+		s.FastForward(s.St.T + 300)
+	}
+	if s.St.Center != moon {
+		t.Fatal("the flight never reached the Moon's sphere of influence")
+	}
+	s.FastForward(s.St.T + 3600)
+
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	f := NewFlightScreen(s)
+	f.updateCamera(a, Rect{0, 0, 1160, 830}) // pulled back, so no ground track in it
+	f.snapFrame()
+
+	// The two samples either side of the change of centre.
+	var before, after sim.Sample
+	for i := 1; i < len(s.Hist); i++ {
+		if s.Hist[i].Center != s.Hist[i-1].Center {
+			before, after = s.Hist[i-1], s.Hist[i]
+			break
+		}
+	}
+	if after.T == 0 {
+		t.Fatal("no change of centre in the history")
+	}
+
+	gap := f.trackPoint(after).Sub(f.trackPoint(before)).Len()
+	// They are one integrator step apart, so the vehicle's own motion is all that
+	// should separate them: a kilometre a second for a few hundred seconds at most.
+	if moved := (after.T - before.T) * after.Speed; gap > 2*moved+1e3 {
+		t.Errorf("the seam opens %.3g m over a step the vehicle covers %.3g m in", gap, moved)
 	}
 }

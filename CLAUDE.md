@@ -618,15 +618,24 @@ the time it was measured**.
   Moon crosses the screen at a kilometre a second; centring on it makes the approach readable, and it is
   the same reason the trail's shape depends on the frame — a transfer looks different around the Earth
   and around the Moon, and both are true.
-- **The shift is taken at the sample's own time**, not the current one. A track relative to a moving body
-  is a sequence of "where was it relative to the body *then*", which is what "in the Moon's frame" means.
-- **A frame change is handed over, not switched** (`handOver`, `frameBlend`, 0.6 s). Crossing into the
-  Moon's sphere changes what the drawn coordinates *mean*, and doing it in one frame teleported everything
-  that goes through `framePoint` — the flown path, every marker on it, the rails, the bodies — by the whole
-  372,000 km between the two frames. Nothing about the flight happens at that instant; it is bookkeeping,
-  and the change of scale that comes with it was already eased, so the frame is eased the same way and the
-  two move together. `snapFrame` lands it at once for a scripted capture, because a screenshot taken
-  mid-glide is a screenshot of neither frame.
+- **What was flown in an earlier frame is carried across by an offset frozen at the crossing**
+  (`legOffset`, `frameLegs`), not recomputed each frame. This is the whole difference between a flown path
+  and a smear. Recomputed at each sample's own time it is the *true* path relative to the drawn body — and
+  when that body is moving, the true path is a spiral: the revolutions flown around the Earth while waiting
+  for the Moon came out spread over three hundred thousand kilometres of the Moon's own orbit, because the
+  Moon was somewhere else each time round. Frozen at the crossing, every leg keeps the shape it was drawn
+  with, for ever.
+- **The seam stays joined and the hand-over moves nothing.** At the crossing the two frames agree exactly,
+  so the last sample before it and the first after it land in the same place; and since every drawn thing
+  shifts by the same constant as the camera, the change of frame is invisible in the picture. The one lie
+  is a leg the flight *returns* to — the free return passes the Moon and comes back to the Earth it
+  launched from — where two hops out and back do not compose to nothing, because the bodies moved in
+  between: the parking orbit ends up some ninety thousand kilometres off the Earth. Joined seams are worth
+  more than that.
+- **The frame change is eased anyway** (`handOver`, `frameBlend`, 0.6 s), because the *bodies* are drawn at
+  the current time and a pinned camera does not shift with them. The change of scale that comes with a
+  crossing was already eased in log space; the frame now eases with it. `snapFrame` lands it at once for a
+  scripted capture, because a screenshot taken mid-glide is a screenshot of neither frame.
 - **The camera is three separate decisions — scale, centre, rotation — and each of them becomes the
   user's the moment the user touches it.** `frame` is whose coordinates the world is drawn in; `follow` is
   what sits in the middle of the screen: the vehicle, a body, or `camFree` for a point. Splitting the two
