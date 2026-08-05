@@ -197,3 +197,66 @@ func TestFlownPathStopsMovingOnceTheViewPullsBack(t *testing.T) {
 			sm.T, after.Sub(before).Len())
 	}
 }
+
+// Crossing into the Moon's sphere of influence changes what the drawn coordinates
+// mean, and changing it in one frame teleported everything: the flown path, every
+// marker on it, the rails, the bodies — all by the Earth-Moon distance, over a
+// bookkeeping change that nothing about the flight marks. The picture hands over
+// between the two frames instead, the way it already does with the scale.
+func TestFrameHandOverGlidesInsteadOfJumping(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	moon := s.Cfg.System.IndexOf("moon")
+	f := NewFlightScreen(s)
+
+	// Up to the last moment before the crossing.
+	for !s.St.Done && s.St.Center != moon {
+		s.FastForward(s.St.T + 60)
+	}
+	if s.St.Center != moon {
+		t.Fatal("the flight never reached the Moon's sphere of influence")
+	}
+	// Rewind by running a fresh copy to just before it, which is the only way to
+	// stand either side of an instant: the simulation does not go backwards.
+	cross := s.St.T
+	s = sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	s.FastForward(cross - 120)
+	f = NewFlightScreen(s)
+	f.updateCamera(a, view)
+	if f.frameBody() == moon {
+		t.Fatal("already in the Moon's frame before the crossing")
+	}
+
+	sm := s.Hist[len(s.Hist)/2] // something well behind the vehicle
+	before := f.trackPoint(sm)
+
+	// Across it, one frame's worth of glide.
+	s.FastForward(cross + 1)
+	f.updateCamera(a, view)
+	if f.frameBody() != moon {
+		t.Fatalf("still in body %d's frame past the crossing", f.frameBody())
+	}
+	step := f.trackPoint(sm).Sub(before).Len()
+
+	// What the jump used to be: the whole distance between the two frames.
+	full := f.frameShift(sm.Center, moon, sm.T).Sub(f.frameShift(sm.Center, f.framePrev, sm.T)).Len()
+	if full < 1e8 {
+		t.Fatalf("the two frames are only %.3g m apart, so this proves nothing", full)
+	}
+	if step > full/50 {
+		t.Errorf("the path moved %.3g m in one frame, %.0f%% of the %.3g m between frames",
+			step, step/full*100, full)
+	}
+
+	// And it does arrive: half a second of easing later it is in the new frame.
+	for range 60 {
+		f.updateCamera(a, view)
+	}
+	want := f.frameShift(sm.Center, moon, sm.T).Add(sm.Pos)
+	if d := f.trackPoint(sm).Sub(want).Len(); d > 1 {
+		t.Errorf("after the hand-over the sample is %.3g m from where the Moon's frame puts it", d)
+	}
+}

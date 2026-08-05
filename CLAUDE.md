@@ -620,6 +620,13 @@ the time it was measured**.
   and around the Moon, and both are true.
 - **The shift is taken at the sample's own time**, not the current one. A track relative to a moving body
   is a sequence of "where was it relative to the body *then*", which is what "in the Moon's frame" means.
+- **A frame change is handed over, not switched** (`handOver`, `frameBlend`, 0.6 s). Crossing into the
+  Moon's sphere changes what the drawn coordinates *mean*, and doing it in one frame teleported everything
+  that goes through `framePoint` — the flown path, every marker on it, the rails, the bodies — by the whole
+  372,000 km between the two frames. Nothing about the flight happens at that instant; it is bookkeeping,
+  and the change of scale that comes with it was already eased, so the frame is eased the same way and the
+  two move together. `snapFrame` lands it at once for a scripted capture, because a screenshot taken
+  mid-glide is a screenshot of neither frame.
 - **The camera is three separate decisions — scale, centre, rotation — and each of them becomes the
   user's the moment the user touches it.** `frame` is whose coordinates the world is drawn in; `follow` is
   what sits in the middle of the screen: the vehicle, a body, or `camFree` for a point. Splitting the two

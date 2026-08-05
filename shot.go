@@ -393,8 +393,11 @@ func (sr *shotRunner) step(a *App) bool {
 		// instant rather than a duration and never runs backwards, so a step that
 		// resolves to something already past simply captures where the flight is.
 		a.flight.s.FastForward(target)
-		// Snap the camera instead of easing, so the capture is not mid-zoom.
+		// Snap the camera instead of easing, so the capture is not mid-zoom — and
+		// the frame with it, or a jump across a sphere of influence lands the
+		// capture half way between two frames.
 		a.flight.cam.Scale = 0
+		a.flight.snapFrame()
 	}
 
 	if a.flight != nil {
@@ -419,6 +422,7 @@ func (sr *shotRunner) step(a *App) bool {
 		// deep-space captures all came out in low Earth orbit.
 		a.flight.pred = nil
 		a.flight.cam.Scale = 0 // snap, so the capture is not mid-zoom
+		a.flight.snapFrame()
 	}
 
 	for st.stages > 0 && len(a.cfg.Rocket.Stages) > st.stages {

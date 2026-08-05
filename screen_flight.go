@@ -42,6 +42,11 @@ type FlightScreen struct {
 	// on the pad to 0 once the view has pulled back off the planet. Set by
 	// updateCamera, read by trackPoint.
 	groundHold float64
+	// frameShown is the frame the picture is being drawn in, framePrev the one it
+	// is handing over from, and frameBlend how far through that hand-over it is.
+	frameShown int
+	framePrev  int
+	frameBlend float64
 
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
@@ -64,18 +69,58 @@ func (f *FlightScreen) frameBody() int {
 	return f.frame
 }
 
+// frameEase is how long the picture takes to hand over from one frame to the next,
+// in seconds of real time.
+const frameEase = 0.6
+
+// frameShift is how far body `from`'s origin sits from `center`'s at time t.
+func (f *FlightScreen) frameShift(from, center int, t float64) sim.Vec2 {
+	if from == center {
+		return sim.Vec2{}
+	}
+	d, _ := f.s.Cfg.System.RelState(from, center, t)
+	return d
+}
+
 // framePoint maps a position measured from body `from` at time t into the frame
 // the picture is drawn in. The shift is taken at the sample's own time, because
 // that is where the bodies were then: a track relative to a moving body is what
 // "in the Moon's frame" means, and it is a different shape from the same track
 // drawn around the Earth.
+//
+// And it is taken between *both* frames while one is handing over to the other.
+// The vehicle crossing into the Moon's sphere of influence changes what these
+// coordinates mean, and changing it in one frame teleported everything drawn
+// through here — the whole flown path, every marker on it, the rails and the
+// bodies — by the Earth-Moon distance. Nothing about the flight happens at that
+// instant; it is a bookkeeping change, and the picture should glide through it
+// the way it already glides through the change of scale that comes with it.
 func (f *FlightScreen) framePoint(p sim.Vec2, from int, t float64) sim.Vec2 {
 	center := f.frameBody()
-	if from == center {
-		return p
+	d := f.frameShift(from, center, t)
+	if f.frameBlend < 1 && f.framePrev != center {
+		k := f.frameBlend * f.frameBlend * (3 - 2*f.frameBlend)
+		prev := f.frameShift(from, f.framePrev, t)
+		d = prev.Add(d.Sub(prev).Scale(k))
 	}
-	d, _ := f.s.Cfg.System.RelState(from, center, t)
 	return p.Add(d)
+}
+
+// handOver notices that the frame has changed and starts the glide. Called once a
+// frame, before anything is placed.
+func (f *FlightScreen) handOver(dt float64) {
+	if want := f.frameBody(); want != f.frameShown {
+		f.framePrev, f.frameShown, f.frameBlend = f.frameShown, want, 0
+	}
+	if f.frameBlend < 1 {
+		f.frameBlend = math.Min(1, f.frameBlend+dt/frameEase)
+	}
+}
+
+// snapFrame lands the hand-over immediately, for a scripted capture: a screenshot
+// taken mid-glide is a screenshot of neither frame.
+func (f *FlightScreen) snapFrame() {
+	f.frameShown, f.framePrev, f.frameBlend = f.frameBody(), f.frameBody(), 1
 }
 
 // trackPoint maps a recorded sample into the drawn frame, turning it forward with
@@ -108,6 +153,7 @@ func (f *FlightScreen) vehiclePos() sim.Vec2 {
 
 func NewFlightScreen(s *sim.Sim) *FlightScreen {
 	f := &FlightScreen{s: s, frame: -1, follow: -1, groundHold: 1}
+	f.snapFrame()
 	f.cam.Scale = 0
 	return f
 }
@@ -211,6 +257,7 @@ func (f *FlightScreen) autoScale(view Rect) float64 {
 // three separate decisions, and each of them is the user's the moment the user
 // touches it.
 func (f *FlightScreen) updateCamera(a *App, view Rect) {
+	f.handOver(a.ui.DT)
 	f.cam.View = view
 	want := f.autoScale(view)
 
