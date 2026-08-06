@@ -64,3 +64,8 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v5
+        with:
+          # Half an hour rather than the default ten minutes. Seventeen megabytes of
+          # wasm takes Pages five to seven to distribute, which is close enough to
+          # the default that one run timed out on it and published nothing.
+          timeout: 1800000
