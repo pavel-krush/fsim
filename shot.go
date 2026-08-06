@@ -272,6 +272,8 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 		dir: dir,
 		tl:  newShotTimeline(cfg),
 		steps: []shotStep{
+			// The mission list, which is where a run without -preset begins.
+			{name: "0-presets", screen: ScreenPresets},
 			{name: "1-setup", screen: ScreenSetup},
 			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
 			{name: "1b2-setup-presets", screen: ScreenSetup, openPreset: true},

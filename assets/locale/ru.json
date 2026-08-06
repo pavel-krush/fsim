@@ -130,6 +130,7 @@
   "preset.proton-geo": "Протон-К / блок ДМ на геостационар",
   "preset.proton-zvezda": "Протон-К / «Звезда» к МКС",
   "preset.titan-ascent": "Титан / густой воздух, слабая гравитация",
+  "presets.hint": "Выбери миссию — мышью, либо ↑↓ и Enter.",
   "setup.addLayer": "+ слой",
   "setup.addMoon": "+ спутник",
   "setup.addPoint": "+ точка",

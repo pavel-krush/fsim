@@ -11,8 +11,9 @@ translunar injection at T+15325 s, and the Moon's sphere of influence two and a 
 ## Build & run
 
 ```
-go run .                       # start
-go run . -preset apollo-lunar  # start on a preset by name (see sim.Presets), not by position
+go run .                       # start on the mission list
+go run . -preset apollo-lunar  # skip the list: straight to the editor on that preset, by name
+go run . -preset titan-ascent -fly   # skip the editor too, and launch
 go run . -shot ./shots         # run the capture script and save a PNG of every screen
 go run . -camtrace 700         # print the vehicle's screen coordinates per frame (catches camera shake)
 go run . -lang ru              # start with the interface in Russian (default is English)
@@ -83,12 +84,13 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
 | `sim/presets.go` | Thirteen of them, and the invented Kerbin system. All reach orbit; eight carry a flight plan and six leave the body they launched from |
-| `main.go` | `App` — the three-screen state machine, `ebiten.Game` |
+| `main.go` | `App` — the four-screen state machine, `startScreen`, `newApp`, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
 | `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets, bodies |
 | `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
+| `screen_presets.go` | The first screen: the mission list, and nothing else |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
 | `screen_flight.go` | Trajectory, bodies, rails, prediction, launch pad, camera, flight plan, telemetry, time controls |
 | `screen_graphs.go` | Seven plots on a movable time axis, event ruler, scrubber |
@@ -581,6 +583,29 @@ and a half early. `TestApolloPresetMatchesTheRealAscent` pins all of it.
 
 Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet wearing an Earth-thick
 70 km atmosphere does not yield to direct ascent on a single burn.
+
+## The first screen
+
+`ScreenPresets` is where a run begins: thirteen missions, one per row, and nothing else. What used to be
+first — four columns of every number the model has — is a great deal to be handed before you have said
+what you are trying to fly, so it comes second.
+
+- **`startScreen` is the whole of the decision** and is a pure function of two booleans, which is why it
+  has a test: the list, or the editor with a mission in it, or a vehicle already on the pad. Naming a
+  preset means the choice is made, so the list would be in the way; `-fly` means the editor is too.
+- **`-fly` exists for tests and for links.** A scripted capture or a shared URL usually wants the flight,
+  not two screens of preamble, and `?fly=1` carries it in the browser. `newApp` is where it lands, which
+  is also why the app's construction is a function rather than eight lines inside `main`.
+- **The row shows the identifier as well as the name**, dim and monospaced on the right. It is what
+  `-preset` and `?preset=` take and there is nowhere else in the interface to find it out.
+- **The keyboard's row and the mouse's hover are different things.** Arrows move the selection, the
+  pointer only lights what is under it: a pointer hovering one row while the keyboard sits on another is
+  two selections, and only one of them can be right.
+- **Picking builds the editor fresh** (`NewSetupScreen`) rather than telling the old one to change its
+  mind, and cancels the pending edit first. Every field in that screen is bound to an address inside the
+  configuration being replaced — the same trap `loadPreset` documents.
+- **There is no way back to the list**, deliberately: the editor has its own preset dropdown, which is
+  the same choice without losing what you have typed.
 
 ## Stage count
 

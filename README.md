@@ -16,6 +16,11 @@ eighty-six days to Mars, [`?preset=apollo-return&lang=ru`](https://pavel-krush.g
 for the free return in Russian. Anything it does not recognise it ignores, so a mistyped link is still
 a working simulator.
 
+![The mission list](docs/presets.png)
+
+*Thirteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
+take. Picking one opens the editor on it; naming one on the command line skips the list entirely.*
+
 ![Setup screen](docs/setup.png)
 
 Locally, `web/build.sh` writes the same thing into `web/`; serve that directory over HTTP. Same
@@ -24,7 +29,7 @@ program, same physics — what costs in a browser is pixels rather than arithmet
 ## Running it
 
 ```
-go run .                       # start
+go run .                       # start on the mission list
 go run . -lang ru              # start in Russian (default is English)
 go run . -preset apollo-lunar  # start on a preset by name, not by position
 go test ./...                  # physics and interface checks

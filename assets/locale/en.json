@@ -130,6 +130,7 @@
   "preset.proton-geo": "Proton-K / Blok DM to geostationary",
   "preset.proton-zvezda": "Proton-K / Zvezda to the ISS",
   "preset.titan-ascent": "Titan / thick air, low gravity",
+  "presets.hint": "Pick a mission — click one, or ↑↓ and Enter.",
   "setup.addLayer": "+ layer",
   "setup.addMoon": "+ moon",
   "setup.addPoint": "+ point",

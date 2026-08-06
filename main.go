@@ -20,10 +20,28 @@ const (
 type Screen int
 
 const (
-	ScreenSetup Screen = iota
+	// ScreenPresets is where a run starts unless it was told what to fly: a list of
+	// missions and nothing else. Setup comes second, because four columns of every
+	// number the model has is a lot to be handed before you have said what you are
+	// trying to fly.
+	ScreenPresets Screen = iota
+	ScreenSetup
 	ScreenFlight
 	ScreenGraphs
 )
+
+// startScreen is where a run begins. Naming a preset means the choice has already
+// been made, so the list would only be in the way; asking to fly means even the
+// editor is, which is what tests and scripted captures want.
+func startScreen(presetNamed, fly bool) Screen {
+	switch {
+	case fly:
+		return ScreenFlight
+	case presetNamed:
+		return ScreenSetup
+	}
+	return ScreenPresets
+}
 
 // App is the whole program: a configuration being edited, a simulation being
 // flown, and the three screens that show them.
@@ -31,10 +49,11 @@ type App struct {
 	ui     *UI
 	screen Screen
 
-	cfg    sim.Config
-	setup  *SetupScreen
-	flight *FlightScreen
-	graphs *GraphScreen
+	cfg     sim.Config
+	presets *PresetScreen
+	setup   *SetupScreen
+	flight  *FlightScreen
+	graphs  *GraphScreen
 
 	canvas *ebiten.Image
 	w, h   int
@@ -66,6 +85,8 @@ func (a *App) Update() error {
 	a.canvas.Fill(colBG)
 
 	switch a.screen {
+	case ScreenPresets:
+		a.presets.Update(a, a.canvas)
 	case ScreenSetup:
 		a.setup.Update(a, a.canvas)
 	case ScreenFlight:
@@ -116,10 +137,29 @@ func (a *App) ShowGraphs(s *sim.Sim) {
 	a.screen = ScreenGraphs
 }
 
+// newApp builds the program at the screen it should start on, which is the whole of
+// what the flags decide between: the mission list, the editor with a mission in it,
+// or a vehicle already on its way.
+func newApp(chosen int, presetNamed, fly bool) *App {
+	presets := sim.Presets()
+	a := &App{
+		ui:  NewUI(),
+		cfg: presets[chosen].Cfg,
+	}
+	a.presets = NewPresetScreen(chosen)
+	a.setup = NewSetupScreen(chosen)
+	a.screen = startScreen(presetNamed, fly)
+	if a.screen == ScreenFlight {
+		a.Launch()
+	}
+	return a
+}
+
 func main() {
 	shotDir := flag.String("shot", "", "run the capture script and save screenshots of every screen into this directory")
 	presetSlug := flag.String("preset", "", "identifier of the preset to start from, e.g. apollo-lunar; empty for the first")
 	camTrace := flag.Int("camtrace", 0, "print the vehicle's screen coordinates for N frames of live flight")
+	fly := flag.Bool("fly", false, "skip the mission list and the editor and launch straight away")
 	langCode := flag.String("lang", "en", "interface language to start in: en or ru")
 	flag.Parse()
 
@@ -150,11 +190,7 @@ func main() {
 		}
 	}
 
-	app := &App{
-		ui:  NewUI(),
-		cfg: presets[chosen].Cfg,
-	}
-	app.setup = NewSetupScreen(chosen)
+	app := newApp(chosen, *presetSlug != "", *fly)
 	if *shotDir != "" {
 		app.shots = newShotRunner(*shotDir, app.cfg)
 	}

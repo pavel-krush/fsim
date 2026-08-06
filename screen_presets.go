@@ -1,0 +1,134 @@
+package main
+
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+
+	"github.com/pavel-krush/fsim/sim"
+)
+
+// The first screen: pick a mission and nothing else. What used to be first — four
+// columns of every number the model has — is a great deal to be handed before you
+// have said what you are trying to fly, so it comes second now.
+//
+// A preset given on the command line skips this screen, which is what -preset was
+// always for: it names the thing you already know you want.
+
+// PresetScreen is the mission list.
+type PresetScreen struct {
+	// sel is the row the keyboard is on. The mouse does not move it: a pointer
+	// hovering one row while the keyboard sits on another is two selections, and
+	// only one of them can be right.
+	sel int
+}
+
+func NewPresetScreen(sel int) *PresetScreen {
+	return &PresetScreen{sel: sel}
+}
+
+// presetRowH is the height of one row, and presetListW how wide the list is. Wide
+// enough for the longest name in either language with the identifier beside it.
+const (
+	presetRowH  = 42.0
+	presetListW = 640.0
+)
+
+// move walks the keyboard selection, stopping at the ends rather than wrapping:
+// a list this short is easier to aim at when it has ends you can feel.
+func (s *PresetScreen) move(delta, n int) {
+	s.sel += delta
+	if s.sel < 0 {
+		s.sel = 0
+	}
+	if s.sel >= n {
+		s.sel = n - 1
+	}
+}
+
+// pick loads a preset and moves on to the setup screen. Everything the editor
+// points into belongs to the configuration, so the screen is built fresh rather
+// than told to change its mind.
+func (s *PresetScreen) pick(a *App, i int) {
+	presets := sim.Presets()
+	if i < 0 || i >= len(presets) {
+		return
+	}
+	a.ui.cancel()
+	s.sel = i
+	a.cfg = presets[i].Cfg
+	a.setup = NewSetupScreen(i)
+	a.screen = ScreenSetup
+}
+
+// rowRect is where row i is drawn, given the area the list has.
+func presetRowRect(area Rect, i int) Rect {
+	x := area.X + (area.W-presetListW)/2
+	return Rect{x, area.Y + float64(i)*(presetRowH+6), presetListW, presetRowH}
+}
+
+func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
+	u := a.ui
+	b := a.Bounds()
+	presets := sim.Presets()
+
+	if s.sel < 0 || s.sel >= len(presets) {
+		s.sel = 0
+	}
+
+	const pad = 12
+	headH := 44.0
+	panel(dst, Rect{pad, pad, b.W - 2*pad, headH}, colPanel)
+	drawText(dst, "FSIM", fontBig, pad+14, pad+(headH-fontBig.Size)/2-2, colAccent, alignLeft)
+	drawText(dst, T("setup.tagline"), fontUISm, pad+14+textWidth("FSIM", fontBig)+10,
+		pad+(headH-fontUISm.Size)/2, colTextFaint, alignLeft)
+	u.LangPicker(dst, Rect{b.W - pad - 10 - langPickerW, pad + 8, langPickerW, headH - 16})
+
+	// The list, centred in what is left and vertically middled, so that adding a
+	// preset moves the block rather than pushing the last one off the bottom.
+	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - 3*pad - 8}
+	listH := float64(len(presets))*(presetRowH+6) - 6
+	// The hint below counts towards the centring, or the block sits low.
+	area := Rect{body.X, body.Y + (body.H-listH-30)/2, body.W, listH}
+
+	if u.keyPressed(ebiten.KeyArrowDown) {
+		s.move(1, len(presets))
+	}
+	if u.keyPressed(ebiten.KeyArrowUp) {
+		s.move(-1, len(presets))
+	}
+	if u.keyPressed(ebiten.KeyEnter) || u.keyPressed(ebiten.KeyNumpadEnter) {
+		s.pick(a, s.sel)
+		return
+	}
+
+	for i, p := range presets {
+		r := presetRowRect(area, i)
+		hover := u.hover(r)
+
+		// The identifier is the dimmest thing on the row, except on the selected one,
+		// where dim against the accent colour is invisible rather than quiet.
+		bg, fg, slug := colPanel, colText, colTextFaint
+		switch {
+		case i == s.sel:
+			bg, slug = colAccentDim, colTextDim
+		case hover:
+			bg = lighten(colPanel, 0.18)
+		}
+		fillRect(dst, r, bg)
+		if i == s.sel {
+			strokeRect(dst, r, 1, colAccent)
+		}
+
+		drawText(dst, presetName(p.Name), fontUI, r.X+16, r.Y+(r.H-fontUI.Size)/2-1, fg, alignLeft)
+		// The identifier as well as the name: it is what -preset and ?preset= take,
+		// and there is nowhere else to find it out.
+		drawText(dst, p.Name, fontMono, r.Right()-16, r.Y+(r.H-fontMono.Size)/2-1,
+			slug, alignRight)
+
+		if u.clicked(r) {
+			s.pick(a, i)
+			return
+		}
+	}
+
+	drawText(dst, T("presets.hint"), fontUISm, b.W/2, area.Bottom()+22, colTextDim, alignCenter)
+}

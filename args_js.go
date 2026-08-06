@@ -19,8 +19,8 @@ import (
 // That is the whole point of it — a link can say "here is the way to Mars, a
 // hundred and eighty-six days, watch" rather than just "here is a simulator".
 //
-// Only the two flags that mean anything in a browser are accepted. -shot writes
-// files and -camtrace prints to a console nobody has open.
+// Only the flags that mean anything in a browser are accepted: -preset, -lang and
+// -fly. -shot writes files and -camtrace prints to a console nobody has open.
 //
 // A value that is not a preset or a language is dropped rather than passed on,
 // because main treats both as fatal: a mistyped link would leave whoever clicked
@@ -48,5 +48,10 @@ func init() {
 		if _, ok := localeCode[code]; ok {
 			os.Args = append(os.Args, "-lang", code)
 		}
+	}
+	// ?fly=1 goes straight to the pad, which is the whole of what a link wants to
+	// do when it is showing someone a mission rather than handing them an editor.
+	if v := q.Get("fly"); v == "1" || v == "true" {
+		os.Args = append(os.Args, "-fly")
 	}
 }
