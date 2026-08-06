@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fsim — orbital launch simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  /* The canvas is the whole page: Layout() takes the size it is given, so the
+     simulator lays itself out to whatever the window happens to be. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f14; }
+  canvas { display: block; }
+  #boot {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #8fa3b8;
+  }
+  #boot b { font-size: 22px; letter-spacing: 2px; color: #dbe6f0; font-weight: 600; }
+  #boot.failed { color: #d97070; }
+</style>
+
+<div id="boot"><b>FSIM</b><span id="msg">loading 18 MB of simulator…</span></div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const msg = document.getElementById("msg");
+  const boot = document.getElementById("boot");
+
+  // Ebiten's js backend keeps the canvas the browser gives it, so nothing here
+  // has to know the window size — see App.Layout.
+  async function run() {
+    if (!WebAssembly.instantiateStreaming) {
+      throw new Error("this browser cannot stream WebAssembly");
+    }
+    const go = new Go();
+    const resp = await fetch("fsim.wasm");
+    if (!resp.ok) throw new Error("fsim.wasm: " + resp.status + " " + resp.statusText);
+    const mod = await WebAssembly.instantiateStreaming(resp, go.importObject);
+    boot.remove();
+    await go.run(mod.instance);
+  }
+
+  run().catch(err => {
+    boot.classList.add("failed");
+    msg.textContent = String(err);
+    console.error(err);
+  });
+</script>

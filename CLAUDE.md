@@ -18,7 +18,28 @@ go run . -camtrace 700         # print the vehicle's screen coordinates per fram
 go run . -lang ru              # start with the interface in Russian (default is English)
 go test ./...                  # physics and interface
 go build ./... && go vet ./...
+web/build.sh                   # the same thing for the browser, into web/
 ```
+
+The browser build is the same program: `GOOS=js GOARCH=wasm`, Ebiten's own js backend, and
+`App.Layout` already takes whatever size it is given, so the canvas is the page. `web/build.sh`
+writes `web/fsim.wasm` (17 MB, 4.2 over gzip) and copies Go's `wasm_exec.js` out of GOROOT so the
+loader always matches the toolchain; both are generated and both are gitignored. It has to be served
+over HTTP — a `file://` page cannot fetch the wasm:
+
+```
+web/build.sh && (cd web && python3 -m http.server 8080)
+```
+
+- **What costs is pixels, not physics.** Measured in headless Chrome, which renders in software with
+  SwiftShader: 1400 x 940 ran at a sixth of real time and 750 x 470 at five sixths — a quarter of the
+  pixels for five times the rate. Ebiten's js backend puts every widget, line and glyph through WebGL,
+  so a real GPU is the whole difference. The simulation itself is the same arithmetic it is natively.
+- **`-shot`, `-camtrace` and the other flags are not reachable in a browser**, which is fine: they are
+  development tools and the flags simply default off. Nothing in the program writes a file unless
+  `-shot` asks it to.
+- Verified end to end through the DevTools protocol — load, render, press Enter, fly — rather than by
+  assuming a successful compile means a working page.
 
 `-shot` exists because Ebiten can only create and read images inside a running game loop — there is no
 way to render the UI headless. The flag drives the real loop through the script in `shot.go` and dumps

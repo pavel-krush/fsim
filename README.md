@@ -11,6 +11,9 @@ rails except the planets themselves.
 
 ![Setup screen](docs/setup.png)
 
+It also builds for the browser: `web/build.sh`, then serve the `web/` directory over HTTP. Same
+program, same physics; what costs in a browser is pixels rather than arithmetic.
+
 ## Running it
 
 ```
