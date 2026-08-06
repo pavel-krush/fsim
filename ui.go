@@ -23,8 +23,13 @@ type UI struct {
 	MX, MY float64
 	Down   bool // left button held
 	Click  bool // left button went down this frame
-	Wheel  float64
-	DT     float64
+	// Wheel is this frame's scrolling, in notches: one detent of a mouse wheel is
+	// 1 whatever the platform calls it. See normalizeWheel.
+	Wheel float64
+	DT    float64
+
+	// wheelUnit is how much raw scrolling this device calls one notch.
+	wheelUnit float64
 
 	runes []rune
 	keys  []ebiten.Key
@@ -53,7 +58,53 @@ type UI struct {
 }
 
 // NewUI builds the toolkit state.
-func NewUI() *UI { return &UI{} }
+func NewUI() *UI { return &UI{wheelUnit: 1} }
+
+// wheelUnit is bounded so that one freak event cannot desensitise the session, and
+// decays while nothing is scrolling so that swapping a trackpad for a mouse
+// recalibrates. wheelZoomMax is how much of a notch one frame may ever be worth.
+const (
+	wheelUnitMin   = 1.0
+	wheelUnitMax   = 400.0
+	wheelUnitDecay = 0.995
+	wheelZoomMax   = 1.0
+)
+
+// normalizeWheel turns whatever the platform calls scrolling into notches, one
+// detent of a mouse wheel being 1.
+//
+// It has to, because the same number means wildly different things. Ebiten's
+// desktop backend hands over what GLFW gives it, which is 1 per detent. Its browser
+// backend hands over the raw `deltaY` of the DOM event — a Windows mouse in Chrome
+// sends 100 of them per detent, a Firefox in line mode sends 3, and a trackpad
+// sends a stream of small fractions with a momentum tail. Ebiten does not
+// normalise: there is a TODO in its source where deltaMode would be read. So a
+// zoom of exp(wheel*0.18) — a comfortable ×1.20 per detent natively — was ×6.6e7
+// per detent in a browser on Windows, and on a Mac trackpad every event in a flick
+// counted as dozens of detents.
+//
+// The unit is estimated from the largest event seen rather than from the platform,
+// which is what the web does about this (normalize-wheel and its descendants) and
+// needs no knowledge of the device: whatever the biggest push is, that is one
+// notch. Then no single frame is worth more than a notch, which is what makes one
+// detent one step everywhere.
+//
+// The first gesture of a session is counted generously, because every event on its
+// rising edge is a new largest and so a whole notch: a trackpad flick that should be
+// worth four comes out at six or seven. From the second gesture on the device is
+// calibrated. Being slightly eager once is a better failure than the alternatives —
+// guessing the platform, or making the first detent do nothing while it measures.
+func (u *UI) normalizeWheel(raw float64) float64 {
+	if u.wheelUnit < wheelUnitMin {
+		u.wheelUnit = wheelUnitMin
+	}
+	if raw == 0 {
+		u.wheelUnit = math.Max(wheelUnitMin, u.wheelUnit*wheelUnitDecay)
+		return 0
+	}
+	u.wheelUnit = clamp(math.Max(math.Abs(raw), u.wheelUnit), wheelUnitMin, wheelUnitMax)
+	return clamp(raw/u.wheelUnit, -wheelZoomMax, wheelZoomMax)
+}
 
 // BeginFrame samples the input devices. canvas is the whole drawing area:
 // overlays paint onto it directly, and its size decides whether a dropdown
@@ -70,7 +121,7 @@ func (u *UI) BeginFrame(canvas *ebiten.Image, dt float64) {
 	u.Down = ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	u.Click = inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	_, wy := ebiten.Wheel()
-	u.Wheel = wy
+	u.Wheel = u.normalizeWheel(wy)
 	u.DT = dt
 
 	u.runes = ebiten.AppendInputChars(u.runes[:0])

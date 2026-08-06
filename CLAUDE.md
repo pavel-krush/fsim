@@ -36,6 +36,20 @@ web/build.sh && (cd web && python3 -m http.server 8080)
   SwiftShader: 1400 x 940 ran at a sixth of real time and 750 x 470 at five sixths — a quarter of the
   pixels for five times the rate. Ebiten's js backend puts every widget, line and glyph through WebGL,
   so a real GPU is the whole difference. The simulation itself is the same arithmetic it is natively.
+- **The wheel arrives in different units on every platform, so it is normalised into
+  notches** (`UI.normalizeWheel`). Ebiten's desktop backend passes on what GLFW gives it, which is 1 per
+  detent; its browser backend passes the DOM event's raw `deltaY`, and there is a TODO in its source where
+  `deltaMode` would be read. A Windows mouse in Chrome sends 100 per detent, Firefox in line mode sends 3,
+  a trackpad sends a stream of fractions with a momentum tail. So `exp(wheel*0.18)` — a comfortable ×1.20
+  per detent natively — was **×6.6e7** per detent in a browser on Windows, and every event of a Mac
+  trackpad flick counted as dozens of detents.
+  The unit is estimated from the largest event seen rather than from the platform, which is what the web
+  does about this (`normalize-wheel` and its descendants): whatever the biggest push is, that is one notch,
+  bounded, decaying while idle so that swapping a trackpad for a mouse recalibrates, and clamped so no
+  single frame is worth more than a notch. The first gesture of a session is counted generously — every
+  event on its rising edge is a new largest — and from the second it is calibrated.
+  Normalising in `BeginFrame` rather than at the three places that use it means the zoom, the graph axis
+  and the setup screen's column scroll all kept their constants and the desktop feel is unchanged.
 - **The query string is the command line** (`args_js.go`, `//go:build js`): `?preset=apollo-mars&lang=ru`
   becomes `-preset apollo-mars -lang ru` in `os.Args` from an `init`, before `flag.Parse` looks. Only those
   two flags — `-shot` writes files and `-camtrace` prints to a console nobody has open. A value that names
