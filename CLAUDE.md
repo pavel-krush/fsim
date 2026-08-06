@@ -598,6 +598,11 @@ what you are trying to fly, so it comes second.
   is also why the app's construction is a function rather than eight lines inside `main`.
 - **The row shows the identifier as well as the name**, dim and monospaced on the right. It is what
   `-preset` and `?preset=` take and there is nowhere else in the interface to find it out.
+- **The rows shrink to fit whatever window there is** (`presetLayout`), down to a floor of 22 px. In a
+  window the program sizes itself that never matters; in a browser the window is whatever the browser is,
+  and 1200 x 760 had thirteen rows overlapping the header at the top and running off the bottom. The test
+  checks five window sizes, including that one, and that no two rows overlap — two rows sharing a click
+  is the other way this goes wrong.
 - **The keyboard's row and the mouse's hover are different things.** Arrows move the selection, the
   pointer only lights what is under it: a pointer hovering one row while the keyboard sits on another is
   two selections, and only one of them can be right.

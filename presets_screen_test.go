@@ -94,30 +94,45 @@ func TestTheListStopsAtItsEnds(t *testing.T) {
 	}
 }
 
-// Every row has to be reachable in the window the program asks for: a mission that
-// cannot be clicked is a mission nobody can fly.
-func TestEveryMissionFitsOnTheScreen(t *testing.T) {
+// Every row has to be reachable in every window, not just the one the program asks
+// for: in a browser the window is whatever the browser is, and a 1200 x 760 one had
+// thirteen rows overlapping the header at the top and running off the bottom.
+func TestEveryMissionFitsInAnyWindow(t *testing.T) {
 	n := len(sim.Presets())
-	b := Rect{0, 0, winW, winH}
-	const pad = 12
-	headH := 44.0
-	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - 3*pad - 8}
-	listH := float64(n)*(presetRowH+6) - 6
-	area := Rect{body.X, body.Y + (body.H-listH)/2, body.W, listH}
+	for _, win := range []Rect{
+		{0, 0, winW, winH},
+		{0, 0, 1200, 760},
+		{0, 0, 1000, 620},
+		{0, 0, 820, 500},
+		{0, 0, 1920, 1200},
+	} {
+		const pad = 12
+		headH := 44.0
+		body := Rect{pad, pad + headH + 8, win.W - 2*pad, win.H - headH - 3*pad - 8}
+		rowH, area := presetLayout(body, n)
 
-	if listH > body.H {
-		t.Fatalf("%d rows need %.0f px of the %.0f the window has", n, listH, body.H)
-	}
-	first, last := presetRowRect(area, 0), presetRowRect(area, n-1)
-	if first.Y < body.Y {
-		t.Errorf("the first row starts at %.0f, above the area's %.0f", first.Y, body.Y)
-	}
-	if last.Bottom() > body.Bottom() {
-		t.Errorf("the last row ends at %.0f, below the area's %.0f", last.Bottom(), body.Bottom())
-	}
-	if first.X < body.X || first.Right() > body.Right() {
-		t.Errorf("a row spans %.0f..%.0f, outside %.0f..%.0f",
-			first.X, first.Right(), body.X, body.Right())
+		if rowH < presetRowMin-0.001 || rowH > presetRowH+0.001 {
+			t.Errorf("%.0fx%.0f: row height %.1f, outside %.0f..%.0f",
+				win.W, win.H, rowH, presetRowMin, presetRowH)
+		}
+		first, last := presetRowRect(area, rowH, 0), presetRowRect(area, rowH, n-1)
+		if first.Y < body.Y-0.001 {
+			t.Errorf("%.0fx%.0f: the first row starts at %.1f, above the area's %.1f",
+				win.W, win.H, first.Y, body.Y)
+		}
+		if last.Bottom() > body.Bottom()+0.001 {
+			t.Errorf("%.0fx%.0f: the last row ends at %.1f, below the area's %.1f",
+				win.W, win.H, last.Bottom(), body.Bottom())
+		}
+		if first.X < body.X-0.001 || first.Right() > body.Right()+0.001 {
+			t.Errorf("%.0fx%.0f: a row spans %.1f..%.1f, outside %.1f..%.1f",
+				win.W, win.H, first.X, first.Right(), body.X, body.Right())
+		}
+		// And rows must not overlap each other, or two of them share a click.
+		if second := presetRowRect(area, rowH, 1); second.Y < first.Bottom() {
+			t.Errorf("%.0fx%.0f: row 1 starts at %.1f, inside row 0 ending at %.1f",
+				win.W, win.H, second.Y, first.Bottom())
+		}
 	}
 }
 

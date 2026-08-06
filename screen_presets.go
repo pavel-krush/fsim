@@ -1,6 +1,8 @@
 package main
 
 import (
+	"math"
+
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/pavel-krush/fsim/sim"
@@ -25,12 +27,39 @@ func NewPresetScreen(sel int) *PresetScreen {
 	return &PresetScreen{sel: sel}
 }
 
-// presetRowH is the height of one row, and presetListW how wide the list is. Wide
-// enough for the longest name in either language with the identifier beside it.
+// presetRowH is how tall a row would like to be, presetRowMin how short it will go
+// to fit, and presetListW how wide the list is: enough for the longest name in
+// either language with the identifier beside it.
 const (
-	presetRowH  = 42.0
-	presetListW = 640.0
+	presetRowH   = 42.0
+	presetRowMin = 22.0
+	presetListW  = 640.0
+	presetRowGap = 6.0
 )
+
+// presetLayout fits n rows into the area it is given. In a window the program owns
+// they are 42 px tall and the block is centred; in a browser the window is whatever
+// the browser is, and a 760 px one had thirteen rows overlapping the header at the
+// top and running off the bottom. So the rows shrink to fit, down to a floor, and
+// the width comes in with the area.
+func presetLayout(body Rect, n int) (rowH float64, area Rect) {
+	// The hint below the list counts towards the centring, or the block sits low.
+	const hint = 30.0
+	rowH = presetRowH
+	if n > 0 {
+		if fit := (body.H - hint - float64(n-1)*presetRowGap) / float64(n); fit < rowH {
+			rowH = math.Max(presetRowMin, fit)
+		}
+	}
+	listH := float64(n)*(rowH+presetRowGap) - presetRowGap
+	w := math.Min(presetListW, body.W-40)
+	return rowH, Rect{
+		X: body.X + (body.W-w)/2,
+		Y: body.Y + math.Max(0, (body.H-listH-hint)/2),
+		W: w,
+		H: listH,
+	}
+}
 
 // move walks the keyboard selection, stopping at the ends rather than wrapping:
 // a list this short is easier to aim at when it has ends you can feel.
@@ -59,10 +88,9 @@ func (s *PresetScreen) pick(a *App, i int) {
 	a.screen = ScreenSetup
 }
 
-// rowRect is where row i is drawn, given the area the list has.
-func presetRowRect(area Rect, i int) Rect {
-	x := area.X + (area.W-presetListW)/2
-	return Rect{x, area.Y + float64(i)*(presetRowH+6), presetListW, presetRowH}
+// presetRowRect is where row i is drawn.
+func presetRowRect(area Rect, rowH float64, i int) Rect {
+	return Rect{area.X, area.Y + float64(i)*(rowH+presetRowGap), area.W, rowH}
 }
 
 func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
@@ -82,12 +110,10 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 		pad+(headH-fontUISm.Size)/2, colTextFaint, alignLeft)
 	u.LangPicker(dst, Rect{b.W - pad - 10 - langPickerW, pad + 8, langPickerW, headH - 16})
 
-	// The list, centred in what is left and vertically middled, so that adding a
-	// preset moves the block rather than pushing the last one off the bottom.
+	// The list, centred in what is left, so that adding a preset moves the block
+	// rather than pushing the last one off the bottom.
 	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - 3*pad - 8}
-	listH := float64(len(presets))*(presetRowH+6) - 6
-	// The hint below counts towards the centring, or the block sits low.
-	area := Rect{body.X, body.Y + (body.H-listH-30)/2, body.W, listH}
+	rowH, area := presetLayout(body, len(presets))
 
 	if u.keyPressed(ebiten.KeyArrowDown) {
 		s.move(1, len(presets))
@@ -101,7 +127,7 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 	}
 
 	for i, p := range presets {
-		r := presetRowRect(area, i)
+		r := presetRowRect(area, rowH, i)
 		hover := u.hover(r)
 
 		// The identifier is the dimmest thing on the row, except on the selected one,
