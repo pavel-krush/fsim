@@ -40,6 +40,10 @@ web/build.sh && (cd web && python3 -m http.server 8080)
   `-shot` asks it to.
 - Verified end to end through the DevTools protocol — load, render, press Enter, fly — rather than by
   assuming a successful compile means a working page.
+- **`.github/workflows/pages.yml` builds it and publishes `web/` to GitHub Pages** on every push to
+  master. The wasm is built there rather than committed: seventeen megabytes of generated binary would
+  cost another seventeen in the history on every rebuild. The workflow runs the tests first, so a red
+  suite does not get published.
 
 `-shot` exists because Ebiten can only create and read images inside a running game loop — there is no
 way to render the UI headless. The flag drives the real loop through the script in `shot.go` and dumps
