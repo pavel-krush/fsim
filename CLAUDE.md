@@ -35,9 +35,12 @@ web/build.sh && (cd web && python3 -m http.server 8080)
   SwiftShader: 1400 x 940 ran at a sixth of real time and 750 x 470 at five sixths — a quarter of the
   pixels for five times the rate. Ebiten's js backend puts every widget, line and glyph through WebGL,
   so a real GPU is the whole difference. The simulation itself is the same arithmetic it is natively.
-- **`-shot`, `-camtrace` and the other flags are not reachable in a browser**, which is fine: they are
-  development tools and the flags simply default off. Nothing in the program writes a file unless
-  `-shot` asks it to.
+- **The query string is the command line** (`args_js.go`, `//go:build js`): `?preset=apollo-mars&lang=ru`
+  becomes `-preset apollo-mars -lang ru` in `os.Args` from an `init`, before `flag.Parse` looks. Only those
+  two flags — `-shot` writes files and `-camtrace` prints to a console nobody has open. A value that names
+  no preset and no language is *dropped* rather than passed on, because `main` treats both as fatal and a
+  mistyped link would otherwise leave whoever clicked it looking at a blank page with the reason in a
+  console they will never open.
 - Verified end to end through the DevTools protocol — load, render, press Enter, fly — rather than by
   assuming a successful compile means a working page.
 - **`.github/workflows/pages.yml` builds it and publishes `web/` to GitHub Pages** on every push to

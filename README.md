@@ -9,10 +9,17 @@ The physics is real: gravity is integrated, propellant is spent, mass changes as
 back, and every body in the system pulls on the vehicle at once. Nothing is scripted, and nothing is on
 rails except the planets themselves.
 
+**[Fly it in a browser](https://pavel-krush.github.io/fsim/)** — the same program compiled to
+WebAssembly, four megabytes over the wire, no install. The query string picks where to start:
+[`?preset=apollo-mars`](https://pavel-krush.github.io/fsim/?preset=apollo-mars) for the hundred and
+eighty-six days to Mars, [`?preset=apollo-return&lang=ru`](https://pavel-krush.github.io/fsim/?preset=apollo-return&lang=ru)
+for the free return in Russian. Anything it does not recognise it ignores, so a mistyped link is still
+a working simulator.
+
 ![Setup screen](docs/setup.png)
 
-It also builds for the browser: `web/build.sh`, then serve the `web/` directory over HTTP. Same
-program, same physics; what costs in a browser is pixels rather than arithmetic.
+Locally, `web/build.sh` writes the same thing into `web/`; serve that directory over HTTP. Same
+program, same physics — what costs in a browser is pixels rather than arithmetic.
 
 ## Running it
 
