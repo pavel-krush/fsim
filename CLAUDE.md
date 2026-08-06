@@ -42,8 +42,13 @@ web/build.sh && (cd web && python3 -m http.server 8080)
   assuming a successful compile means a working page.
 - **`.github/workflows/pages.yml` builds it and publishes `web/` to GitHub Pages** on every push to
   master. The wasm is built there rather than committed: seventeen megabytes of generated binary would
-  cost another seventeen in the history on every rebuild. The workflow runs the tests first, so a red
-  suite does not get published.
+  cost another seventeen in the history on every rebuild.
+- **The workflow gates on `go test ./sim/...`, not on the whole suite.** On Linux the interface package
+  wants X11 and GL headers to build and a `DISPLAY` to so much as *import* — Ebiten's package init calls
+  `glfw.Init()` — so running tests that never open a window costs six minutes of dev packages plus xvfb
+  in a job whose purpose is to publish a page. The physics is pure Go and takes twenty seconds, and the
+  wasm build compiles the whole program anyway, so nothing that fails to build gets past. Both failures
+  were found the same way: by reading the run, not by assuming a green laptop means a green runner.
 
 `-shot` exists because Ebiten can only create and read images inside a running game loop — there is no
 way to render the UI headless. The flag drives the real loop through the script in `shot.go` and dumps

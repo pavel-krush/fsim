@@ -2,7 +2,8 @@
 #
 # The wasm is 17 MB and generated, so it is built here rather than committed:
 # a binary that size in the history would cost another 17 MB on every rebuild.
-# One manual step is needed once, in the repository's settings:
+# The tests here are the physics ones; the step says why not the rest. One manual
+# step is needed once, in the repository's settings:
 #
 #   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
 #
@@ -35,17 +36,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # The interface package links Ebiten's GLFW backend through cgo, so building
-      # it — even just to run tests that never open a window — needs the X11 and
-      # GL headers. The runner has none of them by default, which is what a bare
-      # `go test ./...` fell over on. sim/ compiles and tests without any of this.
-      - name: Ebiten's build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends             libc6-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxi-dev             libxinerama-dev libxrandr-dev libxxf86vm-dev libasound2-dev pkg-config
-
-      - name: Test on the host platform
-        run: go test ./...
+      # The physics, which is pure Go and needs nothing from the runner. The
+      # interface package is deliberately not tested here: on Linux, Ebiten's GLFW
+      # backend wants the X11 and GL headers to build and a DISPLAY to so much as
+      # import -- its package init calls glfw.Init() -- so running tests that never
+      # open a window would cost six minutes of X11 dev packages plus xvfb. The
+      # step below still compiles the whole program, so nothing broken gets past.
+      - name: Test the physics
+        run: go test ./sim/...
 
       - name: Build for the browser
         run: |
