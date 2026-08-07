@@ -133,10 +133,13 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A body's parent always sits at a lower index.** That one invariant makes a cycle impossible to
   express, makes every walk up the tree terminate by construction, and leaves the slice in topological
   order. `Normalize` enforces it, clamping bad data to the root rather than trusting the author.
-- **`Config.Body` is the launch body's editable face.** `New` copies it *into* the system when it has a
-  radius, then mirrors it back, so the setup screen's fields still work on a multi-body preset — the first
-  cut copied the other way and editing the planet was a silent no-op. A caller that fills the system and
-  leaves `Body` empty, which is every test that builds a system by hand, is left alone.
+- **`Config.Body` is an input only when there is no system, and a read-back mirror ever after.** That is
+  what makes a single-planet configuration — and every test that writes one by hand — work, and it is the
+  only direction that leaves the editor working: the first column writes through the tree, because it has
+  to for the other seventeen bodies, and `EnsureSystem` used to copy the stale mirror back over the top on
+  the next call. Diameter, mass, rotation period — every edit to the planet the pad is on snapped back a
+  frame later with nothing on screen to say why. `TestEditingTheLaunchBodySticks` drives a real frame of
+  the editor and pins it; the two directions cannot both be live.
 - **The state is measured from `State.Center`**, the deepest body whose sphere of influence contains the
   vehicle, in a frame that does not rotate with it. Not from the root: heliocentric coordinates are
   ~1.5e11 m, where float64 resolves 3e-5 m, and the ascent tests assert altitudes to 1e-6 m. They would

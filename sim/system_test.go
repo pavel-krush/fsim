@@ -430,21 +430,40 @@ func TestEnsureSystemFromASinglePlanet(t *testing.T) {
 	}
 }
 
-// Body is the launch body's editable face: what the setup screen types into it has
-// to reach the system, or editing the planet on a multi-body preset does nothing.
-func TestEnsureSystemCopiesTheEditableFace(t *testing.T) {
+// Body is a read-back mirror of the launch body, not a second place to edit it. The
+// editor writes through the tree — it has to, for the other seventeen bodies — and the
+// mirror used to be copied back over the top on the next call, which silently undid
+// every edit made to the planet the pad is on.
+func TestTheLaunchBodyIsEditedThroughTheTree(t *testing.T) {
 	cfg := Config{System: earthMoon(), LaunchBody: 0}
 	cfg.EnsureSystem()
 
-	cfg.Body.Radius = 3000000 // as if typed into the diameter field
+	cfg.System.Bodies[0].Radius = 3000000 // as the diameter field writes it
 	cfg.EnsureSystem()
 
 	if got := cfg.System.Bodies[0].Radius; got != 3000000 {
-		t.Errorf("the system's launch body has radius %g, want the edited 3e6", got)
+		t.Errorf("the edit was undone: radius %g, want 3e6", got)
+	}
+	if cfg.Body.Radius != 3000000 {
+		t.Errorf("the mirror reads %g, want the edited 3e6", cfg.Body.Radius)
 	}
 	// And the Moon, which nobody touched, is still where it was.
 	if got := cfg.System.Bodies[1].SemiMajor; got != 3.844e8 {
 		t.Errorf("the Moon's orbit changed to %g", got)
+	}
+}
+
+// A configuration with no system at all is the one case where Body is an input: that
+// is what a single-planet setup is, and what every test that writes one by hand does.
+func TestBodyBuildsTheSystemWhenThereIsNone(t *testing.T) {
+	cfg := Config{Body: Body{Name: "somewhere", Radius: 1e6, Mass: 1e22}}
+	cfg.EnsureSystem()
+
+	if len(cfg.System.Bodies) != 1 || cfg.System.Bodies[0].Radius != 1e6 {
+		t.Fatalf("the system is %+v", cfg.System.Bodies)
+	}
+	if cfg.Body.Mu <= 0 {
+		t.Error("the mirror came back without its derived values")
 	}
 }
 

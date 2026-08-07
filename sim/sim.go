@@ -120,10 +120,16 @@ type Config struct {
 // system of one body, the launch index is brought into range, and the derived
 // quantities are filled in.
 //
-// Body is the launch body's editable face: it is copied *into* the system when it
-// has a radius, then mirrored back. Copying the other way made editing the planet
-// on a multi-body preset a silent no-op. A caller that fills the system and
-// leaves Body empty — every test that builds one by hand — is left alone.
+// Body is an *input only when there is no system yet*, which is what makes a
+// single-planet configuration — and every test that writes one by hand — work. Once
+// the tree exists, Body is a read-back mirror of the launch body and nothing else.
+//
+// It used to be copied into the system on every call, and that quietly undid every
+// edit made to the launch body: the editor writes through the tree, because it has to
+// for the other seventeen bodies, and the next call put the stale mirror back over the
+// top. Diameter, mass, rotation — all of it snapped back a frame later, with nothing
+// on screen to say why. The two directions cannot both be live; this is the one that
+// leaves the editor working.
 func (c *Config) EnsureSystem() {
 	if len(c.System.Bodies) == 0 {
 		c.System.Bodies = []Body{c.Body}
@@ -131,10 +137,6 @@ func (c *Config) EnsureSystem() {
 	c.System.Normalize()
 	if c.LaunchBody < 0 || c.LaunchBody >= len(c.System.Bodies) {
 		c.LaunchBody = 0
-	}
-	if c.Body.Radius > 0 {
-		c.System.Bodies[c.LaunchBody] = c.Body
-		c.System.Normalize()
 	}
 	c.Body = c.System.Bodies[c.LaunchBody]
 }
