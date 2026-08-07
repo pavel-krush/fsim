@@ -323,3 +323,90 @@ func TestThePastFadesInPlaceAfterACrossing(t *testing.T) {
 		t.Error("the frame just left is still drawn a second and a half later")
 	}
 }
+
+// A drag is a pan and has nothing to say about which way is up. It used to have
+// plenty: leaving the vehicle behind switched the rotation target from the vehicle's
+// own radius to the world's +Y axis and moved the whole way there in one frame, so a
+// click on the pad — which sits on the +X axis — turned the picture ninety degrees.
+func TestAClickDoesNotRotateTheWorld(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view) // on the pad, following the vehicle, zoomed right in
+	before := f.cam.Rot
+
+	// What handleCamera does on the first pixel of a drag.
+	f.freePos, f.follow = f.cam.Center, camFree
+	f.updateCamera(a, view)
+
+	if d := math.Abs(angleDelta(before, f.cam.Rot)); d > 0.001 {
+		t.Errorf("the world turned %.1f degrees on a click", d*180/math.Pi)
+	}
+	// And it stays put over the frames that follow, rather than creeping.
+	for range 120 {
+		f.updateCamera(a, view)
+	}
+	if d := math.Abs(angleDelta(before, f.cam.Rot)); d > 0.001 {
+		t.Errorf("the world turned %.1f degrees over two seconds of dragging", d*180/math.Pi)
+	}
+}
+
+// Pinning a body does put the world's own axes up — there is no local vertical to
+// speak of out there — but it takes about half a second over it. Snapping is what
+// read as a rendering fault.
+func TestPinningABodyTurnsTheWorldGently(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	before := f.cam.Rot
+
+	f.lookAt(s.Cfg.System.IndexOf("moon"))
+	f.updateCamera(a, view)
+	step := math.Abs(angleDelta(before, f.cam.Rot))
+	full := math.Abs(angleDelta(before, math.Pi/2))
+	if step > full/4 {
+		t.Errorf("one frame moved %.0f%% of the way round", step/full*100)
+	}
+	if step == 0 {
+		t.Error("it did not start turning at all")
+	}
+
+	for range 120 {
+		f.updateCamera(a, view)
+	}
+	if d := math.Abs(angleDelta(f.cam.Rot, math.Pi/2)); d > 0.01 {
+		t.Errorf("after two seconds it is still %.1f degrees off", d*180/math.Pi)
+	}
+}
+
+// A scripted capture has to be settled: the zoom, the change of frame and the
+// rotation all ease, and a screenshot taken part way through any of them is a
+// screenshot of nothing in particular. The pinned views came out eighty degrees from
+// where they settle before snapCamera took the rotation on as well.
+func TestAScriptedCaptureIsSettled(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+
+	f.lookAt(s.Cfg.System.IndexOf("moon"))
+	f.snapCamera()
+	f.updateCamera(a, view)
+
+	if d := math.Abs(angleDelta(f.cam.Rot, math.Pi/2)); d > 0.001 {
+		t.Errorf("one frame after snapCamera the rotation is %.1f degrees off", d*180/math.Pi)
+	}
+	if f.camHoldK != 0 || f.ghostK != 0 {
+		t.Errorf("the view is still being held: camHold %g, ghost %g", f.camHoldK, f.ghostK)
+	}
+}

@@ -755,6 +755,14 @@ the time it was measured**.
   not also grab the world; `u.consumed` is the only thing that knows.
 - **The picker shows the free state as its own entry.** Claiming to follow the vehicle while the camera
   sits half way to the Moon is a lie about the one thing that control exists to report.
+- **A drag never rotates the picture, and pinning a body takes half a second over
+  it.** `Rot` is the world angle pointed at the top of the screen: following the vehicle it is the
+  vehicle's own radius, so a launch reads as a climb, and anywhere else it is the world's +Y. Those are
+  different by a quarter turn on the pad — the launch site sits on the +X axis — and the switch used to
+  happen in one frame with `hold = 1`, so a click on the pad turned the whole picture ninety degrees. It
+  looked like a rendering fault and was reported as one. A pan has nothing to say about which way is up, so
+  it now says nothing; a pinned body eases. `snapCamera` lands all of it at once for a scripted capture,
+  which is what keeps the pinned captures from coming out eighty degrees from where they settle.
 - **The camera lets go of the local vertical as it pulls back**, on the same ramp that slides the centre
   from the vehicle to the planet's middle — standing on a planet becomes looking at one over the same
   stretch. Held all the way out the picture would spin with the orbit, a full turn every five seconds at

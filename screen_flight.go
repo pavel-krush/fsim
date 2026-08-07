@@ -48,6 +48,9 @@ type FlightScreen struct {
 	// much of it is still being held on to.
 	camHold  sim.Vec2
 	camHoldK float64
+	// snapRot lands the rotation in one frame instead of easing it. Set by
+	// snapCamera and cleared as soon as it is used.
+	snapRot bool
 	// The frame just left, and what is still being shown of it: the offset that
 	// keeps it where it was drawn, frozen at the crossing, and how much is left to
 	// fade. ghostFrom is -1 when there is nothing to let go of.
@@ -140,11 +143,15 @@ func (f *FlightScreen) holdView(natural sim.Vec2) sim.Vec2 {
 	return natural.Add(f.camHold.Sub(natural).Scale(k))
 }
 
-// snapFrame lands the hand-over immediately, for a scripted capture: a screenshot
-// taken mid-glide is a screenshot of neither framing.
-func (f *FlightScreen) snapFrame() {
+// snapCamera settles everything the camera eases, for a scripted capture: the frame
+// hand-over, the ghost of the frame before it, the zoom and the rotation all land at
+// once. A screenshot taken mid-glide is a screenshot of nothing in particular — the
+// pinned views came out turned eighty degrees from where they settle.
+func (f *FlightScreen) snapCamera() {
 	f.frameShown, f.camHoldK = f.frameBody(), 0
 	f.ghostFrom, f.ghostK = -1, 0
+	f.cam.Scale = 0
+	f.snapRot = true
 }
 
 // trackPoint maps a recorded sample into the drawn frame, turning it forward with
@@ -216,8 +223,8 @@ func (f *FlightScreen) vehiclePos() sim.Vec2 {
 
 func NewFlightScreen(s *sim.Sim) *FlightScreen {
 	f := &FlightScreen{s: s, frame: -1, follow: -1, groundHold: 1}
-	f.snapFrame()
-	f.cam.Scale = 0
+	// Nothing to ease from on the first frame: the picture has not been drawn yet.
+	f.snapCamera()
 	return f
 }
 
@@ -373,16 +380,29 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u)))
 	}
 
-	// Rotation tracks the local vertical only while following the vehicle, and
-	// only while close in. Held all the way out the picture would spin with the
-	// orbit — a full turn every five seconds at ×1000 — and in a body's frame or a
-	// dragged view there is no "up" to speak of. At u = 0 this is exactly "point
-	// the vertical at the top of the screen", the way it has always been; the
-	// shortest-path delta is what stops the wrap through pi flipping the world.
-	want = math.Pi / 2
-	hold := 1.0
-	if f.follow == -1 {
+	// Rotation tracks the local vertical only while following the vehicle, and only
+	// while close in. Held all the way out the picture would spin with the orbit — a
+	// full turn every five seconds at ×1000 — and in a body's frame or a dragged view
+	// there is no "up" to speak of. At u = 0 the vehicle case is exactly "point the
+	// vertical at the top of the screen", and it has to be rigid there or the pad
+	// drifts; the shortest-path delta is what stops the wrap through pi flipping the
+	// world.
+	//
+	// The other two cases are the ones that went wrong. A drag is a pan and has
+	// nothing to say about which way is up, so it says nothing: the rotation stays
+	// where it was. Pinning a body does put the world's own axes up, but over about
+	// half a second — moving the whole way in one frame turned the picture ninety
+	// degrees on a click, because the launch pad sits on the +X axis and the world's
+	// +Y is a quarter turn from it. That read as a rendering fault, and fairly.
+	want, hold := f.cam.Rot, 0.0
+	switch {
+	case f.follow == -1:
 		want, hold = f.vehiclePos().Angle(), 1-u
+	case f.follow >= 0:
+		want, hold = math.Pi/2, math.Min(1, 6*a.ui.DT)
+	}
+	if f.snapRot {
+		hold, f.snapRot = 1, false
 	}
 	f.cam.Rot += hold * angleDelta(f.cam.Rot, want)
 }
