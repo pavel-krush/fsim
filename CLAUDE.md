@@ -923,6 +923,20 @@ the time it was measured**.
   not the screen.
 - **Framing is derived from the eased zoom, not the raw `span`.** Otherwise a step in the span — the
   orbit closing, say — jolts the composition while the zoom is still gliding.
+- **The automatic framing has to keep the vehicle in the picture, and that is solved rather than assumed.**
+  The span was capped at twenty-four body radii, which is a sensible width for a picture *about a planet*
+  and hides the vehicle everywhere else: in the Sun's frame it is 1.7e10 m against a vehicle at 1.5e11, so
+  three days out from the Earth the screen was one yellow dot with the flight six view-widths off the edge,
+  and the same cap bit on the way out of any body past about twelve radii. The cap now yields to the
+  vehicle's own distance — and because *where the centre sits* is itself a function of the span through
+  `camBlend`, the span needed to keep the vehicle is a function of the span too, so `autoScale` iterates
+  three passes of a monotone fixed point instead of guessing at a threshold. The first attempt did guess
+  one, and left the vehicle just off the top edge at 1.9 radii.
+- **`camBlend` is the one place that knows how the centre slides from the vehicle to the body.**
+  `autoScale` and `updateCamera` both need it, and the two disagreeing is precisely the fault above: one
+  chose a span believing the centre was still near the vehicle while the other had already moved it to the
+  middle of the planet. `TestTheVehicleStaysInThePicture` walks fourteen moments of the Mars flight,
+  including both sides of the hand-over into the Sun's frame, and asks only that the vehicle is on screen.
 - **The camera focus cannot be lerped towards the planet's centre linearly.** The target is thousands of
   kilometres away, so even a factor of 1e-4 shifts the picture by hundreds of metres and throws the
   launch pad out of a 1.5 km wide view. The blend stays at zero until the span reaches half a planet

@@ -605,3 +605,49 @@ func TestThePredictionIsNotRecomputedForNothing(t *testing.T) {
 		t.Error("the prediction was not refreshed after the flight moved along it")
 	}
 }
+
+// The automatic framing has one duty above the rest: the vehicle is in the picture.
+// It lost it — the span was capped at twenty-four body radii, which in the Sun's frame
+// is 1.7e10 m against a vehicle at 1.5e11, so three days out from the Earth the whole
+// screen was one yellow dot with the flight six view-widths off the edge. The same
+// thing happened on the way out of any body, past about twelve radii: the trail left
+// the picture with nothing following it.
+func TestTheVehicleStaysInThePicture(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	cases := []struct {
+		preset string
+		times  []float64
+	}{
+		// The pad, the ascent, the parking orbit, the departure burn, the long climb
+		// out through the Earth's sphere of influence, the crossing into the Sun's
+		// frame, and the cruise.
+		{"apollo-mars", []float64{0, 60, 300, 700, 4400, 6000, 40000, 150000,
+			261000, 262100, 300000, 4 * 86400, 20 * 86400, 100 * 86400}},
+		// A lunar flight, which crosses into a moon's frame and back out.
+		{"apollo-lunar", []float64{0, 500, 20000, 200000, 240000, 300000, 5 * 86400}},
+		// And a plain ascent, where the close-up framing has to stay close up.
+		{"earth-falcon", []float64{0, 30, 120, 480, 2000, 6000}},
+	}
+
+	for _, c := range cases {
+		s := sim.New(presetNamed(t, c.preset).Cfg)
+		f := NewFlightScreen(s)
+		for _, when := range c.times {
+			s.FastForward(when)
+			f.updateCamera(a, view)
+			f.snapCamera()
+			f.updateCamera(a, view)
+
+			x, y := f.cam.Project(f.vehiclePos())
+			if x < view.X || x > view.Right() || y < view.Y || y > view.Bottom() {
+				t.Errorf("%s at T+%.0f s: the vehicle is drawn at %.0f,%.0f, outside "+
+					"the %.0f x %.0f view (span %.3g m, frame %d, centre %.3g m out)",
+					c.preset, s.St.T, x, y, view.W, view.H,
+					math.Min(view.W, view.H)/f.cam.Scale, f.frameBody(), f.cam.Center.Len())
+			}
+		}
+	}
+}

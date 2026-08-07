@@ -313,6 +313,25 @@ func (f *FlightScreen) lookAt(target int) {
 // autoScale is the framing the flight would choose for itself: a window holding
 // the vehicle and the ground under it, widening to the whole orbit once there is
 // one.
+// camMargin is how much wider than the vehicle's distance from the centre the view is
+// kept, once the two have parted company. Ten per cent: enough that the marker is not
+// riding the edge, little enough that it does not rewrite framings that already worked.
+const camMargin = 2.2
+
+// camBlend is how far the camera's centre has slid from the vehicle to the middle of
+// the body it is drawn about: 0 standing on the ground, 1 looking at the whole planet.
+//
+// It lives here, in one place, because autoScale and updateCamera both need it and the
+// two of them disagreeing is exactly the fault this fixes — one chose a span assuming
+// the centre was near the vehicle while the other had already moved it to the body.
+func camBlend(span, radius float64) float64 {
+	if radius <= 0 {
+		return 1
+	}
+	u := clamp((span/radius-0.5)/2.1, 0, 1)
+	return u * u * (3 - 2*u)
+}
+
 func (f *FlightScreen) autoScale(view Rect) float64 {
 	b := f.s.Center()
 	pos := f.s.St.Pos
@@ -328,7 +347,21 @@ func (f *FlightScreen) autoScale(view Rect) float64 {
 	case o.Bound() && o.Apoapsis > r:
 		span = math.Max(span, (o.Apoapsis-b.Radius)*2.4)
 	}
-	span = math.Min(span, b.Radius*24)
+	// Twenty-four radii is as far back as a picture *about the body* wants to go, and
+	// it used to be the last word. It cannot be: in the Sun's frame twenty-four solar
+	// radii is 1.7e10 m against a vehicle at 1.5e11, so three days out from the Earth
+	// the screen was one yellow dot with the flight six view-widths off the edge. The
+	// same fault bit on the way out of any body past about twelve radii, where the
+	// trail left the picture with nothing following it.
+	span = math.Min(span, math.Max(b.Radius*24, r*camMargin))
+
+	// The vehicle has to be in shot. Where the centre sits is a function of the span
+	// through camBlend, so how much span it takes to keep the vehicle is a function of
+	// the span too — solved by iterating rather than guessed at with a threshold. It is
+	// monotone and clamped, so three passes is convergence and not hope.
+	for range 3 {
+		span = math.Max(span, camMargin*r*camBlend(span, b.Radius))
+	}
 
 	if f.follow >= 0 {
 		// Framed on a body instead: its sphere of influence is what an approach
@@ -408,8 +441,7 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 	// How far the view has pulled back, from "standing on a planet" to "looking
 	// at one". It decides both how much of the vehicle's own position the centre
 	// follows and how hard the camera holds the local vertical.
-	u := clamp((effSpan/b.Radius-0.5)/2.1, 0, 1)
-	u = u * u * (3 - 2*u)
+	u := camBlend(effSpan, b.Radius)
 
 	// The same ramp decides how much of a ground track the flown path is drawn as.
 	// It is only a ground track while the picture is about the ground: see
