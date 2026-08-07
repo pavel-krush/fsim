@@ -61,6 +61,9 @@ web/build.sh && (cd web && python3 -m http.server 8080)
 - **`.github/workflows/pages.yml` builds it and publishes `web/` to GitHub Pages** on every push to
   master. The wasm is built there rather than committed: seventeen megabytes of generated binary would
   cost another seventeen in the history on every rebuild.
+- **A stalled queue cannot be waited out, which is why the fallback exists.** `actions/deploy-pages` caps
+  its own timeout at ten minutes — asking for thirty gets "timeout value is greater than the allowed maximum
+  - timeout set to the maximum of 600000 milliseconds" — so there is no number that helps.
 - **`web/deploy.sh` is the fallback, and exists because the queue does stall.** One afternoon a deployment
   sat in `deployment_queued` for ten minutes and timed out — on GitHub's own `pages-build-deployment` bot as
   well as on our workflow, with the same artefact that had gone through in five and a half minutes that

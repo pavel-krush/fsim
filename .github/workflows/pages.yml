@@ -62,10 +62,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # No timeout is set, because ten minutes is not only the default but the
+      # maximum: asking for half an hour got "timeout value is greater than the
+      # allowed maximum - timeout set to the maximum of 600000 milliseconds". So a
+      # stalled Pages queue cannot be waited out here, and web/deploy.sh is the
+      # answer to that rather than a bigger number.
       - id: deploy
         uses: actions/deploy-pages@v5
-        with:
-          # Half an hour rather than the default ten minutes. Seventeen megabytes of
-          # wasm takes Pages five to seven to distribute, which is close enough to
-          # the default that one run timed out on it and published nothing.
-          timeout: 1800000
