@@ -332,6 +332,30 @@ func camBlend(span, radius float64) float64 {
 	return u * u * (3 - 2*u)
 }
 
+// camFarFade is how much the body has stopped being the subject of the picture. Zero
+// while the vehicle is within four radii of it — a parking orbit, an approach, anything
+// the body's own shape frames — and one past sixteen, where the body is a dot the flight
+// happens to be passing.
+//
+// Without it the centre slid to the body's middle whenever the view was wide compared
+// with the body, which in the Sun's frame is always: the picker said "the vehicle" and
+// the picture was centred on the Sun with the flight off to one side. In the Sun's frame
+// nobody is standing on anything, which is the whole assumption the slide is built on.
+func camFarFade(dist, radius float64) float64 {
+	if radius <= 0 {
+		return 1
+	}
+	x := clamp((dist/radius-4)/12, 0, 1)
+	return x * x * (3 - 2*x)
+}
+
+// camCentreBlend is how much of the way from the vehicle to the body's middle the centre
+// sits: pulled back far enough for the body to be the subject, and not so far that the
+// body has stopped being one.
+func camCentreBlend(span, radius, dist float64) float64 {
+	return camBlend(span, radius) * (1 - camFarFade(dist, radius))
+}
+
 func (f *FlightScreen) autoScale(view Rect) float64 {
 	b := f.s.Center()
 	pos := f.s.St.Pos
@@ -360,7 +384,7 @@ func (f *FlightScreen) autoScale(view Rect) float64 {
 	// the span too — solved by iterating rather than guessed at with a threshold. It is
 	// monotone and clamped, so three passes is convergence and not hope.
 	for range 3 {
-		span = math.Max(span, camMargin*r*camBlend(span, b.Radius))
+		span = math.Max(span, camMargin*r*camCentreBlend(span, b.Radius, r))
 	}
 
 	if f.follow >= 0 {
@@ -468,8 +492,14 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 		// target is thousands of kilometres away, so even a part in ten thousand
 		// would shove the pad off a 1.5 km wide view. Close in, the vehicle sits
 		// a little below centre so it has sky to climb into.
+		//
+		// And the slide stops once the body is no longer the subject: on an
+		// interplanetary cruise the frame body is the Sun, and centring on it while
+		// claiming to follow the vehicle is a lie about the one thing that control is
+		// for. See camFarFade.
 		drawn := f.vehiclePos()
-		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u)))
+		c := camCentreBlend(effSpan, b.Radius, f.s.St.Pos.Len())
+		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - c)))
 	}
 
 	// Rotation tracks the local vertical only while following the vehicle, and only

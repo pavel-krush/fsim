@@ -282,6 +282,11 @@ func TestThePastFadesInPlaceAfterACrossing(t *testing.T) {
 		f.updateCamera(a, view)
 	}
 	f.groundHold = 0 // pulled back, so no ground track in the way
+	// The zoom is held still, because this test is about the *centre* changing hands.
+	// Entering a sphere of influence changes the automatic span by a large factor and
+	// that motion is a zoom doing its job — it moves everything on screen, this sample
+	// included, and would drown out the thing being measured.
+	f.manualScale = true
 
 	// A sample from the parking orbit: whole, and where it was recorded.
 	sm := s.Hist[sampleAt(s.Hist, 3000)]
@@ -649,5 +654,57 @@ func TestTheVehicleStaysInThePicture(t *testing.T) {
 					math.Min(view.W, view.H)/f.cam.Scale, f.frameBody(), f.cam.Center.Len())
 			}
 		}
+	}
+}
+
+// Following the vehicle has to mean the vehicle is in the middle. It did not: the centre
+// slides towards the body being drawn as the view widens — which is right for a planet,
+// since standing on one becomes looking at one — and in the Sun's frame that slide never
+// stopped, so the picker said "the vehicle" while the picture was centred on the Sun.
+func TestFollowingTheVehicleCentresOnTheVehicle(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-mars").Cfg)
+	f := NewFlightScreen(s)
+
+	// Well into the heliocentric cruise, where the frame body is the Sun and the
+	// vehicle is two hundred solar radii out.
+	s.FastForward(30 * 86400)
+	f.updateCamera(a, view)
+	f.snapCamera()
+	f.updateCamera(a, view)
+
+	if f.frameBody() != 0 {
+		t.Fatalf("the frame is body %d, so this is not the heliocentric case", f.frameBody())
+	}
+	x, y := f.cam.Project(f.vehiclePos())
+	sx, sy := f.cam.Project(f.framePoint(sim.Vec2{}, 0, s.St.T))
+	cx, cy := view.X+view.W/2, view.Y+view.H/2
+
+	// The vehicle within a fifth of the view of the middle, and the Sun further from
+	// it than the vehicle is: whichever way round the composition sits, the subject
+	// is not the star.
+	if d := math.Hypot(x-cx, y-cy); d > 0.2*math.Min(view.W, view.H) {
+		t.Errorf("the vehicle is %.0f px from the middle of a %.0f px view", d, view.H)
+	}
+	if math.Hypot(sx-cx, sy-cy) <= math.Hypot(x-cx, y-cy) {
+		t.Errorf("the Sun is nearer the middle (%.0f px) than the vehicle (%.0f px)",
+			math.Hypot(sx-cx, sy-cy), math.Hypot(x-cx, y-cy))
+	}
+
+	// And the parking orbit still frames on the planet, which is the case the slide
+	// exists for: the whole ellipse, centred, with the vehicle somewhere on it.
+	s2 := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	s2.FastForward(2000)
+	g := NewFlightScreen(s2)
+	g.updateCamera(a, view)
+	g.snapCamera()
+	g.updateCamera(a, view)
+	ex, ey := g.cam.Project(g.framePoint(sim.Vec2{}, 0, s2.St.T))
+	if d := math.Hypot(ex-cx, ey-cy); d > 0.1*view.H {
+		t.Errorf("in the parking orbit the Earth is %.0f px off the middle, so the "+
+			"planet-centred framing was lost", d)
 	}
 }

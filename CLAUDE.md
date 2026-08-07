@@ -932,6 +932,14 @@ the time it was measured**.
   `camBlend`, the span needed to keep the vehicle is a function of the span too, so `autoScale` iterates
   three passes of a monotone fixed point instead of guessing at a threshold. The first attempt did guess
   one, and left the vehicle just off the top edge at 1.9 radii.
+- **The slide to the body's middle stops once the body has stopped being the subject** (`camFarFade`).
+  It is what makes standing on a planet become looking at one, and it assumed there was a planet to stand
+  on: in the Sun's frame the vehicle is two hundred solar radii out and the slide never let go, so the
+  picker said "the vehicle" while the picture was centred on the Sun with the flight off to one side. The
+  fade is zero within four radii — a parking orbit, an approach, anything the body's own shape frames — and
+  one past sixteen. **The rotation ramp keeps the old `camBlend` alone**, because tying *that* to the fade
+  would point the vehicle's heliocentric radius at the top of the screen and turn the whole picture over
+  the months of a cruise.
 - **`camBlend` is the one place that knows how the centre slides from the vehicle to the body.**
   `autoScale` and `updateCamera` both need it, and the two disagreeing is precisely the fault above: one
   chose a span believing the centre was still near the vehicle while the other had already moved it to the
