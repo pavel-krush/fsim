@@ -73,7 +73,7 @@ func TestLookAtSetsBothFrameAndFollow(t *testing.T) {
 
 	// A drag takes over from wherever the camera was, without moving the picture.
 	f.cam = Camera{Center: sim.Vec2{X: 7e6}, Scale: 1e-4, View: Rect{0, 0, 800, 600}}
-	f.follow, f.freePos = camFree, f.cam.Center
+	f.takeFree()
 	if f.frameBody() != s.St.Center {
 		t.Error("a free view lost the frame it was dragged in")
 	}
@@ -321,5 +321,236 @@ func TestThePastFadesInPlaceAfterACrossing(t *testing.T) {
 	}
 	if _, ok := f.showTrack(sm); ok {
 		t.Error("the frame just left is still drawn a second and a half later")
+	}
+}
+
+// A drag is a pan and has nothing to say about which way is up. It used to have
+// plenty: leaving the vehicle behind switched the rotation target from the vehicle's
+// own radius to the world's +Y axis and moved the whole way there in one frame, so a
+// click on the pad — which sits on the +X axis — turned the picture ninety degrees.
+func TestAClickDoesNotRotateTheWorld(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view) // on the pad, following the vehicle, zoomed right in
+	before := f.cam.Rot
+
+	// What handleCamera does on the first pixel of a drag.
+	f.takeFree()
+	f.updateCamera(a, view)
+
+	if d := math.Abs(angleDelta(before, f.cam.Rot)); d > 0.001 {
+		t.Errorf("the world turned %.1f degrees on a click", d*180/math.Pi)
+	}
+	// And it stays put over the frames that follow, rather than creeping.
+	for range 120 {
+		f.updateCamera(a, view)
+	}
+	if d := math.Abs(angleDelta(before, f.cam.Rot)); d > 0.001 {
+		t.Errorf("the world turned %.1f degrees over two seconds of dragging", d*180/math.Pi)
+	}
+}
+
+// Pinning a body does put the world's own axes up — there is no local vertical to
+// speak of out there — but it takes about half a second over it. Snapping is what
+// read as a rendering fault.
+func TestPinningABodyTurnsTheWorldGently(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	before := f.cam.Rot
+
+	f.lookAt(s.Cfg.System.IndexOf("moon"))
+	f.updateCamera(a, view)
+	step := math.Abs(angleDelta(before, f.cam.Rot))
+	full := math.Abs(angleDelta(before, math.Pi/2))
+	if step > full/4 {
+		t.Errorf("one frame moved %.0f%% of the way round", step/full*100)
+	}
+	if step == 0 {
+		t.Error("it did not start turning at all")
+	}
+
+	for range 120 {
+		f.updateCamera(a, view)
+	}
+	if d := math.Abs(angleDelta(f.cam.Rot, math.Pi/2)); d > 0.01 {
+		t.Errorf("after two seconds it is still %.1f degrees off", d*180/math.Pi)
+	}
+}
+
+// A scripted capture has to be settled: the zoom, the change of frame and the
+// rotation all ease, and a screenshot taken part way through any of them is a
+// screenshot of nothing in particular. The pinned views came out eighty degrees from
+// where they settle before snapCamera took the rotation on as well.
+func TestAScriptedCaptureIsSettled(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-saturn").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+
+	f.lookAt(s.Cfg.System.IndexOf("moon"))
+	f.snapCamera()
+	f.updateCamera(a, view)
+
+	if d := math.Abs(angleDelta(f.cam.Rot, math.Pi/2)); d > 0.001 {
+		t.Errorf("one frame after snapCamera the rotation is %.1f degrees off", d*180/math.Pi)
+	}
+	if f.camHoldK != 0 || f.ghostK != 0 {
+		t.Errorf("the view is still being held: camHold %g, ghost %g", f.camHoldK, f.ghostK)
+	}
+}
+
+// Launching on its own does not turn anything: the pad is on the +X axis, the camera
+// follows the vehicle, and the vertical it points up is the vehicle's own radius — so
+// the rotation starts at zero and stays there through the first seconds of the climb.
+// Worth pinning separately from the click, because "I launch and it turns ninety
+// degrees" and "I launch, click, and it turns ninety degrees" are different faults and
+// only the second one existed.
+func TestLaunchingAloneDoesNotTurnTheCamera(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+
+	for i := range 600 { // ten seconds off the pad
+		f.updateCamera(a, view)
+		if d := math.Abs(angleDelta(f.cam.Rot, 0)); d > 0.02 {
+			t.Fatalf("frame %d: the camera has turned %.1f degrees since liftoff", i, d*180/math.Pi)
+		}
+		s.Advance(a.ui.DT)
+	}
+}
+
+// A dragged view near the ground has to stay over the ground. The pad is carried
+// east at 465 m/s by the planet's own rotation, and a camera pinned in the inertial
+// frame is a camera the launch site slides out of — the whole width of a 1.5 km view
+// in three seconds, which is what "everything moves sideways when I click" is.
+func TestADraggedViewNearTheGroundStaysOverIt(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	if f.groundHold < 0.99 {
+		t.Fatalf("on the pad the ground track is held at %.2f, so this proves nothing", f.groundHold)
+	}
+
+	// What handleCamera does on the first pixel of a drag, without moving anything.
+	f.takeFree()
+	f.updateCamera(a, view)
+	x0, y0 := f.cam.Project(f.s.PadPos())
+
+	// A second of flight, with the camera left alone.
+	for range 60 {
+		s.Advance(a.ui.DT)
+		f.updateCamera(a, view)
+	}
+	x1, y1 := f.cam.Project(f.s.PadPos())
+
+	if d := math.Hypot(x1-x0, y1-y0); d > 20 {
+		t.Errorf("the launch pad slid %.0f px across the view in a second of dragging", d)
+	}
+}
+
+// padTrack projects the launch pad for a number of frames of a dragged view, with
+// the flight running at ×1, and reports the largest step between frames and how many
+// times the horizontal motion changed direction. Shake shows up as both.
+//
+// Moves under padQuiet are not counted as direction changes. With the turn derived
+// rather than integrated the pad holds its pixel to a thousandth of a millionth of
+// one, and the sign of that noise flips at random — a criterion of "any change of
+// sign at all" reports it as a hundred and fifty reversals, which is a measurement
+// of the last bit of a float64 and not of anything on screen.
+const padQuiet = 0.01
+
+func padTrack(f *FlightScreen, a *App, view Rect, frames int, held bool) (maxStep float64, reversals int) {
+	prevX, prevY, prevDir := 0.0, 0.0, 0.0
+	for i := range frames {
+		f.updateCamera(a, view)
+		if held {
+			f.handleCamera(a.ui, view)
+		}
+		x, y := f.cam.Project(f.s.PadPos())
+		if i > 0 {
+			maxStep = math.Max(maxStep, math.Hypot(x-prevX, y-prevY))
+			if d := x - prevX; math.Abs(d) > padQuiet {
+				if dir := d / math.Abs(d); prevDir != 0 && dir != prevDir {
+					reversals++
+				} else {
+					prevDir = dir
+				}
+			}
+		}
+		prevX, prevY = x, y
+		f.s.Advance(a.ui.DT)
+	}
+	return maxStep, reversals
+}
+
+// The camera must not shake. Deriving the ground's turn from the clock is the only way
+// to get that: integrating it frame by frame gives the camera a smooth angle while the
+// simulation advances in 0.02 s quanta — 0.02 does not divide a sixtieth — so the
+// ground jumps ±4.6 m against a camera that does not, which is five pixels of jitter
+// at a 1.5 km view. The centre had exactly this fault once and it is documented.
+func TestADraggedViewDoesNotShake(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	f.takeFree() // what the first pixel of a drag does
+	f.manualScale = true
+
+	step, reversals := padTrack(f, a, view, 600, false)
+	if step > 1 {
+		t.Errorf("the pad moved %.1f px in a single frame", step)
+	}
+	if reversals > 4 {
+		t.Errorf("the pad changed direction %d times in ten seconds", reversals)
+	}
+}
+
+// And holding the button still has to hold the ground still. The drag pins whatever is
+// under the pointer, so if it pins an inertial point the ground slides out from under
+// it at 465 m/s — which is the same fault as the camera being inertial, reached the
+// other way round.
+func TestHoldingTheButtonHoldsTheGround(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+
+	// Press, and keep the pointer exactly where it is for a second.
+	a.ui.MX, a.ui.MY = 500, 400
+	a.ui.Click, a.ui.Down = true, true
+	f.handleCamera(a.ui, view)
+	a.ui.Click = false
+
+	x0, y0 := f.cam.Project(f.s.PadPos())
+	if _, _ = padTrack(f, a, view, 60, true); true {
+		x1, y1 := f.cam.Project(f.s.PadPos())
+		if d := math.Hypot(x1-x0, y1-y0); d > 20 {
+			t.Errorf("the pad slid %.0f px while the button was held still", d)
+		}
 	}
 }

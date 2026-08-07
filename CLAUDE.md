@@ -755,6 +755,24 @@ the time it was measured**.
   not also grab the world; `u.consumed` is the only thing that knows.
 - **The picker shows the free state as its own entry.** Claiming to follow the vehicle while the camera
   sits half way to the Moon is a lie about the one thing that control exists to report.
+- **A dragged view near the ground turns with the ground.** The launch site is carried east at 465 m/s, so
+  a camera held still in the *inertial* frame is a camera the pad slides out of — the whole width of a
+  1.5 km view in three seconds. That is what "everything moves sideways when I click" was, and it was
+  hiding behind the ninety-degree flip until that was fixed. While the picture is about the ground a free
+  camera advances its centre and its rotation by `ω·groundHold·dt`, so a point on the surface holds its
+  place on screen exactly; pulled back, the ramp takes it to zero and the view is inertial again, which is
+  what an orbit wants.
+- **`groundHold` asks about the frame and the scale, not about what the camera follows.** It used to
+  require `follow == -1`, which meant a dragged view a kilometre over the pad was not "standing on it" as
+  far as the trail was concerned — while obviously being exactly that.
+- **A drag never rotates the picture, and pinning a body takes half a second over
+  it.** `Rot` is the world angle pointed at the top of the screen: following the vehicle it is the
+  vehicle's own radius, so a launch reads as a climb, and anywhere else it is the world's +Y. Those are
+  different by a quarter turn on the pad — the launch site sits on the +X axis — and the switch used to
+  happen in one frame with `hold = 1`, so a click on the pad turned the whole picture ninety degrees. It
+  looked like a rendering fault and was reported as one. A pan has nothing to say about which way is up, so
+  it now says nothing; a pinned body eases. `snapCamera` lands all of it at once for a scripted capture,
+  which is what keeps the pinned captures from coming out eighty degrees from where they settle.
 - **The camera lets go of the local vertical as it pulls back**, on the same ramp that slides the centre
   from the vehicle to the planet's middle — standing on a planet becomes looking at one over the same
   stretch. Held all the way out the picture would spin with the orbit, a full turn every five seconds at
@@ -814,6 +832,18 @@ the time it was measured**.
   (0.02 s does not divide the 1/60 frame) turns that lag into ±5 px of shake — 150 direction reversals
   over 700 frames. The centre is now derived from the vehicle's current position every frame: zero
   reversals. Checked with `-camtrace N`, which prints the vehicle and pad screen coordinates per frame.
+- **A dragged view is stored in the ground's turning frame, and the turn is derived from the clock.**
+  Two faults, one cause. Pinned in inertial space, a dragged view is one the launch site leaves at
+  465 m/s — the whole width of a 1.5 km picture in three seconds, which is exactly what "holding the
+  mouse button makes the camera drift right" was. So `freePos`/`freeRot` are kept pre-rotated by
+  `groundTurn()` (`freeCenter`/`setFree`/`takeFree`), and the drag anchor, the drag shift and the
+  wheel's zoom-about-the-cursor correction all go through the same conversion. And `groundTurn` is
+  `ω·T·groundHold`, read off the mission clock every frame: the first cut *integrated* `ω·dt` into
+  `cam.Rot` and walked straight into the paragraph above, because the simulation advances in whole
+  0.02 s steps while a camera turning by `dt` does not — 4.3 px of jitter and 499 reversals in ten
+  seconds. Derived, the pad holds its pixel to 1e-12 of one, which is why `padTrack` ignores anything
+  under `padQuiet`: the sign of the last bit flips at random and counting that is measuring float64,
+  not the screen.
 - **Framing is derived from the eased zoom, not the raw `span`.** Otherwise a step in the span — the
   orbit closing, say — jolts the composition while the zoom is still gliding.
 - **The camera focus cannot be lerped towards the planet's centre linearly.** The target is thousands of
