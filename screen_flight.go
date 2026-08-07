@@ -31,9 +31,12 @@ type FlightScreen struct {
 	// middle of the screen: the vehicle, a body, or camFree for wherever it was
 	// last dragged to. Splitting the two is what lets the view be pushed around
 	// while a moon still holds still in it.
-	frame   int
-	follow  int
-	freePos sim.Vec2 // centre in frame coordinates, while free
+	frame  int
+	follow int
+	// freePos and freeRot are the dragged view, kept in the launch body's turning
+	// frame while the picture is about the ground. See freeCenter.
+	freePos sim.Vec2
+	freeRot float64
 	// manualScale stops the zoom easing towards the automatic framing. Any camera
 	// gesture sets it; C clears it.
 	manualScale bool
@@ -123,7 +126,7 @@ func (f *FlightScreen) handOver(dt float64) {
 	}
 	if want := f.frameBody(); want != f.frameShown {
 		d := f.frameShift(f.frameShown, want, f.s.St.T)
-		f.freePos = f.freePos.Add(d)
+		f.setFree(f.freeCenter().Add(d))
 		f.camHold, f.camHoldK = f.cam.Center.Add(d), 1
 		// And what is being let go of, held exactly where it was drawn: the offset
 		// is taken once, here, and never recomputed — at this instant the two frames
@@ -323,11 +326,48 @@ func (f *FlightScreen) autoScale(view Rect) float64 {
 	return math.Min(view.W, view.H) / span
 }
 
+// groundTurn is how far the launch body has turned since liftoff, weighted by how
+// much the picture is about its surface.
+//
+// Derived from the clock every frame and never accumulated. Integrating it frame by
+// frame is what made a dragged view shake: the simulation advances in whole 0.02 s
+// steps and 0.02 does not divide a sixtieth of a second, so the ground moves in
+// quanta of four and a half metres while a camera turning smoothly does not — five
+// pixels of jitter at a 1.5 km view, and five hundred changes of direction in ten
+// seconds. The camera centre had the same fault once, for the same reason, and the
+// cure was the same: derive it, do not integrate it.
+func (f *FlightScreen) groundTurn() float64 {
+	if f.groundHold <= 0 || f.frameBody() != f.s.Cfg.LaunchBody {
+		return 0
+	}
+	return f.s.Cfg.System.Bodies[f.s.Cfg.LaunchBody].AngularVelocity() * f.s.St.T * f.groundHold
+}
+
+// freeCenter is where a dragged view is looking, in the frame being drawn.
+//
+// freePos is kept in the launch body's *turning* frame, not in the drawn one, so that
+// a view dragged over a patch of ground stays over it: the launch site is carried east
+// at 465 m/s, and a centre held still in the inertial frame is one the pad leaves at
+// the rate of a 1.5 km view every three seconds. Away from the launch body, or pulled
+// far enough back that the ground stops being the subject, the turn is zero and this
+// is the identity.
+func (f *FlightScreen) freeCenter() sim.Vec2 { return f.freePos.Rotate(f.groundTurn()) }
+
+// setFree remembers a point of the drawn frame as the dragged centre.
+func (f *FlightScreen) setFree(p sim.Vec2) { f.freePos = p.Rotate(-f.groundTurn()) }
+
+// takeFree hands the camera over to a drag, keeping the picture exactly where it is.
+func (f *FlightScreen) takeFree() {
+	f.setFree(f.cam.Center)
+	f.freeRot = f.cam.Rot - f.groundTurn()
+	f.follow = camFree
+	f.manualScale = true
+}
+
 // updateCamera places the camera for this frame. Scale, centre and rotation are
 // three separate decisions, and each of them is the user's the moment the user
 // touches it.
 func (f *FlightScreen) updateCamera(a *App, view Rect) {
-	f.handOver(a.ui.DT)
 	f.cam.View = view
 	want := f.autoScale(view)
 
@@ -365,23 +405,13 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 		f.groundHold = 1 - u
 	}
 
-	// And a view that is about the ground has to stay over the ground. The launch
-	// site is carried east at 465 m/s by the planet's own rotation, so a camera held
-	// still in the inertial frame is one the pad slides out of — the whole width of a
-	// 1.5 km view in three seconds, which is what a click near the pad looked like.
-	// A free camera therefore turns with the ground, centre and rotation together, on
-	// the same ramp: a point on the surface then holds its place on screen exactly.
-	if f.follow == camFree && f.groundHold > 0 {
-		if w := f.s.Cfg.System.Bodies[f.s.Cfg.LaunchBody].AngularVelocity(); w != 0 {
-			turn := w * f.groundHold * a.ui.DT
-			f.freePos = f.freePos.Rotate(turn)
-			f.cam.Rot += turn
-		}
-	}
+	// The hand-over needs groundHold above it, because what it carries across is the
+	// dragged view and that is stored in the turning frame.
+	f.handOver(a.ui.DT)
 
 	switch {
 	case f.follow == camFree:
-		f.cam.Center = f.holdView(f.freePos)
+		f.cam.Center = f.holdView(f.freeCenter())
 	case f.follow >= 0:
 		f.cam.Center = f.holdView(f.framePoint(sim.Vec2{}, f.follow, f.s.St.T))
 	default:
@@ -403,13 +433,17 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 	// world.
 	//
 	// The other two cases are the ones that went wrong. A drag is a pan and has
-	// nothing to say about which way is up, so it says nothing: the rotation stays
-	// where it was. Pinning a body does put the world's own axes up, but over about
-	// half a second — moving the whole way in one frame turned the picture ninety
-	// degrees on a click, because the launch pad sits on the +X axis and the world's
-	// +Y is a quarter turn from it. That read as a rendering fault, and fairly.
+	// nothing to say about which way is up, so it says nothing about it: the view
+	// keeps the orientation it was dragged with, which near the ground means turning
+	// with the ground and nowhere else means turning at all. Pinning a body does put
+	// the world's own axes up, but over about half a second — moving the whole way in
+	// one frame turned the picture ninety degrees on a click, because the launch pad
+	// sits on the +X axis and the world's +Y is a quarter turn from it. That read as a
+	// rendering fault, and fairly.
 	want, hold := f.cam.Rot, 0.0
 	switch {
+	case f.follow == camFree:
+		want, hold = f.freeRot+f.groundTurn(), 1
 	case f.follow == -1:
 		want, hold = f.vehiclePos().Angle(), 1-u
 	case f.follow >= 0:
@@ -434,12 +468,16 @@ func (f *FlightScreen) handleCamera(u *UI, view Rect) {
 			// means it stays in the middle instead, which is the whole of what
 			// following is for.
 			after := f.cam.Unproject(u.MX, u.MY)
-			f.freePos = f.freePos.Add(under.Sub(after))
+			f.setFree(f.freeCenter().Add(under.Sub(after)))
 		}
 	}
 
 	if u.Click && !u.consumed && u.hover(view) {
-		f.dragging, f.dragAnchor = true, f.cam.Unproject(u.MX, u.MY)
+		// The anchor is a point of the ground, not of inertial space: holding the
+		// pointer still has to hold the ground still, and the ground is going east
+		// at 465 m/s.
+		f.dragging = true
+		f.dragAnchor = f.cam.Unproject(u.MX, u.MY).Rotate(-f.groundTurn())
 	}
 	if !u.Down {
 		f.dragging = false
@@ -448,15 +486,15 @@ func (f *FlightScreen) handleCamera(u *UI, view Rect) {
 		return
 	}
 
-	shift := f.dragAnchor.Sub(f.cam.Unproject(u.MX, u.MY))
+	turn := f.groundTurn()
+	shift := f.dragAnchor.Sub(f.cam.Unproject(u.MX, u.MY).Rotate(-turn))
 	if shift.Len() == 0 {
 		return
 	}
 	if f.follow != camFree {
 		// Taking over from wherever the camera happened to be, so the picture does
 		// not jump on the first pixel of the drag.
-		f.freePos, f.follow = f.cam.Center, camFree
-		f.manualScale = true
+		f.takeFree()
 	}
 	f.freePos = f.freePos.Add(shift)
 }

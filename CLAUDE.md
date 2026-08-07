@@ -832,6 +832,18 @@ the time it was measured**.
   (0.02 s does not divide the 1/60 frame) turns that lag into ±5 px of shake — 150 direction reversals
   over 700 frames. The centre is now derived from the vehicle's current position every frame: zero
   reversals. Checked with `-camtrace N`, which prints the vehicle and pad screen coordinates per frame.
+- **A dragged view is stored in the ground's turning frame, and the turn is derived from the clock.**
+  Two faults, one cause. Pinned in inertial space, a dragged view is one the launch site leaves at
+  465 m/s — the whole width of a 1.5 km picture in three seconds, which is exactly what "holding the
+  mouse button makes the camera drift right" was. So `freePos`/`freeRot` are kept pre-rotated by
+  `groundTurn()` (`freeCenter`/`setFree`/`takeFree`), and the drag anchor, the drag shift and the
+  wheel's zoom-about-the-cursor correction all go through the same conversion. And `groundTurn` is
+  `ω·T·groundHold`, read off the mission clock every frame: the first cut *integrated* `ω·dt` into
+  `cam.Rot` and walked straight into the paragraph above, because the simulation advances in whole
+  0.02 s steps while a camera turning by `dt` does not — 4.3 px of jitter and 499 reversals in ten
+  seconds. Derived, the pad holds its pixel to 1e-12 of one, which is why `padTrack` ignores anything
+  under `padQuiet`: the sign of the last bit flips at random and counting that is measuring float64,
+  not the screen.
 - **Framing is derived from the eased zoom, not the raw `span`.** Otherwise a step in the span — the
   orbit closing, say — jolts the composition while the zoom is still gliding.
 - **The camera focus cannot be lerped towards the planet's centre linearly.** The target is thousands of

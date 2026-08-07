@@ -413,8 +413,8 @@ func (sr *shotRunner) step(a *App) bool {
 		}
 		a.flight.lookAt(focus)
 		if st.freeHalfway {
-			a.flight.follow = camFree
-			a.flight.freePos = a.flight.framePoint(sim.Vec2{}, sr.tl.crossing, a.flight.s.St.T).Scale(0.5)
+			a.flight.takeFree()
+			a.flight.setFree(a.flight.framePoint(sim.Vec2{}, sr.tl.crossing, a.flight.s.St.T).Scale(0.5))
 		}
 		// Nothing here writes Cfg.Nodes. A step used to be able to bring its own
 		// plan, and the assignment ran on every step, which wiped the one the

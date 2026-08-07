@@ -73,7 +73,7 @@ func TestLookAtSetsBothFrameAndFollow(t *testing.T) {
 
 	// A drag takes over from wherever the camera was, without moving the picture.
 	f.cam = Camera{Center: sim.Vec2{X: 7e6}, Scale: 1e-4, View: Rect{0, 0, 800, 600}}
-	f.follow, f.freePos = camFree, f.cam.Center
+	f.takeFree()
 	if f.frameBody() != s.St.Center {
 		t.Error("a free view lost the frame it was dragged in")
 	}
@@ -339,7 +339,7 @@ func TestAClickDoesNotRotateTheWorld(t *testing.T) {
 	before := f.cam.Rot
 
 	// What handleCamera does on the first pixel of a drag.
-	f.freePos, f.follow = f.cam.Center, camFree
+	f.takeFree()
 	f.updateCamera(a, view)
 
 	if d := math.Abs(angleDelta(before, f.cam.Rot)); d > 0.001 {
@@ -451,8 +451,7 @@ func TestADraggedViewNearTheGroundStaysOverIt(t *testing.T) {
 	}
 
 	// What handleCamera does on the first pixel of a drag, without moving anything.
-	f.freePos, f.follow = f.cam.Center, camFree
-	f.manualScale = true
+	f.takeFree()
 	f.updateCamera(a, view)
 	x0, y0 := f.cam.Project(f.s.PadPos())
 
@@ -465,5 +464,93 @@ func TestADraggedViewNearTheGroundStaysOverIt(t *testing.T) {
 
 	if d := math.Hypot(x1-x0, y1-y0); d > 20 {
 		t.Errorf("the launch pad slid %.0f px across the view in a second of dragging", d)
+	}
+}
+
+// padTrack projects the launch pad for a number of frames of a dragged view, with
+// the flight running at ×1, and reports the largest step between frames and how many
+// times the horizontal motion changed direction. Shake shows up as both.
+//
+// Moves under padQuiet are not counted as direction changes. With the turn derived
+// rather than integrated the pad holds its pixel to a thousandth of a millionth of
+// one, and the sign of that noise flips at random — a criterion of "any change of
+// sign at all" reports it as a hundred and fifty reversals, which is a measurement
+// of the last bit of a float64 and not of anything on screen.
+const padQuiet = 0.01
+
+func padTrack(f *FlightScreen, a *App, view Rect, frames int, held bool) (maxStep float64, reversals int) {
+	prevX, prevY, prevDir := 0.0, 0.0, 0.0
+	for i := range frames {
+		f.updateCamera(a, view)
+		if held {
+			f.handleCamera(a.ui, view)
+		}
+		x, y := f.cam.Project(f.s.PadPos())
+		if i > 0 {
+			maxStep = math.Max(maxStep, math.Hypot(x-prevX, y-prevY))
+			if d := x - prevX; math.Abs(d) > padQuiet {
+				if dir := d / math.Abs(d); prevDir != 0 && dir != prevDir {
+					reversals++
+				} else {
+					prevDir = dir
+				}
+			}
+		}
+		prevX, prevY = x, y
+		f.s.Advance(a.ui.DT)
+	}
+	return maxStep, reversals
+}
+
+// The camera must not shake. Deriving the ground's turn from the clock is the only way
+// to get that: integrating it frame by frame gives the camera a smooth angle while the
+// simulation advances in 0.02 s quanta — 0.02 does not divide a sixtieth — so the
+// ground jumps ±4.6 m against a camera that does not, which is five pixels of jitter
+// at a 1.5 km view. The centre had exactly this fault once and it is documented.
+func TestADraggedViewDoesNotShake(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	f.takeFree() // what the first pixel of a drag does
+	f.manualScale = true
+
+	step, reversals := padTrack(f, a, view, 600, false)
+	if step > 1 {
+		t.Errorf("the pad moved %.1f px in a single frame", step)
+	}
+	if reversals > 4 {
+		t.Errorf("the pad changed direction %d times in ten seconds", reversals)
+	}
+}
+
+// And holding the button still has to hold the ground still. The drag pins whatever is
+// under the pointer, so if it pins an inertial point the ground slides out from under
+// it at 465 m/s — which is the same fault as the camera being inertial, reached the
+// other way round.
+func TestHoldingTheButtonHoldsTheGround(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+
+	// Press, and keep the pointer exactly where it is for a second.
+	a.ui.MX, a.ui.MY = 500, 400
+	a.ui.Click, a.ui.Down = true, true
+	f.handleCamera(a.ui, view)
+	a.ui.Click = false
+
+	x0, y0 := f.cam.Project(f.s.PadPos())
+	if _, _ = padTrack(f, a, view, 60, true); true {
+		x1, y1 := f.cam.Project(f.s.PadPos())
+		if d := math.Hypot(x1-x0, y1-y0); d > 20 {
+			t.Errorf("the pad slid %.0f px while the button was held still", d)
+		}
 	}
 }
