@@ -21,10 +21,34 @@ type PresetScreen struct {
 	// hovering one row while the keyboard sits on another is two selections, and
 	// only one of them can be right.
 	sel int
+
+	// hasSaved is whether the user's own stored setup gets a row. It is decided
+	// once, here, rather than per frame: the answer costs a read of the disk.
+	//
+	// The row is *last*, which is not a matter of taste. Every index in this screen
+	// and in -preset counts into sim.Presets(), and a row at the front would shift
+	// all of them — the kind of quiet renumbering this project has been bitten by
+	// more than once. Appended, it changes nothing above it.
+	hasSaved bool
 }
 
 func NewPresetScreen(sel int) *PresetScreen {
-	return &PresetScreen{sel: sel}
+	s := &PresetScreen{sel: sel}
+	// Offered only if there is something to offer, and only if it still reads: a
+	// row that reports a broken file every time it is clicked is not a mission.
+	if _, ok, err := loadConfig(); ok && err == nil {
+		s.hasSaved = true
+	}
+	return s
+}
+
+// rows is how many the list has: the presets, and the saved setup if there is one.
+func (s *PresetScreen) rows() int {
+	n := len(sim.Presets())
+	if s.hasSaved {
+		n++
+	}
+	return n
 }
 
 // presetRowH is how tall a row would like to be, presetRowMin how short it will go
@@ -78,6 +102,27 @@ func (s *PresetScreen) move(delta, n int) {
 // than told to change its mind.
 func (s *PresetScreen) pick(a *App, i int) {
 	presets := sim.Presets()
+
+	// The saved setup is read afresh rather than kept from construction, so that the
+	// editor gets its own slices to mutate: the vehicle, the layers and the
+	// keyframes are all edited in place, and handing over a shared copy would mean
+	// editing the stored one too.
+	if s.hasSaved && i == len(presets) {
+		cfg, ok, err := loadConfig()
+		if !ok || err != nil {
+			return
+		}
+		a.ui.cancel()
+		s.sel = i
+		a.cfg = cfg
+		// Which preset it came from is not a question a saved setup answers, and
+		// the dropdown has no way to say "none", so it says the first one. The same
+		// small lie the LOAD button in that screen already tells.
+		a.setup = NewSetupScreen(0)
+		a.screen = ScreenSetup
+		return
+	}
+
 	if i < 0 || i >= len(presets) {
 		return
 	}
@@ -97,8 +142,9 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 	u := a.ui
 	b := a.Bounds()
 	presets := sim.Presets()
+	n := s.rows()
 
-	if s.sel < 0 || s.sel >= len(presets) {
+	if s.sel < 0 || s.sel >= n {
 		s.sel = 0
 	}
 
@@ -113,20 +159,33 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 	// The list, centred in what is left, so that adding a preset moves the block
 	// rather than pushing the last one off the bottom.
 	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - 3*pad - 8}
-	rowH, area := presetLayout(body, len(presets))
+	rowH, area := presetLayout(body, n)
 
 	if u.keyPressed(ebiten.KeyArrowDown) {
-		s.move(1, len(presets))
+		s.move(1, n)
 	}
 	if u.keyPressed(ebiten.KeyArrowUp) {
-		s.move(-1, len(presets))
+		s.move(-1, n)
 	}
 	if u.keyPressed(ebiten.KeyEnter) || u.keyPressed(ebiten.KeyNumpadEnter) {
 		s.pick(a, s.sel)
 		return
 	}
 
-	for i, p := range presets {
+	// One label pair per row, so that the saved setup is drawn, hovered, selected
+	// and clicked by exactly the same code as a preset rather than by a copy of it.
+	type row struct{ name, slug string }
+	list := make([]row, 0, n)
+	for _, p := range presets {
+		list = append(list, row{presetName(p.Name), p.Name})
+	}
+	if s.hasSaved {
+		// No identifier: there is no -preset for it. What it is instead is the one
+		// row here that is yours.
+		list = append(list, row{T("presets.saved"), ""})
+	}
+
+	for i, p := range list {
 		r := presetRowRect(area, rowH, i)
 		hover := u.hover(r)
 
@@ -144,10 +203,10 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 			strokeRect(dst, r, 1, colAccent)
 		}
 
-		drawText(dst, presetName(p.Name), fontUI, r.X+16, r.Y+(r.H-fontUI.Size)/2-1, fg, alignLeft)
+		drawText(dst, p.name, fontUI, r.X+16, r.Y+(r.H-fontUI.Size)/2-1, fg, alignLeft)
 		// The identifier as well as the name: it is what -preset and ?preset= take,
 		// and there is nowhere else to find it out.
-		drawText(dst, p.Name, fontMono, r.Right()-16, r.Y+(r.H-fontMono.Size)/2-1,
+		drawText(dst, p.slug, fontMono, r.Right()-16, r.Y+(r.H-fontMono.Size)/2-1,
 			slug, alignRight)
 
 		if u.clicked(r) {

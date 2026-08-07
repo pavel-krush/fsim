@@ -49,8 +49,12 @@ type Body struct {
 	ArgPeri   float64 // rad, where periapsis points
 	MeanAnom0 float64 // rad, mean anomaly at t = 0
 
-	Mu  float64 // m^3/s^2, standard gravitational parameter, derived
-	SOI float64 // m, radius of the sphere of influence, derived
+	// Derived by Normalize, and left out of JSON for it: what is worth writing down
+	// is the inputs. The root's sphere of influence is +Inf besides, which JSON has
+	// no way to spell — so a saved system would not be writable at all with these
+	// in it.
+	Mu  float64 `json:"-"` // m^3/s^2, standard gravitational parameter
+	SOI float64 `json:"-"` // m, radius of the sphere of influence
 }
 
 // Normalize derives the dependent quantities from Radius and MassSource.

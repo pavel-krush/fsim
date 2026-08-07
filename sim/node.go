@@ -39,10 +39,12 @@ const predBurnStep = 1.0
 // several times a second, so it needs a ceiling more than it needs to be complete.
 const maxPredSteps = 20000
 
-// maxNodes is how many manoeuvres a flight plan may hold. The executed ones are
+// MaxNodes is how many manoeuvres a flight plan may hold. The executed ones are
 // tracked as a bitmask in the state, which is what sets the ceiling — and a
 // flight plan with more than a few dozen burns in it is not a flight plan.
-const maxNodes = 64
+// Exported because a plan can arrive from outside the program — a saved setup —
+// and whoever reads one has to know what will fit.
+const MaxNodes = 64
 
 // Node is one scheduled burn.
 type Node struct {
@@ -84,7 +86,7 @@ func (n *Node) Direction(pos, vel Vec2) Vec2 {
 func (s *Sim) pendingNode() int {
 	best := -1
 	for i := range s.Cfg.Nodes {
-		if i >= maxNodes || s.St.NodesDone&(1<<uint(i)) != 0 {
+		if i >= MaxNodes || s.St.NodesDone&(1<<uint(i)) != 0 {
 			continue
 		}
 		if best < 0 || s.Cfg.Nodes[i].T < s.Cfg.Nodes[best].T {

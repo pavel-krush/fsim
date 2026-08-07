@@ -116,6 +116,8 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `perf.go` | The service readout: what a frame costs, split into physics and everything else |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
 | `screen_presets.go` | The first screen: the mission list, and nothing else |
+| `store.go` | Saving a setup: JSON in, JSON out, and what a loaded one has to be before it is flown |
+| `store_native.go`, `store_js.go` | Where it is kept — a file in the user's config directory, or `localStorage` |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
 | `screen_flight.go` | Trajectory, bodies, rails, prediction, launch pad, camera, flight plan, telemetry, time controls |
 | `screen_graphs.go` | Seven plots on a movable time axis, event ruler, scrubber |
@@ -636,6 +638,43 @@ what you are trying to fly, so it comes second.
   configuration being replaced — the same trap `loadPreset` documents.
 - **There is no way back to the list**, deliberately: the editor has its own preset dropdown, which is
   the same choice without losing what you have typed.
+
+## Saving a setup
+
+Everything the editor produces is one `sim.Config` — the system of bodies, the air, the vehicle, the
+pitch programme and the flight plan — so saving it is one file. `SAVE` and `LOAD` sit in the setup
+header, and the stored setup gets a row of its own at the bottom of the mission list.
+
+- **One slot, not a library.** The fault being fixed is losing an evening of editing, not the absence
+  of a collection. There is nothing to name and nothing to choose.
+- **What is written is the inputs.** `Body.Mu` and `Body.SOI` carry `json:"-"` because they are derived —
+  and because the root's sphere of influence is `+Inf`, which JSON cannot spell, so a normalized system
+  was not writable at all until they came out. `EnsureSystem` derives them again on the way in, which is
+  also what clamps a stale launch body and mirrors `Body` back. `TestASystemOnRailsCanBeWrittenAtAll`
+  pins the trap, since the symptom is a whole feature failing over one struct tag in another package.
+- **A stored file is the one input this program gets from a previous version of itself**, so it is the
+  one that has to be doubted: `validConfig` refuses a config with no bodies, no radius, no stages or
+  more burns than the bitmask holds, and a `version` from the future says so rather than being misread.
+  A decoded config cannot contain a NaN — JSON has no literal for one — so the only guard needed on the
+  way out is `Marshal`'s own refusal to write one.
+- **The round trip is tested by flying it, not by comparing JSON.** Every preset is flown 400 s before
+  and after, and the states have to match to the last bit. A config that reads back almost right is the
+  worst outcome available: nothing complains and the numbers quietly differ.
+- **Loading is `loadPreset` with a different button on it**, and needs the same two things: `u.cancel()`,
+  because every field in that screen is bound to an address inside the configuration being replaced, and
+  a reset of the body selection, because the stale index is how this screen crashes.
+- **The saved row is last in the mission list.** Every index in that screen and in `-preset` counts into
+  `sim.Presets()`; a row at the front would shift all of them. It is also read afresh when picked rather
+  than kept from construction, so the editor gets its own slices — the stages, layers and keyframes are
+  edited in place, and a shared copy would mean editing the stored one too.
+- **`-shot` ignores it.** Whether the machine running a capture happens to have saved a setup is not part
+  of the program, and a screenshot that depends on it is not reproducible. The tests take the same care:
+  `noSavedSetup(t)` points the store at an empty directory, or the row count depends on whose laptop it is.
+- **Written through a temporary file and renamed** natively, so a failure half way through leaves the
+  previous save intact rather than a truncated file where a setup used to be. In a browser it is
+  `localStorage`, per-origin — a local build and the published page keep separate setups, which is the
+  right way round — and every call is recovered from a JS exception, because storage is denied outright
+  in some privacy modes and a page that dies on a save is worse than one that says it could not save.
 
 ## Stage count
 

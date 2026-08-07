@@ -23,6 +23,13 @@ type SetupScreen struct {
 	// launch body is a separate choice: a system is worth looking at whether or
 	// not the pad is on the body being looked at.
 	selBody int
+	// note is what the last save or load had to say, and noteLeft how long it has
+	// left on screen. A file written or read is invisible otherwise, and a save
+	// nobody can see the result of is a save nobody believes.
+	note     string
+	noteBad  bool
+	noteLeft float64
+
 	// preset is the one last loaded. The configuration can be edited freely
 	// afterwards, so this is a record of where it came from and not a claim about
 	// what it still is.
@@ -691,6 +698,30 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 
 	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, r.Y + 8, langPickerW, r.H - 16})
 
+	// Save and load, after the tagline: an evening of editing is worth keeping, and
+	// until these existed the only way out of this screen was to lose it. One slot,
+	// so there is nothing to name and nothing to choose. LOAD is not greyed out when
+	// there is nothing saved — it says so instead, which is more use than a button
+	// that has been switched off for a reason you cannot see, and costs no read of
+	// the disk on every frame to decide.
+	const bsw = 116.0
+	bx := r.X + 14 + textWidth("FSIM", fontBig) + 10 + textWidth(T("setup.tagline"), fontUISm) + 22
+	if u.Button(dst, Rect{bx, r.Y + 8, bsw, r.H - 16}, T("setup.save"), ButtonNormal) {
+		s.save(a)
+	}
+	if u.Button(dst, Rect{bx + bsw + 8, r.Y + 8, bsw, r.H - 16}, T("setup.load"), ButtonNormal) {
+		s.load(a)
+		return // the configuration underneath every widget below has just changed
+	}
+	if s.noteLeft > 0 {
+		s.noteLeft -= u.DT
+		col := colTextDim
+		if s.noteBad {
+			col = colBad
+		}
+		drawText(dst, s.note, fontUISm, bx+2*(bsw+8)+8, r.Y+(r.H-fontUISm.Size)/2, col, alignLeft)
+	}
+
 	// A picker rather than a row of buttons: six of them already needed 900 pixels
 	// of header, and the number only goes one way.
 	presets := sim.Presets()
@@ -722,6 +753,44 @@ func (s *SetupScreen) drawHeader(a *App, dst *ebiten.Image, r Rect) {
 // selected body is the half that crashed: coming from a system of eighteen to a
 // system of one leaves the editor holding index nine, and the columns are drawn
 // after this runs, not before.
+// noteFor is how long a note stays up, in seconds. Long enough to read a sentence,
+// short enough that it is gone before it becomes furniture.
+const noteFor = 4.0
+
+// say puts a note in the header.
+func (s *SetupScreen) say(text string, bad bool) {
+	s.note, s.noteBad, s.noteLeft = text, bad, noteFor
+}
+
+// save writes the configuration as it stands, edits and all.
+func (s *SetupScreen) save(a *App) {
+	a.cfg.EnsureSystem()
+	if err := saveConfig(a.cfg); err != nil {
+		s.say(fmt.Sprintf(T("setup.saveFailed"), err), true)
+		return
+	}
+	s.say(T("setup.saved"), false)
+}
+
+// load replaces it with what was saved, if anything was.
+func (s *SetupScreen) load(a *App) {
+	cfg, ok, err := loadConfig()
+	switch {
+	case err != nil:
+		s.say(fmt.Sprintf(T("setup.loadFailed"), err), true)
+		return
+	case !ok:
+		// Not an error: nothing has been saved yet. Which is worth saying, because
+		// the alternative is a button that appears to do nothing.
+		s.say(T("setup.noSave"), false)
+		return
+	}
+	// The same care a preset needs, and for the same reason: every field in this
+	// screen is bound to an address inside the configuration being replaced.
+	s.loadPreset(a, cfg)
+	s.say(T("setup.loaded"), false)
+}
+
 func (s *SetupScreen) loadPreset(a *App, cfg sim.Config) {
 	a.ui.cancel()
 	a.cfg = cfg

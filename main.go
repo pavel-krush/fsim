@@ -206,6 +206,9 @@ func main() {
 	app := newApp(chosen, *presetSlug != "", *fly)
 	if *shotDir != "" {
 		app.shots = newShotRunner(*shotDir, app.cfg)
+		// A capture has to be the same on every machine, and whether the person
+		// running it happens to have saved a setup is not part of the program.
+		app.presets.hasSaved = false
 	}
 	app.traceLeft = *camTrace
 

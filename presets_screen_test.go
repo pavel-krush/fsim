@@ -43,6 +43,8 @@ func TestPickingAMissionLoadsItAndMovesOn(t *testing.T) {
 		t.Fatal("no apollo-mars preset")
 	}
 
+	noSavedSetup(t) // the list must be the presets and nothing else here
+
 	a := &App{ui: NewUI(), cfg: presets[0].Cfg}
 	a.presets = NewPresetScreen(0)
 	a.setup = NewSetupScreen(0)
@@ -77,6 +79,8 @@ func TestPickingAMissionLoadsItAndMovesOn(t *testing.T) {
 // The keyboard walks the list and stops at the ends: a short list is easier to aim
 // at when it has ends you can feel.
 func TestTheListStopsAtItsEnds(t *testing.T) {
+	noSavedSetup(t)
+
 	n := len(sim.Presets())
 	s := NewPresetScreen(0)
 
