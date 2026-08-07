@@ -244,6 +244,17 @@ type Sim struct {
 	// delivered the time asked for, so the flight is going slower than the warp
 	// setting claims.
 	WarpLimited bool
+	// Steps counts the integrator steps taken, fixed and adaptive alike. Nothing in
+	// the physics reads it: it is there so that the interface can say what a step
+	// costs and how many of them a frame is buying, which is the difference between
+	// "the simulation is slow" and "the drawing is slow". A prediction runs on a
+	// copy, so its steps land in the copy's counter and not in this one.
+	Steps int64
+
+	// histThin multiplies the recording interval. It doubles every time the history
+	// is halved, so a flight left running for months keeps costing the same rather
+	// than being thinned again every few seconds. See maxHist.
+	histThin float64
 
 	coastH float64 // step the adaptive propagator wants next, s
 
@@ -288,6 +299,7 @@ func New(cfg Config) *Sim {
 	s := &Sim{
 		Cfg:          cfg,
 		HistInterval: 0.1,
+		histThin:     1,
 		WarpRate:     1,
 		surfaceP:     cfg.Atmo.SurfacePressure,
 	}
@@ -329,6 +341,8 @@ func (s *Sim) Reset() {
 	s.prevRadialV = 0
 	s.reachedSpace = false
 	s.leftHome = false
+	s.Steps = 0
+	s.histThin = 1
 	s.mark(EvLiftoff)
 	s.record()
 }
@@ -1104,9 +1118,22 @@ func (s *Sim) checkMaxQPassed() {
 // has no end, so recording it at full rate would grow without bound.
 const coastRecordFactor = 50
 
+// maxHist is how many samples the history holds before it starts throwing every
+// second one away. A flight has no end once it has a verdict, so without a ceiling
+// this is a leak with a physics engine attached: 93,000 samples and 43 MB of heap
+// at T+600 days on the Mars preset, growing linearly for as long as it is left
+// running, and every sample carries a PropFrac slice of its own for the collector
+// to walk.
+//
+// Twenty thousand is about eight megabytes and more points than any plot has pixels
+// for. Note that thinning the *rate* alone would not do it: during a coast a sample
+// is written per integrator step and the steps are minutes long, so the interval is
+// not what is binding — halving the stored history is.
+const maxHist = 20000
+
 // record appends a history sample if enough simulated time has passed.
 func (s *Sim) record() {
-	interval := s.HistInterval
+	interval := s.HistInterval * s.histThin
 	if s.Settled() {
 		interval *= coastRecordFactor
 	}
@@ -1116,6 +1143,33 @@ func (s *Sim) record() {
 	s.lastRecord = s.St.T
 	t := s.Telemetry()
 	s.Hist = append(s.Hist, t.Sample)
+	if len(s.Hist) >= maxHist {
+		s.thinHistory()
+	}
+}
+
+// thinHistory halves the history, and halves the rate the rest of the flight is
+// recorded at along with it.
+//
+// Keeping every second sample is a coarser record of the whole flight rather than a
+// complete record of the recent part: an ascent five days back is still on the graph,
+// at half the resolution it had. The alternative — dropping the oldest — would throw
+// the launch away, which is the one part of a flight everybody wants to look at.
+//
+// The last sample is always kept. It is the one the interface reads as "now", and an
+// even-length history would otherwise lose it.
+func (s *Sim) thinHistory() {
+	w := 0
+	for i := 0; i < len(s.Hist); i += 2 {
+		s.Hist[w] = s.Hist[i]
+		w++
+	}
+	if last := len(s.Hist) - 1; last%2 != 0 {
+		s.Hist[w] = s.Hist[last]
+		w++
+	}
+	s.Hist = s.Hist[:w]
+	s.histThin *= 2
 }
 
 // Telemetry snapshots everything worth displaying about the current state.

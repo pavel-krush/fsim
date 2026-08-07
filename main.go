@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -58,6 +59,8 @@ type App struct {
 	canvas *ebiten.Image
 	w, h   int
 
+	perf perf // the service readout in the corner of the flight screen
+
 	shots     *shotRunner // non-nil only in screenshot mode
 	traceLeft int         // frames left to print camera coordinates for
 }
@@ -84,6 +87,7 @@ func (a *App) Update() error {
 	a.ui.BeginFrame(a.canvas, 1.0/float64(ebiten.TPS()))
 	a.canvas.Fill(colBG)
 
+	t0 := time.Now()
 	switch a.screen {
 	case ScreenPresets:
 		a.presets.Update(a, a.canvas)
@@ -94,6 +98,15 @@ func (a *App) Update() error {
 	case ScreenGraphs:
 		a.graphs.Update(a, a.canvas)
 	}
+	// The whole frame, and the part of it that was integration: the difference is
+	// what the interface costs. Only the flight screen has a simulation to separate.
+	var simNs, steps int64
+	var simT float64
+	if a.screen == ScreenFlight && a.flight != nil {
+		simNs, steps, simT = a.flight.simNs, a.flight.simSteps, a.flight.simT
+		a.perf.pred(a.flight.predNs)
+	}
+	a.perf.frame(time.Since(t0).Nanoseconds(), simNs, steps, simT)
 
 	a.ui.EndFrame()
 	if a.shots != nil {
@@ -193,6 +206,9 @@ func main() {
 	app := newApp(chosen, *presetSlug != "", *fly)
 	if *shotDir != "" {
 		app.shots = newShotRunner(*shotDir, app.cfg)
+		// A capture has to be the same on every machine, and whether the person
+		// running it happens to have saved a setup is not part of the program.
+		app.presets.hasSaved = false
 	}
 	app.traceLeft = *camTrace
 

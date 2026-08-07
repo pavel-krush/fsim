@@ -113,8 +113,11 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
 | `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets, bodies |
 | `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
+| `perf.go` | The service readout: what a frame costs, split into physics and everything else |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
 | `screen_presets.go` | The first screen: the mission list, and nothing else |
+| `store.go` | Saving a setup: JSON in, JSON out, and what a loaded one has to be before it is flown |
+| `store_native.go`, `store_js.go` | Where it is kept — a file in the user's config directory, or `localStorage` |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
 | `screen_flight.go` | Trajectory, bodies, rails, prediction, launch pad, camera, flight plan, telemetry, time controls |
 | `screen_graphs.go` | Seven plots on a movable time axis, event ruler, scrubber |
@@ -636,6 +639,43 @@ what you are trying to fly, so it comes second.
 - **There is no way back to the list**, deliberately: the editor has its own preset dropdown, which is
   the same choice without losing what you have typed.
 
+## Saving a setup
+
+Everything the editor produces is one `sim.Config` — the system of bodies, the air, the vehicle, the
+pitch programme and the flight plan — so saving it is one file. `SAVE` and `LOAD` sit in the setup
+header, and the stored setup gets a row of its own at the bottom of the mission list.
+
+- **One slot, not a library.** The fault being fixed is losing an evening of editing, not the absence
+  of a collection. There is nothing to name and nothing to choose.
+- **What is written is the inputs.** `Body.Mu` and `Body.SOI` carry `json:"-"` because they are derived —
+  and because the root's sphere of influence is `+Inf`, which JSON cannot spell, so a normalized system
+  was not writable at all until they came out. `EnsureSystem` derives them again on the way in, which is
+  also what clamps a stale launch body and mirrors `Body` back. `TestASystemOnRailsCanBeWrittenAtAll`
+  pins the trap, since the symptom is a whole feature failing over one struct tag in another package.
+- **A stored file is the one input this program gets from a previous version of itself**, so it is the
+  one that has to be doubted: `validConfig` refuses a config with no bodies, no radius, no stages or
+  more burns than the bitmask holds, and a `version` from the future says so rather than being misread.
+  A decoded config cannot contain a NaN — JSON has no literal for one — so the only guard needed on the
+  way out is `Marshal`'s own refusal to write one.
+- **The round trip is tested by flying it, not by comparing JSON.** Every preset is flown 400 s before
+  and after, and the states have to match to the last bit. A config that reads back almost right is the
+  worst outcome available: nothing complains and the numbers quietly differ.
+- **Loading is `loadPreset` with a different button on it**, and needs the same two things: `u.cancel()`,
+  because every field in that screen is bound to an address inside the configuration being replaced, and
+  a reset of the body selection, because the stale index is how this screen crashes.
+- **The saved row is last in the mission list.** Every index in that screen and in `-preset` counts into
+  `sim.Presets()`; a row at the front would shift all of them. It is also read afresh when picked rather
+  than kept from construction, so the editor gets its own slices — the stages, layers and keyframes are
+  edited in place, and a shared copy would mean editing the stored one too.
+- **`-shot` ignores it.** Whether the machine running a capture happens to have saved a setup is not part
+  of the program, and a screenshot that depends on it is not reproducible. The tests take the same care:
+  `noSavedSetup(t)` points the store at an empty directory, or the row count depends on whose laptop it is.
+- **Written through a temporary file and renamed** natively, so a failure half way through leaves the
+  previous save intact rather than a truncated file where a setup used to be. In a browser it is
+  `localStorage`, per-origin — a local build and the published page keep separate setups, which is the
+  right way round — and every call is recovered from a JS exception, because storage is denied outright
+  in some privacy modes and a page that dies on a save is worse than one that says it could not save.
+
 ## Stage count
 
 The vehicle takes **one to four stages** — `minStages`/`maxStages` in `screen_setup.go`. The staging
@@ -965,6 +1005,37 @@ the slice it pointed into — so `TestPresetsAreValid`, `TestRemoveRunningNode`,
   relying on an accident, so the limit is now six days — the length of the mission
   it ships with.
 
+## The service readout
+
+Under the mission clock, in the corner of the trajectory view: frames and ticks, the frame period, what
+the physics cost and what it bought, what the rest of the frame cost, the warp actually delivered, the
+last prediction and the size of the history. `perf.go`.
+
+- **The split is the point.** `sim` is the time inside `Advance`; the other line is the whole of `Update`
+  minus that, which is the interface — every widget laid out, every ring tessellated, the trail. Which
+  half is not keeping up is a question this project has had to answer twice by indirect means: once by
+  timing a prediction that turned out to cost 658 ms, and once by taking screenshots at two window sizes
+  to establish that the browser build was bound by pixels rather than arithmetic. Now it is on the screen.
+- **`Update` is not the whole frame, so the frame period is shown too.** What Ebiten spends rasterising
+  and presenting happens after `Update` returns, and the gap between the period and `sim + ui` is exactly
+  that. Four milliseconds of interface at eight frames a second is not a contradiction — it is where the
+  other hundred and twenty went, and in a browser under software rendering that is the usual reading.
+- **Sampled over half a second, not per frame.** Per-frame figures jitter by a factor of two, and in a
+  browser `time.Now()` is quantised to about a tenth of a millisecond — the same order as a frame's
+  integration — so a single frame's measurement is mostly the clock. For the same reason the cost of one
+  step is withheld until a window has twenty of them: a number that is noise is worse than no number.
+- **The warp line only appears when the warp is not being delivered**, and keeps two decimals while it is
+  small: at ×1 asked and a third achieved the interesting figure is 0.33, and rounding it to zero says
+  nothing. It says the simulation is falling behind before `WarpLimited` trips, which only fires once a
+  frame has run out of its step budget entirely.
+- **A wash goes behind the whole readout, and it is not decoration.** The block sits over whatever the
+  trajectory view happens to show: bright blue sky at the start of a flight, green ground under it, black
+  space later. Faint grey on the first two is invisible, so the rows are collected before they are drawn —
+  the wash cannot be sized until the block is known — and it is dense enough to mute a prediction line
+  crossing the corner without reading as a panel. No border, for the same reason.
+- **`Sim.Steps` is the one thing the physics gained**, a plain counter in `advanceOne` that nothing in the
+  model reads. A prediction runs on a copy, so its steps land in the copy's counter.
+
 ## What it costs to run
 
 Measured, because all four of these were guesses that turned out wrong in one
@@ -976,7 +1047,34 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | one step, solar system | 17.2 µs | **3.1 µs** |
 | one step, single body | 1.08 µs | 0.88 µs |
 | one prediction from the parking orbit | 658 ms | **9.5 ms** |
+| predictions during a real-time coast | 2 per second | **none until the path is flown** |
+| history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
 
+- **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew
+  linearly for as long as the program was left running: 93,000 samples and 43 MB of heap at T+600 days on
+  the Mars preset, each one carrying a `PropFrac` slice of its own for the collector to walk. Past
+  `maxHist` the history *halves* — every second sample dropped, the recording rate halved with it — so a
+  four-hundred-day flight keeps the same twenty thousand samples an hour-long one does. Note that thinning
+  the rate alone would have done nothing: during a coast a sample is written per integrator step and the
+  steps are minutes long, so the interval was never what bound it.
+- **Thinning keeps a coarser record of the whole flight, not a complete record of the recent part.** An
+  ascent five days back is still on the graph at half the resolution it had; dropping the oldest instead
+  would throw the launch away, which is the one part of a flight everybody wants to look at. It also
+  bounds what the trail costs to draw, which is the other thing that had no ceiling — `trailSpan` is
+  `+Inf` for a trajectory that is not coming back round, so an interplanetary cruise draws the whole
+  flight by design.
+- **The prediction is recomputed when the flight has flown into it, not when the clock has ticked.** One
+  is 25 to 90 ms — a ten-day horizon through eighteen bodies — and a timer of half a second meant that
+  hitch twice a second for the whole of a coast, in return for a curve that had not moved by a pixel. The
+  rule is now a floor of half a second of wall clock *and* two per cent of the predicted span actually
+  flown: at ×1e6 the span is eaten in milliseconds and the floor binds, so high warp is unchanged; at ×1
+  it is minutes between recomputes, and paused it is never.
+- **Which is why `planKey` exists, and it is not an optimisation.** A paused flight advances no mission
+  time at all, so without a fingerprint of the plan an edited burn would keep the path it produced before
+  the edit — for as long as the pause lasted.
+- **A stale prediction is free because the path is drawn from the vehicle**, skipping the points already
+  flown. The curve is the same curve either way; the only thing staleness could show is a gap between the
+  vehicle and the start of its own path, and there is now no way for one to open.
 - **A prediction only runs while coasting.** During an ascent the pitch programme
   is flying and a preview of it says nothing — and it is the expensive case,
   because a burn is integrated at the fixed step. The old altitude test let

@@ -191,6 +191,10 @@ a delay, or at apoapsis.
 Getting to orbit is a matter of pitching over neither too early, which flies you into the thick air,
 nor too late, which spends everything climbing. The Δv losses panel tells you which mistake you made.
 
+A setup you have edited can be kept: `SAVE` and `LOAD` in the setup header write it to one slot — a file
+in your config directory, or `localStorage` in a browser — and a saved setup then gets a row of its own at
+the bottom of the mission list.
+
 On the flight screen: `SPACE` pauses, `,` and `.` change the time warp. Drag to move the view anywhere,
 the wheel zooms about the pointer, the picker in the corner locks the camera to the vehicle or to any body
 in the system, `TAB` cycles it and `C` hands the whole thing back to the automatic framing.
