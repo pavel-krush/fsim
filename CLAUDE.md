@@ -755,6 +755,16 @@ the time it was measured**.
   not also grab the world; `u.consumed` is the only thing that knows.
 - **The picker shows the free state as its own entry.** Claiming to follow the vehicle while the camera
   sits half way to the Moon is a lie about the one thing that control exists to report.
+- **A dragged view near the ground turns with the ground.** The launch site is carried east at 465 m/s, so
+  a camera held still in the *inertial* frame is a camera the pad slides out of — the whole width of a
+  1.5 km view in three seconds. That is what "everything moves sideways when I click" was, and it was
+  hiding behind the ninety-degree flip until that was fixed. While the picture is about the ground a free
+  camera advances its centre and its rotation by `ω·groundHold·dt`, so a point on the surface holds its
+  place on screen exactly; pulled back, the ramp takes it to zero and the view is inertial again, which is
+  what an orbit wants.
+- **`groundHold` asks about the frame and the scale, not about what the camera follows.** It used to
+  require `follow == -1`, which meant a dragged view a kilometre over the pad was not "standing on it" as
+  far as the trail was concerned — while obviously being exactly that.
 - **A drag never rotates the picture, and pinning a body takes half a second over
   it.** `Rot` is the world angle pointed at the top of the screen: following the vehicle it is the
   vehicle's own radius, so a launch reads as a climb, and anywhere else it is the world's +Y. Those are

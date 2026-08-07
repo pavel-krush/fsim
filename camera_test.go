@@ -433,3 +433,37 @@ func TestLaunchingAloneDoesNotTurnTheCamera(t *testing.T) {
 		s.Advance(a.ui.DT)
 	}
 }
+
+// A dragged view near the ground has to stay over the ground. The pad is carried
+// east at 465 m/s by the planet's own rotation, and a camera pinned in the inertial
+// frame is a camera the launch site slides out of — the whole width of a 1.5 km view
+// in three seconds, which is what "everything moves sideways when I click" is.
+func TestADraggedViewNearTheGroundStaysOverIt(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+	if f.groundHold < 0.99 {
+		t.Fatalf("on the pad the ground track is held at %.2f, so this proves nothing", f.groundHold)
+	}
+
+	// What handleCamera does on the first pixel of a drag, without moving anything.
+	f.freePos, f.follow = f.cam.Center, camFree
+	f.manualScale = true
+	f.updateCamera(a, view)
+	x0, y0 := f.cam.Project(f.s.PadPos())
+
+	// A second of flight, with the camera left alone.
+	for range 60 {
+		s.Advance(a.ui.DT)
+		f.updateCamera(a, view)
+	}
+	x1, y1 := f.cam.Project(f.s.PadPos())
+
+	if d := math.Hypot(x1-x0, y1-y0); d > 20 {
+		t.Errorf("the launch pad slid %.0f px across the view in a second of dragging", d)
+	}
+}

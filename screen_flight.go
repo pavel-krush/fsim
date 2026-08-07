@@ -357,12 +357,26 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 
 	// The same ramp decides how much of a ground track the flown path is drawn as.
 	// It is only a ground track while the picture is about the ground: see
-	// trackPoint. Following a body rather than the vehicle means there is no
-	// "standing on it" to speak of, and a track relative to a surface the picture
-	// is not looking at is worth nothing.
+	// trackPoint. Which is a question about the frame being drawn and the scale, and
+	// not about what the camera follows — a dragged view a kilometre over the pad is
+	// as much "standing on it" as a followed one.
 	f.groundHold = 0
-	if f.follow == -1 && f.frameBody() == f.s.Cfg.LaunchBody {
+	if f.frameBody() == f.s.Cfg.LaunchBody {
 		f.groundHold = 1 - u
+	}
+
+	// And a view that is about the ground has to stay over the ground. The launch
+	// site is carried east at 465 m/s by the planet's own rotation, so a camera held
+	// still in the inertial frame is one the pad slides out of — the whole width of a
+	// 1.5 km view in three seconds, which is what a click near the pad looked like.
+	// A free camera therefore turns with the ground, centre and rotation together, on
+	// the same ramp: a point on the surface then holds its place on screen exactly.
+	if f.follow == camFree && f.groundHold > 0 {
+		if w := f.s.Cfg.System.Bodies[f.s.Cfg.LaunchBody].AngularVelocity(); w != 0 {
+			turn := w * f.groundHold * a.ui.DT
+			f.freePos = f.freePos.Rotate(turn)
+			f.cam.Rot += turn
+		}
 	}
 
 	switch {
