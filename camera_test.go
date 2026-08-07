@@ -410,3 +410,26 @@ func TestAScriptedCaptureIsSettled(t *testing.T) {
 		t.Errorf("the view is still being held: camHold %g, ghost %g", f.camHoldK, f.ghostK)
 	}
 }
+
+// Launching on its own does not turn anything: the pad is on the +X axis, the camera
+// follows the vehicle, and the vertical it points up is the vehicle's own radius — so
+// the rotation starts at zero and stays there through the first seconds of the climb.
+// Worth pinning separately from the click, because "I launch and it turns ninety
+// degrees" and "I launch, click, and it turns ninety degrees" are different faults and
+// only the second one existed.
+func TestLaunchingAloneDoesNotTurnTheCamera(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "earth-falcon").Cfg)
+	f := NewFlightScreen(s)
+
+	for i := range 600 { // ten seconds off the pad
+		f.updateCamera(a, view)
+		if d := math.Abs(angleDelta(f.cam.Rot, 0)); d > 0.02 {
+			t.Fatalf("frame %d: the camera has turned %.1f degrees since liftoff", i, d*180/math.Pi)
+		}
+		s.Advance(a.ui.DT)
+	}
+}
