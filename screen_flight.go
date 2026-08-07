@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
 
 	"github.com/pavel-krush/fsim/sim"
 )
@@ -1279,20 +1280,29 @@ func (f *FlightScreen) drawScaleBar(dst *ebiten.Image, view Rect, cam *Camera) {
 
 // drawViewHUD is the small overlay in the corner of the trajectory view.
 func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.Telemetry) {
-	x, y := view.X+14, view.Y+12
-	drawText(dst, fmtClock(tm.T), fontBig, x, y, colText, alignLeft)
-	y += 30
+	// Collected first, drawn second, because the readout has to be legible over
+	// whatever happens to be behind it: the sky is bright blue at the start of a
+	// flight and the ground is green, and the faint grey the service numbers want to
+	// be printed in disappears into both. So a wash goes down behind the block, and
+	// it can only be sized once the block is known.
+	type row struct {
+		text    string
+		font    *text.GoTextFace
+		col     color.NRGBA
+		advance float64
+	}
+	rows := []row{{fmtClock(tm.T), fontBig, colText, 30}}
 
 	c := colTextDim
 	if tm.Burning {
 		c = colFlame
 	}
-	drawText(dst, fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
-		fontUISm, x, y, c, alignLeft)
+	rows = append(rows, row{
+		fmt.Sprintf(T("flight.stagePhase"), tm.Stage+1, phaseText(tm.Phase)),
+		fontUISm, c, 22,
+	})
 
 	if f.s.Settled() {
-		y += 22
-		verdict := outcomeText(f.s.St.Outcome, bodyName(f.s.Cfg.System.Bodies[f.s.St.OutcomeBody].Name))
 		vc := colBad
 		switch f.s.St.Outcome {
 		case sim.OutcomeOrbit, sim.OutcomeCaptured, sim.OutcomeReturned:
@@ -1300,7 +1310,10 @@ func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.
 		case sim.OutcomeDecaying:
 			vc = colWarn
 		}
-		drawText(dst, verdict, fontHead, x, y, vc, alignLeft)
+		rows = append(rows, row{
+			outcomeText(f.s.St.Outcome, bodyName(f.s.Cfg.System.Bodies[f.s.St.OutcomeBody].Name)),
+			fontHead, vc, 22,
+		})
 	}
 
 	// The service readout, under whatever the flight has to say about itself.
@@ -1309,8 +1322,27 @@ func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.
 		warp = warpSteps[f.warp]
 	}
 	for _, l := range a.perf.lines(warp, len(f.s.Hist)) {
-		y += 18
-		drawText(dst, l, fontMonoSm, x, y, colTextFaint, alignLeft)
+		rows = append(rows, row{l, fontMonoSm, colTextDim, 18})
+	}
+
+	x, y := view.X+14, view.Y+12
+	w, h := 0.0, 0.0
+	for i, r := range rows {
+		w = math.Max(w, textWidth(r.text, r.font))
+		if i > 0 {
+			h += rows[i-1].advance
+		}
+	}
+	h += rows[len(rows)-1].font.Size + 4
+
+	// Enough of the background to read against, and not so much that it reads as a
+	// panel: no border, and the trajectory still shows through faintly. Any less and
+	// a prediction crossing the corner draws a line through the middle of a number.
+	fillRect(dst, Rect{x - 8, y - 6, w + 16, h + 10}, color.NRGBA{0x0d, 0x11, 0x17, 0xd2})
+
+	for _, r := range rows {
+		drawText(dst, r.text, r.font, x, y, r.col, alignLeft)
+		y += r.advance
 	}
 
 	// A warp the current regime cannot deliver is worth saying out loud, or the

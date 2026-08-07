@@ -989,6 +989,11 @@ last prediction and the size of the history. `perf.go`.
   small: at ×1 asked and a third achieved the interesting figure is 0.33, and rounding it to zero says
   nothing. It says the simulation is falling behind before `WarpLimited` trips, which only fires once a
   frame has run out of its step budget entirely.
+- **A wash goes behind the whole readout, and it is not decoration.** The block sits over whatever the
+  trajectory view happens to show: bright blue sky at the start of a flight, green ground under it, black
+  space later. Faint grey on the first two is invisible, so the rows are collected before they are drawn —
+  the wash cannot be sized until the block is known — and it is dense enough to mute a prediction line
+  crossing the corner without reading as a panel. No border, for the same reason.
 - **`Sim.Steps` is the one thing the physics gained**, a plain counter in `advanceOne` that nothing in the
   model reads. A prediction runs on a copy, so its steps land in the copy's counter.
 
