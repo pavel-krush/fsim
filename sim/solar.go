@@ -104,13 +104,19 @@ func EarthAir() Atmosphere {
 
 // MarsAir is six millibars of carbon dioxide. Thin enough that an ascent barely
 // notices it and thick enough that an arrival very much does.
+//
+// 150 km, not the 90 it was: at 90 km the profile is still at 7.8e-7 kg/m³, which is
+// 2600 times the density Earth's own ceiling cuts off at. The number mattered because
+// Top is also the line an orbit has to clear to count as one, and mars-ascent was
+// putting its periapsis at 92 km — two kilometres above a cliff edge that had been
+// drawn just under it.
 func MarsAir() Atmosphere {
 	return Atmosphere{
 		Fractions:       mix("CO2", 0.9532, "N2", 0.027, "Ar", 0.016, "O2", 0.0013),
 		Layers:          []Layer{{0, -0.0009}, {60000, 0}},
 		SurfaceTemp:     210,
 		SurfacePressure: 610,
-		Top:             90000,
+		Top:             150000,
 	}
 }
 
@@ -123,7 +129,10 @@ func VenusAir() Atmosphere {
 		Layers:          []Layer{{0, -0.00814}, {60000, -0.0012}, {100000, 0}},
 		SurfaceTemp:     737,
 		SurfacePressure: 9.2e6,
-		Top:             250000,
+		// 155 km is where this profile reaches the same cutoff density as Earth's.
+		// The 250 it started at was a hundred kilometres of nothing — 1e-19 kg/m³ —
+		// and a hundred kilometres of orbit that would not have counted as one.
+		Top: 155000,
 	}
 }
 
@@ -135,6 +144,10 @@ func TitanAir() Atmosphere {
 		Layers:          []Layer{{0, -0.00053}, {44000, 0.00053}, {250000, 0}},
 		SurfaceTemp:     93.7,
 		SurfacePressure: 146700,
-		Top:             500000,
+		// 720 km. Titan's air is the most extended in the system — a seventh of
+		// Earth's gravity holding up a column at 94 K — and 500 km cut it off at
+		// 1.9e-7 kg/m³, 660 times Earth's ceiling density. Which is why titan-ascent
+		// used to reach "orbit" with a periapsis at 579 km.
+		Top: 720000,
 	}
 }

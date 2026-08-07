@@ -180,3 +180,20 @@ func (a *Atmosphere) soundSpeed(t float64) float64 {
 	}
 	return math.Sqrt(a.gamma * Rgas * t / a.molarMass)
 }
+
+// DensityAt is the density the layered profile gives at h with the ceiling ignored.
+//
+// Top is where the model stops pretending there is air, and choosing it needs to know
+// what the profile would still say above it — which is the one question State cannot
+// answer, since answering it is exactly what State refuses to do.
+func (a *Atmosphere) DensityAt(h float64) float64 {
+	if !a.ready || len(a.Layers) == 0 {
+		return 0
+	}
+	i := a.layerAt(h)
+	t, p := a.walk(i, h-a.Layers[i].BaseAlt)
+	if t <= 0 {
+		return 0
+	}
+	return p * a.molarMass / (Rgas * t)
+}

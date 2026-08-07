@@ -97,9 +97,9 @@ Thirteen launchers, all of which actually reach orbit:
 | Apollo / Mars orbit | 95159 × 91139 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36106 × 35465 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
-| Titan / thick air | 648 × 578 km | 3701 m/s | 19.5 kPa at 24 km | 0.68 g |
+| Titan / thick air | 1212 × 1072 km | 4113 m/s | 19.5 kPa at 24 km | 0.68 g |
 | Io / off to Jupiter | 58 × 43 km, then a Jupiter orbit crossing Io's | 2807 m/s in all | — | 0.60 g |
-| Mars / light launcher | 137 × 92 km | 4044 m/s | 0.2 kPa at 14 km | 1.4 g |
+| Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
 | Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
@@ -160,10 +160,11 @@ which for a real satellite is a slow drift east and a station-keeping budget.
 
 Titan is the strangest ascent in the system and the one that took the most work. Four times Earth's surface
 density under a seventh of its gravity: the air is thick enough that a rocket cannot go fast in it — 173 m/s
-of terminal velocity at 22 kN of thrust — and deep enough that a closed orbit does not start until 600 km.
-So the profile is seven and a half minutes of climbing straight up at a few hundred metres a second, a turn
-once the air is behind, and a kick stage at apoapsis. Drag still costs 622 m/s and gravity 1263, against the
-1682 it takes to be in orbit at all. The vehicle is invented; the numbers are Titan's.
+of terminal velocity at 22 kN of thrust — and so extended that it does not thin out to the density Earth's
+own model stops at until 712 km, which is where a closed orbit starts. So the profile is nine minutes of
+climbing straight up at a few hundred metres a second, a turn once the air is behind, and a kick stage at
+apoapsis. Drag still costs 619 m/s and gravity 1860, against the 1682 it takes to be in orbit at all. The
+vehicle is invented; the numbers are Titan's.
 
 Io is the smallest sphere of influence anything launches into here: 7840 km, four and a third radii, so
 there is barely room for an orbit and the parking orbit has to be a low one. Getting off Io is easy — 1809

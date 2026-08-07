@@ -347,6 +347,28 @@ through are Venus, Earth, Mars and Titan. `EarthAir`, `MarsAir`, `VenusAir` and 
 are functions rather than values, because an `Atmosphere` carries slices and a shared one would be edited
 from every system built out of that file at once.
 
+- **`Top` means the same thing on every body: the altitude at which the profile reaches 1e-9 kg/m³**, which
+  is the density Earth's own ceiling cuts off at. It did not mean that. Each was set to whatever suited the
+  preset launched from it, so Mars stopped at 90 km with the profile still at 7.8e-7 — 2600 times Earth's —
+  Titan at 500 km with 660 times, and Venus at 250 km with a ten-thousandth of a billionth, a hundred
+  kilometres of nothing. `TestEveryCeilingIsAtTheSameDensity` pins the rule now, and `DensityAt` exists
+  because choosing a ceiling needs the one question `State` refuses to answer: what the profile would still
+  say above it.
+- **It matters beyond tidiness, because `Top` is also the line an orbit has to clear to count as one.** With
+  Mars's ceiling at 90 km, `mars-ascent` reached "orbit" with its periapsis at 92 — two kilometres above a
+  cliff edge drawn just under it, on a planet whose real air would have dragged it down in days. Titan's was
+  579 above 500. Both had to be flown again: **Mars is 249 x 195 km and Titan 1212 x 1072**, with 45 and
+  352 km of margin, and `TestEveryPresetClearsTheAirItFliesIn` wants ten per cent of the ceiling as the
+  minimum for every preset.
+- **Mars needed a tail *below* the horizon**, which nothing else here does: −18° at the end of the burn is
+  what stops the climb while the horizontal speed is still building, and it is the only thing in that pitch
+  family that raises a periapsis rather than an apoapsis. The kick-stage-at-apoapsis answer that Kerbin and
+  Titan use cannot work there — the upper stage has 2.6 km/s and circularising at apoapsis from a standstill
+  wants 3.5.
+- **Kerbin keeps its cliff, on purpose.** Its air ends abruptly at 70 km with 3.1e-6 kg/m³ still in it,
+  because that is where the game it comes from ends its atmosphere. Making it consistent with the real
+  bodies would stop it being Kerbin. `TestKerbinKeepsItsCliff` states that as an exception rather than
+  leaving it to look like an oversight.
 - **The gas giants are airless on purpose.** An atmosphere here is measured *from a surface* — a base
   pressure and a temperature at a radius — and Jupiter has no surface to measure from. Between a made-up
   cloud deck and nothing, nothing is the honest answer.
@@ -514,12 +536,14 @@ I called this preset cheap and it was the hardest of the lot. The numbers are wh
 - **A single continuous burn cannot close the orbit however it is tuned.** It always ends while still
   climbing, and the low side stays at 50 km — 4943 x 48, 14571 x 26, 1221 x 13. The answer is the one
   Kerbin already uses: a kick stage on `IgniteAtApoapsis`.
-- **Titan's atmosphere is 435 km deep at Earth's own vacuum threshold** (1e-9 of surface density), so `Top`
-  is 500 km, and `settle` wants a periapsis above `Top`. That puts the target orbit at 600 km, which is a
-  much harder ask than the 185 km the Earth presets aim at. Every attempt that looked like an orbit was
-  coming out as `OutcomeDecaying` and the tuner was discarding it unseen.
+- **Titan's air reaches Earth's own cutoff density at 712 km**, so `Top` is 720 and `settle` wants a
+  periapsis above it. That puts the target orbit at 1000 km, which is a far harder ask than the 185 km the
+  Earth presets aim at. Every attempt that looked like an orbit was coming out as `OutcomeDecaying` and the
+  tuner was discarding it unseen. It shipped for a while with `Top` at 500 km — a cliff at 1.9e-7 kg/m³,
+  660 times Earth's — and the preset's periapsis four kilometres above it; see the ceilings section.
 - **The vehicle had to be sized for the planet, not tuned into it.** Twice the first guess: 7.9 t, two
-  stages, 22 kN. 648 x 578 km came out of the first sweep with it.
+  stages, 22 kN. It now reaches 1212 x 1072 km, and the propellant for that was always there: the kick
+  stage was burning 450 kg of the 1300 it carries.
 
 ### Proton to the belt
 
