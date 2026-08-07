@@ -191,6 +191,11 @@ a delay, or at apoapsis.
 Getting to orbit is a matter of pitching over neither too early, which flies you into the thick air,
 nor too late, which spends everything climbing. The Δv losses panel tells you which mistake you made.
 
+Every body has its own air, and the four in the solar system that have any worth flying through are Venus,
+Earth, Mars and Titan — so a planet arrived at from somewhere else has an atmosphere to arrive *through*.
+The setup screen's atmosphere column belongs to whichever body the first column is on, and a body with
+none is offered some.
+
 A setup you have edited can be kept: `SAVE` and `LOAD` in the setup header write it to one slot — a file
 in your config directory, or `localStorage` in a browser — and a saved setup then gets a row of its own at
 the bottom of the mission list.

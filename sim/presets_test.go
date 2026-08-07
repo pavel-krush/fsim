@@ -42,16 +42,16 @@ func TestPresetsAreValid(t *testing.T) {
 			}
 
 			// The air, and the orbit being aimed at through it.
-			if n := len(cfg.Atmo.Fractions); n != 0 && n != len(Gases) {
+			if n := len(cfg.Body.Atmo.Fractions); n != 0 && n != len(Gases) {
 				t.Errorf("%d gas fractions, want %d or none", n, len(Gases))
 			}
-			if cfg.TargetOrbit <= cfg.Atmo.Top {
+			if cfg.TargetOrbit <= cfg.Body.Atmo.Top {
 				t.Errorf("target orbit %.0f m is inside the atmosphere (%.0f m)",
-					cfg.TargetOrbit, cfg.Atmo.Top)
+					cfg.TargetOrbit, cfg.Body.Atmo.Top)
 			}
 
 			// A vehicle that cannot lift itself off the pad is not a preset.
-			twr := cfg.Rocket.LiftoffTWR(cfg.Atmo.SurfacePressure, cfg.Body.SurfaceG)
+			twr := cfg.Rocket.LiftoffTWR(cfg.Body.Atmo.SurfacePressure, cfg.Body.SurfaceG)
 			if twr <= 1.05 {
 				t.Errorf("liftoff thrust-to-weight is %.2f", twr)
 			}
@@ -96,7 +96,7 @@ func TestPresetsAreValid(t *testing.T) {
 				// The target belongs to the mission, not to the ascent: a preset with
 				// a plan reaches its verdict in a parking orbit and goes on from
 				// there. All the ascent owes is an orbit that clears the air.
-				if apo <= cfg.Atmo.Top {
+				if apo <= cfg.Body.Atmo.Top {
 					t.Errorf("apoapsis %.0f km is inside the atmosphere", apo/1000)
 				}
 			case math.Abs(apo-cfg.TargetOrbit) > cfg.TargetOrbit/2:

@@ -115,7 +115,7 @@ func TestApolloPresetReachesTheMoon(t *testing.T) {
 // verdict has to say which body it is about.
 func TestCapturedVerdictNamesTheBody(t *testing.T) {
 	sys := earthMoon()
-	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+	s := New(Config{System: withAtmoTop(sys, 0, 140000),
 		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
 
 	moon := &sys.Bodies[1]
@@ -142,7 +142,7 @@ func TestCapturedVerdictNamesTheBody(t *testing.T) {
 // Hitting something that is not home is its own verdict.
 func TestImpactVerdictNamesTheBody(t *testing.T) {
 	sys := earthMoon()
-	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+	s := New(Config{System: withAtmoTop(sys, 0, 140000),
 		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
 
 	// A hundred kilometres up over the Moon, falling straight down.
@@ -168,7 +168,7 @@ func TestImpactVerdictNamesTheBody(t *testing.T) {
 // is doing nothing more remarkable than leaving the moon, which every flyby does.
 func TestLeavingAMoonIsNotEscape(t *testing.T) {
 	sys := earthMoon()
-	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000},
+	s := New(Config{System: withAtmoTop(sys, 0, 140000),
 		Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
 
 	moon := &sys.Bodies[1]
@@ -398,8 +398,9 @@ func TestProtonGeoPresetReachesTheBelt(t *testing.T) {
 func TestTitanPresetReachesOrbit(t *testing.T) {
 	cfg := titanAscent().Cfg
 	cfg.EnsureSystem()
-	at := &cfg.Atmo
-	at.Prepare(cfg.Body.SurfaceG)
+	// EnsureSystem derived it already: the air belongs to the body now, and its
+	// profile is prepared with that body's own surface gravity.
+	at := &cfg.Body.Atmo
 
 	// The air first, because everything else follows from it.
 	st := at.State(0)
@@ -444,7 +445,7 @@ func TestTitanPresetReachesOrbit(t *testing.T) {
 func TestApolloReturnPresetComesHome(t *testing.T) {
 	s := New(apolloReturn().Cfg)
 	moon := s.Cfg.System.IndexOf("moon")
-	top := s.Cfg.Atmo.Top
+	top := s.AtmoTop()
 
 	periSel := math.Inf(1)
 	var entryV, entryAng float64

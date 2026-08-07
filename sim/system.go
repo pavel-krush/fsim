@@ -20,6 +20,13 @@ func (s *System) Normalize() {
 	for i := range s.Bodies {
 		b := &s.Bodies[i]
 		b.Normalize()
+		// The air's profile depends on the body's own surface gravity, so it is
+		// derived here with everything else rather than by whoever remembers to ask.
+		// A vacuum has nothing to derive and is skipped: eighteen bodies of which
+		// four have air, re-derived on every frame of the editor.
+		if !b.Atmo.IsVacuum() {
+			b.Atmo.Prepare(b.SurfaceG)
+		}
 
 		if i == 0 {
 			b.Parent = -1

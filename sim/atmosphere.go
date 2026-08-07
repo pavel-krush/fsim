@@ -145,8 +145,14 @@ func (a *Atmosphere) State(h float64) AtmoState {
 	if !a.ready {
 		a.Prepare(a.surfaceG)
 	}
+	// Above the air, and on a body with none, there is nothing to report: no
+	// temperature, and no speed of sound. It used to hand back the surface values,
+	// which put a Mach number on a vehicle in orbit — Mach 21 at 300 km, Mach 33 at
+	// ninety million metres from Mars — and a temperature on a vacuum the model says
+	// nothing about. A body's surface temperature without air is a radiative question
+	// this simulator does not ask.
 	if a.IsVacuum() || h >= a.Top {
-		return AtmoState{Temp: a.SurfaceTemp, Sound: a.soundSpeed(a.SurfaceTemp)}
+		return AtmoState{}
 	}
 	if h < 0 {
 		h = 0

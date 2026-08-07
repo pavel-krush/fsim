@@ -58,3 +58,61 @@ func TestEditingTheLaunchBodySticks(t *testing.T) {
 		t.Errorf("the simulation launched from a planet of radius %g", got)
 	}
 }
+
+// The atmosphere column edits the air of whatever body the first column is on, which is
+// the whole point of the air belonging to the bodies. It used to be the launch body's
+// and only ever the launch body's, so moving the pad took Earth's atmosphere with it.
+func TestTheAtmosphereColumnFollowsTheSelectedBody(t *testing.T) {
+	initFonts()
+	img := ebiten.NewImage(1600, 1000)
+
+	a := &App{ui: NewUI(), cfg: presetNamed(t, "apollo-lunar").Cfg}
+	a.canvas, a.w, a.h = img, 1600, 1000
+	a.setup, a.screen = NewSetupScreen(0), ScreenSetup
+	a.cfg.EnsureSystem()
+
+	titan := a.cfg.System.IndexOf("titan")
+	if titan < 0 {
+		t.Fatal("no Titan in the solar system")
+	}
+	a.setup.selBody = titan
+	editorFrame(t, a, img)
+
+	// Typing a new surface pressure where that column writes it.
+	a.cfg.System.Bodies[titan].Atmo.SurfacePressure = 200000
+	editorFrame(t, a, img)
+
+	if got := a.cfg.System.Bodies[titan].Atmo.SurfacePressure; got != 200000 {
+		t.Errorf("Titan's surface pressure came back as %g", got)
+	}
+	// The launch body's air is untouched: it is a different body's weather.
+	if got := a.cfg.System.Bodies[a.cfg.LaunchBody].Atmo.SurfacePressure; got != 101325 {
+		t.Errorf("editing Titan changed the Earth's surface pressure to %g", got)
+	}
+	// And the profile was re-derived with Titan's gravity, not left stale.
+	if got := a.cfg.System.Bodies[titan].Atmo.State(0).Pressure; got != 200000 {
+		t.Errorf("the profile still starts at %g Pa", got)
+	}
+
+	// A body with no air is offered some, and can have it taken away again.
+	moon := a.cfg.System.IndexOf("moon")
+	a.setup.selBody = moon
+	if !a.cfg.System.Bodies[moon].Atmo.IsVacuum() {
+		t.Fatal("the Moon has air already")
+	}
+	editorFrame(t, a, img)
+	a.cfg.System.Bodies[moon].Atmo = sim.EarthAir() // what the + atmosphere button does
+	editorFrame(t, a, img)
+	if a.cfg.System.Bodies[moon].Atmo.IsVacuum() {
+		t.Error("the Moon's new air did not survive a frame")
+	}
+	// Derived with the Moon's own gravity: a sixth of the pull holds the same column
+	// up over six times the height, so at 50 km it is far thicker than it is here.
+	// The surface density says nothing about it — that is p·M/RT, with no g in it.
+	overMoon := a.cfg.System.Bodies[moon].Atmo.State(50000).Density
+	overEarth := a.cfg.System.Bodies[a.cfg.LaunchBody].Atmo.State(50000).Density
+	if overMoon <= 3*overEarth {
+		t.Errorf("at 50 km the air is %g kg/m³ over the Moon and %g over the Earth: "+
+			"the body's gravity did not reach the profile", overMoon, overEarth)
+	}
+}

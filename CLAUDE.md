@@ -165,8 +165,12 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A system of one body is the old single-planet model to the last digit.** `Gravity` returns early for
   it, keeping the same arithmetic shape, and `TestOneBodySystemIsTheOldModel` pins that. All five presets
   were checked bit-for-bit across the change, all 17 significant digits of the final state.
-- Only the launch body has an atmosphere. Air on every body waits for a setup screen that can describe
-  it; until then `atmoTop` and the drag lookup return vacuum away from the launch body.
+- **Every body carries its own air**, in `Body.Atmo`, and a zero value is a vacuum. The vehicle flies
+  through whatever it is next to: `forces` reads `Center().Atmo`, `AtmoTop` follows the frame, and the
+  profile of each one is derived in `System.Normalize` with *that body's* surface gravity — the same gas at
+  the same surface pressure thins out at a different rate under a different pull, which is why it cannot be
+  prepared once for the configuration. In the solar system Venus, Earth, Mars and Titan have air and
+  nothing else does.
 
 ## Physics — what matters
 
@@ -335,6 +339,29 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
   net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
   slug-to-key mapping to keep in step with anything.
+
+### The air, per body
+
+`Body.Atmo` is one atmosphere per body, and the four in the solar system that have enough of it to fly
+through are Venus, Earth, Mars and Titan. `EarthAir`, `MarsAir`, `VenusAir` and `TitanAir` in `solar.go`
+are functions rather than values, because an `Atmosphere` carries slices and a shared one would be edited
+from every system built out of that file at once.
+
+- **The gas giants are airless on purpose.** An atmosphere here is measured *from a surface* — a base
+  pressure and a temperature at a radius — and Jupiter has no surface to measure from. Between a made-up
+  cloud deck and nothing, nothing is the honest answer.
+- **Venus is described and not launched from.** 92 bar at 737 K is a surface density of 65 kg/m³, fifty
+  times Earth's, where Titan at four times Earth's was already the hardest preset here to fly.
+- **Above the air, and on a body with none, `State` returns nothing at all** — no temperature and no speed
+  of sound. It used to hand back the surface values, which put a Mach number on a vehicle in orbit: Mach 21
+  at 300 km over the Earth, Mach 33 at ninety million metres from Mars. A surface temperature without air
+  is a radiative question this simulator does not ask, so the two presets that carried a trace atmosphere
+  purely to feed that readout — the Moon and Io — are plain vacuum again.
+- **`surfaceP` stays the launch body's**, because it is the pressure the engine's sea-level Isp was
+  *rated* at, not a property of where the vehicle happens to be. An engine does not get a different rating
+  by flying to Mars.
+- **All thirteen presets are bit-for-bit unchanged across the move**, verified at all 17 digits of the
+  final state: every atmosphere the presets defined was the same data now attached to the body.
 
 ### Apollo goes to the Moon, twice
 
@@ -655,6 +682,11 @@ header, and the stored setup gets a row of its own at the bottom of the mission 
   was not writable at all until they came out. `EnsureSystem` derives them again on the way in, which is
   also what clamps a stale launch body and mirrors `Body` back. `TestASystemOnRailsCanBeWrittenAtAll`
   pins the trap, since the symptom is a whole feature failing over one struct tag in another package.
+- **The format is versioned, and version 2 was the first time that earned its keep.** Version 1 kept one
+  atmosphere in the configuration, for the launch body; version 2 keeps one per body. A version 1 file is
+  read twice — once into the live `Config`, once into a shim that still has the dead field — and its air is
+  put on the body it described. A compatibility field left in the live struct would outlive the
+  compatibility.
 - **A stored file is the one input this program gets from a previous version of itself**, so it is the
   one that has to be doubted: `validConfig` refuses a config with no bodies, no radius, no stages or
   more burns than the bitmask holds, and a `version` from the future says so rather than being misread.
@@ -830,7 +862,9 @@ the time it was measured**.
   `maxRingPx` a disc, beyond that the flat-band mode. A moon you cannot see is a moon you cannot aim at,
   so the dot has a floor of 2 px and a name under it — under, not beside, because beside is where the
   launch pad puts its own label.
-- **Only the launch body has air to draw**, which is the same limitation the physics has.
+- **Every body draws its own air**, which is the same rule the physics follows. A planet arrived at from
+  somewhere else used to be drawn as bare rock, because there was one atmosphere in the picture and it hung
+  around the body the flight started from.
 - **`bodyColors` in `theme.go` is the one place that knows Mars is red.** The physics carries identifiers
   and no colours, the same way it carries no text. An identifier with no entry — anything added in the
   editor — comes out grey.
@@ -975,8 +1009,9 @@ body on screen a satellite; `× body` deletes one.
   address inside the body being left.
 - **Unticking "launch from this body" does nothing.** The pad has to be somewhere; the way to move it is
   to tick the box on another body.
-- **The atmosphere column is still the launch body's air, whatever body that is.** Move the pad to the
-  Moon and Earth's atmosphere goes with it. Per-body air is the next thing this editor wants.
+- **The atmosphere column edits the air of the selected body**, and says whose it is under the header. A
+  body with none gets a sentence saying so and a `+ atmosphere` button rather than a column of zeroes to
+  puzzle over; one with air gets `× atmosphere`. The offered default is Earth's, as a thing to edit.
 
 ## Stale indices, which is how this thing crashes
 

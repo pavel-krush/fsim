@@ -735,7 +735,7 @@ func (f *FlightScreen) refreshPrediction(dt float64) bool {
 	// 650 ms of work twice a second in a system of eighteen bodies. That was the
 	// stutter that showed up on the way out of the atmosphere, which is exactly
 	// where the altitude test below starts letting predictions through.
-	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.Cfg.Atmo.Top {
+	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.AtmoTop() {
 		f.pred = nil
 		return false
 	}
@@ -982,17 +982,14 @@ func (f *FlightScreen) drawBodyLabel(dst *ebiten.Image, view Rect, cam *Camera, 
 }
 
 // drawAir paints the atmosphere as concentric rings above a body's surface.
-// Only the launch body has air to draw: describing it for every body needs a
-// setup screen that can, which is not this one yet.
+// Every body draws its own air, because every body has its own: Venus, Earth, Mars and
+// Titan in the solar system, and whatever the editor has been told about elsewhere.
 func (f *FlightScreen) drawAir(dst *ebiten.Image, cam *Camera, i int, x, y float64) {
-	if i != f.s.Cfg.LaunchBody {
-		return
-	}
-	at := &f.s.Cfg.Atmo
+	b := &f.s.Cfg.System.Bodies[i]
+	at := &b.Atmo
 	if at.IsVacuum() {
 		return
 	}
-	b := &f.s.Cfg.System.Bodies[i]
 	rho0 := at.State(0).Density
 	if rho0 <= 0 {
 		return
@@ -1027,8 +1024,8 @@ func airAlpha(at *sim.Atmosphere, h, rho0 float64) uint8 {
 // horizontal lines rather than arcs of a circle a million pixels across.
 func (f *FlightScreen) drawFlatWorld(dst *ebiten.Image, view Rect, cam *Camera, i int) {
 	b := &f.s.Cfg.System.Bodies[i]
-	at := &f.s.Cfg.Atmo
-	hasAir := i == f.s.Cfg.LaunchBody && !at.IsVacuum()
+	at := &b.Atmo
+	hasAir := !at.IsVacuum()
 
 	surface, rim, _ := bodyPaint(b.Name)
 
@@ -1473,8 +1470,11 @@ func (f *FlightScreen) drawTelemetry(a *App, dst *ebiten.Image, r Rect) {
 
 	c.gap(8)
 	u.SectionHeader(dst, c.next(20), T("flight.secOrbit"))
-	row(T("common.apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, f.s.Cfg.Atmo.Top))
-	row(T("common.periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, f.s.Cfg.Atmo.Top))
+	// Against the air of whatever body the vehicle is at: a 60 km periapsis is a
+	// re-entry at the Earth and a perfectly good orbit at the Moon.
+	top := f.s.AtmoTop()
+	row(T("common.apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, top))
+	row(T("common.periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, top))
 	row(T("common.eccentricity"), formatNum(tm.Ecc, 4), colTextDim)
 	if tm.Orbit.Bound() {
 		row(T("common.period"), fmt.Sprintf("%s %s", formatNum(tm.Orbit.Period/60, 1), T("unit.min")), colTextDim)

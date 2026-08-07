@@ -18,15 +18,17 @@ func SolarSystem() System {
 		{Name: "mercury", Radius: 2.4397e6, MassSource: FromMass, Mass: 3.3011e23,
 			RotationPeriod: 5.0670e6, Parent: 0, SemiMajor: 5.7909e10, Ecc: 0.2056, MeanAnom0: 0.3},
 		{Name: "venus", Radius: 6.0518e6, MassSource: FromMass, Mass: 4.8675e24,
-			RotationPeriod: -2.0997e7, Parent: 0, SemiMajor: 1.0821e11, Ecc: 0.0068, MeanAnom0: 2.1},
+			RotationPeriod: -2.0997e7, Parent: 0, SemiMajor: 1.0821e11, Ecc: 0.0068, MeanAnom0: 2.1,
+			Atmo: VenusAir()},
 		{Name: "earth", Radius: 6.371e6, MassSource: FromMass, Mass: 5.97237e24,
-			RotationPeriod: 86164.1, Parent: 0, SemiMajor: 1.4960e11, Ecc: 0.0167, MeanAnom0: 0},
+			RotationPeriod: 86164.1, Parent: 0, SemiMajor: 1.4960e11, Ecc: 0.0167, MeanAnom0: 0,
+			Atmo: EarthAir()},
 		{Name: "mars", Radius: 3.3895e6, MassSource: FromMass, Mass: 6.4171e23,
 			RotationPeriod: 88642, Parent: 0, SemiMajor: 2.2794e11, Ecc: 0.0934, ArgPeri: 0.9,
 			// Not a picture choice like the rest of them: this one is a launch
 			// window. It puts Mars where the transfer in the mars-flyby preset
 			// crosses its orbit, a hundred and eighty days out.
-			MeanAnom0: 5.9975},
+			MeanAnom0: 5.9975, Atmo: MarsAir()},
 		{Name: "jupiter", Radius: 6.9911e7, MassSource: FromMass, Mass: 1.8982e27,
 			RotationPeriod: 35730, Parent: 0, SemiMajor: 7.7857e11, Ecc: 0.0489, MeanAnom0: 3.6},
 		{Name: "saturn", Radius: 5.8232e7, MassSource: FromMass, Mass: 5.6834e26,
@@ -58,7 +60,8 @@ func SolarSystem() System {
 	add("jupiter", Body{Name: "callisto", Radius: 2.4103e6, MassSource: FromMass, Mass: 1.0759e23,
 		RotationPeriod: 1441931, SemiMajor: 1.8827e9, Ecc: 0.0074, MeanAnom0: 1.8})
 	add("saturn", Body{Name: "titan", Radius: 2.5747e6, MassSource: FromMass, Mass: 1.3452e23,
-		RotationPeriod: 1377648, SemiMajor: 1.2219e9, Ecc: 0.0288, MeanAnom0: 3.3})
+		RotationPeriod: 1377648, SemiMajor: 1.2219e9, Ecc: 0.0288, MeanAnom0: 3.3,
+		Atmo: TitanAir()})
 	add("neptune", Body{Name: "triton", Radius: 1.3534e6, MassSource: FromMass, Mass: 2.139e22,
 		RotationPeriod: 507772, SemiMajor: 3.5476e8, Ecc: 0.000016, MeanAnom0: 2.2})
 
@@ -75,4 +78,63 @@ func (s *System) IndexOf(name string) int {
 		}
 	}
 	return -1
+}
+
+// The air, for the four bodies here that have enough of it to fly through. Each is a
+// function rather than a value because an Atmosphere carries slices, and a shared one
+// would be edited from every system built out of this file at once.
+//
+// The gas giants are left airless on purpose. An atmosphere here is measured from a
+// surface — a base pressure and a temperature at a radius — and Jupiter has no surface
+// to measure from, so the honest choice between a made-up cloud deck and nothing is
+// nothing. Bodies with a trace of gas and nothing to fly through, the Moon and Io among
+// them, are vacuum for the same reason they always were.
+
+// EarthAir is the ISA: nitrogen, oxygen, argon and the carbon dioxide, with the
+// standard lapse rates and 140 km of it, which is where the vacuum threshold falls.
+func EarthAir() Atmosphere {
+	return Atmosphere{
+		Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
+		Layers:          earthISA(),
+		SurfaceTemp:     288.15,
+		SurfacePressure: 101325,
+		Top:             140000,
+	}
+}
+
+// MarsAir is six millibars of carbon dioxide. Thin enough that an ascent barely
+// notices it and thick enough that an arrival very much does.
+func MarsAir() Atmosphere {
+	return Atmosphere{
+		Fractions:       mix("CO2", 0.9532, "N2", 0.027, "Ar", 0.016, "O2", 0.0013),
+		Layers:          []Layer{{0, -0.0009}, {60000, 0}},
+		SurfaceTemp:     210,
+		SurfacePressure: 610,
+		Top:             90000,
+	}
+}
+
+// VenusAir is ninety-two bars at 737 K, which is the reason nothing here launches from
+// it: the surface density is 65 kg/m³, fifty times Earth's, and Titan at four times
+// Earth's was already the hardest preset to fly.
+func VenusAir() Atmosphere {
+	return Atmosphere{
+		Fractions:       mix("CO2", 0.965, "N2", 0.035),
+		Layers:          []Layer{{0, -0.00814}, {60000, -0.0012}, {100000, 0}},
+		SurfaceTemp:     737,
+		SurfacePressure: 9.2e6,
+		Top:             250000,
+	}
+}
+
+// TitanAir is nitrogen with methane in it: 1.5 bar at 94 K, cooling to the tropopause
+// at 44 km and warming again above it, which is the shape Huygens measured going down.
+func TitanAir() Atmosphere {
+	return Atmosphere{
+		Fractions:       mix("N2", 0.9420, "CH4", 0.0565, "H2", 0.0010),
+		Layers:          []Layer{{0, -0.00053}, {44000, 0.00053}, {250000, 0}},
+		SurfaceTemp:     93.7,
+		SurfacePressure: 146700,
+		Top:             500000,
+	}
 }

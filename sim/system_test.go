@@ -518,3 +518,94 @@ func TestEditingKeepsTheTreeWalkable(t *testing.T) {
 		}
 	}
 }
+
+// withAtmoTop puts a ceiling on a body without putting any air under it, which is what
+// most of these tests want out of an atmosphere: somewhere for the coast logic and the
+// step planner to stop, with no drag to change the trajectory they are measuring.
+func withAtmoTop(sys System, i int, top float64) System {
+	sys.Bodies[i].Atmo = Atmosphere{Top: top}
+	sys.Normalize()
+	return sys
+}
+
+// Air belongs to the body, and the vehicle flies through whatever it is next to. Until
+// this moved, only the launch body had an atmosphere at all: a descent to Mars on a
+// preset launched from Earth was a descent through nothing, and the drag that should
+// have been there was simply absent.
+func TestTheVehicleFliesThroughTheAirOfWhateverItIsAt(t *testing.T) {
+	sys := SolarSystem()
+	mars := sys.IndexOf("mars")
+	if sys.Bodies[mars].Atmo.IsVacuum() {
+		t.Fatal("Mars has no air, so this test cannot be about anything")
+	}
+
+	s := New(Config{
+		System: sys, LaunchBody: sys.IndexOf("earth"),
+		Rocket:  Rocket{Payload: 1000, Cd: 0.4, Diameter: 2},
+		MaxTime: 1e9,
+	})
+
+	// Put the vehicle thirty kilometres over Mars, going fast, and ask what it feels.
+	s.St.Center = mars
+	b := &sys.Bodies[mars]
+	s.St.Pos = Vec2{b.Radius + 30000, 0}
+	s.St.Vel = Vec2{0, 4000}
+	s.St.Landed, s.St.Phase = false, PhaseCoast
+
+	tm := s.Telemetry()
+	if tm.Density <= 0 {
+		t.Errorf("no air over Mars: density %g", tm.Density)
+	}
+	if tm.Drag <= 0 {
+		t.Errorf("no drag over Mars: %g N", tm.Drag)
+	}
+	if got := s.AtmoTop(); got != b.Atmo.Top {
+		t.Errorf("the ceiling reads %g, want Mars's %g", got, b.Atmo.Top)
+	}
+
+	// And over an airless one it feels nothing, whatever the launch body had.
+	s.St.Center = sys.IndexOf("moon")
+	mb := &sys.Bodies[s.St.Center]
+	s.St.Pos = Vec2{mb.Radius + 30000, 0}
+	tm = s.Telemetry()
+	if tm.Density != 0 || tm.Drag != 0 || tm.Mach != 0 {
+		t.Errorf("the Moon has weather: density %g, drag %g, Mach %g",
+			tm.Density, tm.Drag, tm.Mach)
+	}
+	if s.AtmoTop() != 0 {
+		t.Errorf("the Moon has a ceiling at %g", s.AtmoTop())
+	}
+}
+
+// Every body's air is derived with that body's own gravity, which is the whole reason
+// it cannot be prepared once for the configuration: the same gas at the same surface
+// pressure thins out at a different rate under a different g.
+func TestEachAtmosphereIsPreparedWithItsOwnGravity(t *testing.T) {
+	sys := SolarSystem()
+	titan := sys.IndexOf("titan")
+	g := sys.Bodies[titan].SurfaceG
+
+	// What the tree produced, against the same air prepared by hand with Titan's own
+	// gravity, and against it prepared with Earth's.
+	right := TitanAir()
+	right.Prepare(g)
+	wrong := TitanAir()
+	wrong.Prepare(9.80665)
+
+	const h = 100000.0
+	got := sys.Bodies[titan].Atmo.State(h).Pressure
+	if got != right.State(h).Pressure {
+		t.Errorf("at %g km the tree gives %.4g Pa and Titan's own gravity %.4g Pa",
+			h/1000, got, right.State(h).Pressure)
+	}
+	if got == wrong.State(h).Pressure {
+		t.Errorf("Titan's air reads the same under Earth's gravity, so nothing about " +
+			"the body reached the profile")
+	}
+	// And it is thicker up there than Earth's g would leave it, since a seventh of the
+	// pull holds the column up over seven times the height.
+	if got <= wrong.State(h).Pressure {
+		t.Errorf("%.4g Pa under g = %.3f against %.4g Pa under 9.81", got, g,
+			wrong.State(h).Pressure)
+	}
+}

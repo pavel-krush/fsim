@@ -324,6 +324,10 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// one preset, an entry corridor on another, and a parking orbit going
 			// round for ever on the ones that end at insertion.
 			{name: "8n-arrival", screen: ScreenFlight, at: atEnd(), focusBody: "soi", zoom: 6},
+			// Close in on the body arrived at, which is where its own air shows: every
+			// body carries its own now, so a planet reached from somewhere else is no
+			// longer drawn as bare rock.
+			{name: "8n2-arrival-air", screen: ScreenFlight, at: atEnd(), focusBody: "soi", zoom: 60},
 			{name: "8h-late", screen: ScreenFlight, at: atEnd(), zoom: 0.02},
 			// The whole flight on one time axis, and then the same axis on the ten
 			// minutes of it that the ascent took.
@@ -335,6 +339,9 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// The body editor, on a moon rather than on the launch body: that is
 			// where the orbital elements are.
 			{name: "9c-setup-body", screen: ScreenSetup, selBody: "moon"},
+			// A body with air, and one with none: the atmosphere column belongs to
+			// whichever body the first column is on.
+			{name: "9c2-setup-air", screen: ScreenSetup, selBody: "mars"},
 			{name: "9d-setup-bodylist", screen: ScreenSetup, selBody: "moon", openBody: true},
 			{name: "9-setup-4stage", screen: ScreenSetup, stages: 4},
 			{name: "9b-setup-4stage-bottom", screen: ScreenSetup, stages: 4, scrollRocket: 1e5},

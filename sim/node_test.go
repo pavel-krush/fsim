@@ -8,10 +8,9 @@ import (
 // parked puts a vehicle in a circular orbit with a stage that still has
 // propellant in it, which is the state a manoeuvre node is for.
 func parked(alt float64, nodes ...Node) *Sim {
-	sys := earthMoon()
+	sys := withAtmoTop(earthMoon(), 0, 140000)
 	cfg := Config{
 		System: sys,
-		Atmo:   Atmosphere{Top: 140000},
 		Rocket: Rocket{
 			Payload: 1000, Cd: 0.3, Diameter: 2,
 			Stages: []Stage{{

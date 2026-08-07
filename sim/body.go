@@ -49,6 +49,13 @@ type Body struct {
 	ArgPeri   float64 // rad, where periapsis points
 	MeanAnom0 float64 // rad, mean anomaly at t = 0
 
+	// Atmo is the air around this body, and a zero value is a vacuum. It belongs to
+	// the body rather than to the configuration because it is a property of the body:
+	// the vehicle flies through whatever it is next to, and until this moved here only
+	// the launch body had air at all — so a descent to Mars was a descent through
+	// nothing, on a preset launched from Earth.
+	Atmo Atmosphere
+
 	// Derived by Normalize, and left out of JSON for it: what is worth writing down
 	// is the inputs. The root's sphere of influence is +Inf besides, which JSON has
 	// no way to spell — so a saved system would not be writable at all with these
