@@ -61,6 +61,13 @@ web/build.sh && (cd web && python3 -m http.server 8080)
 - **`.github/workflows/pages.yml` builds it and publishes `web/` to GitHub Pages** on every push to
   master. The wasm is built there rather than committed: seventeen megabytes of generated binary would
   cost another seventeen in the history on every rebuild.
+- **`web/deploy.sh` is the fallback, and exists because the queue does stall.** One afternoon a deployment
+  sat in `deployment_queued` for ten minutes and timed out — on GitHub's own `pages-build-deployment` bot as
+  well as on our workflow, with the same artefact that had gone through in five and a half minutes that
+  morning. So there is a hand deploy: it force-pushes an orphan commit of `web/` to `gh-pages`, which keeps
+  the seventeen megabytes from accumulating in the history, and it serves once the Pages source is pointed
+  at the branch instead of at Actions. Nothing about GitHub Pages avoids Actions entirely, incidentally —
+  the branch route runs their own workflow, which is why the failure looked identical from both sides.
 - **The workflow gates on `go test ./sim/...`, not on the whole suite.** On Linux the interface package
   wants X11 and GL headers to build and a `DISPLAY` to so much as *import* — Ebiten's package init calls
   `glfw.Init()` — so running tests that never open a window costs six minutes of dev packages plus xvfb
