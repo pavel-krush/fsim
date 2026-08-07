@@ -73,10 +73,12 @@ type FlightScreen struct {
 	dragging   bool
 	dragAnchor sim.Vec2 // the world point grabbed at the press
 
-	// The predicted path, recomputed on a timer rather than every frame: it is a
-	// few hundred integrator steps and nothing about it changes in 200 ms.
-	pred    []sim.PredPoint
-	predAge float64
+	// The predicted path, and what it was computed from. It is recomputed when the
+	// flight has actually moved along it, not on a timer: see drawPrediction.
+	pred     []sim.PredPoint
+	predAge  float64 // wall-clock seconds since it was computed
+	predFrom float64 // mission time it was computed at
+	predKey  uint64  // fingerprint of the plan it was computed for
 }
 
 // camFree is the follow target of a camera that has been dragged: it centres on a
@@ -698,6 +700,35 @@ func (f *FlightScreen) predHorizon() float64 {
 // appears once the vehicle is out of the air, where the ascent's ground-frame
 // reading stops being the useful one.
 func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64) {
+	if !f.refreshPrediction(dt) {
+		return
+	}
+
+	// Drawn from where the vehicle is now, skipping the part of the path already
+	// flown. That is what makes a stale prediction free: the curve is the same curve,
+	// and the only thing staleness could show is a gap between the vehicle and the
+	// start of its own path, which there now cannot be.
+	//
+	// Same thinning as the trail: at orbital zoom hundreds of points land on the same
+	// pixel, and every one of them is still a separate draw.
+	px, py := cam.Project(f.vehiclePos())
+	for i, p := range f.pred {
+		if p.T <= f.s.St.T {
+			continue
+		}
+		x, y := cam.Project(f.framePoint(p.Pos, p.Center, p.T))
+		if math.Abs(x-px)+math.Abs(y-py) < 1.2 && i < len(f.pred)-1 {
+			continue
+		}
+		line(dst, px, py, x, y, 1, colPred)
+		px, py = x, y
+	}
+}
+
+// refreshPrediction keeps the cached path up to date and says whether there is one to
+// draw. Separate from the drawing because it is the whole cost — a prediction is 25 to
+// 90 ms and a line is not — and because when it runs is worth testing without a screen.
+func (f *FlightScreen) refreshPrediction(dt float64) bool {
 	// Only while coasting. During the ascent the pitch programme is flying and a
 	// prediction of it says nothing useful — and it is the expensive case: with a
 	// burn in progress every predicted step is a fixed 0.02 s one, which came to
@@ -706,36 +737,56 @@ func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64
 	// where the altitude test below starts letting predictions through.
 	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.Cfg.Atmo.Top {
 		f.pred = nil
-		return
+		return false
 	}
 
+	// Recomputed when the flight has eaten into the path, not when the clock has
+	// ticked. On a timer it landed twice a second for the whole of a coast, which at
+	// ×1 is a 25-to-90 ms hitch every half second in return for a curve that had not
+	// moved by a pixel. So: a floor of half a second of wall clock, and past it, two
+	// per cent of the predicted span actually flown.
+	//
+	// At ×1e6 the span is consumed in milliseconds and the floor is what binds, so
+	// nothing about high warp changes. At ×1 in low orbit it is minutes between
+	// recomputes, and paused it is never — which is why the plan's fingerprint is not
+	// an optimisation but the other half of the rule: a paused flight advances no
+	// mission time at all, and editing a burn has to redraw the path it produces.
 	f.predAge += dt
-	// Half a second. A long plan is tens of thousands of integrator steps —
-	// a burn runs at the fixed step in the prediction too — and nothing about the
-	// answer changes in that time.
-	if f.pred == nil || f.predAge > 0.5 {
+	key := f.planKey()
+	eaten := 0.0
+	if n := len(f.pred); n > 0 && f.pred[n-1].T > f.predFrom {
+		eaten = (f.s.St.T - f.predFrom) / (f.pred[n-1].T - f.predFrom)
+	}
+	if f.pred == nil || key != f.predKey || (f.predAge > 0.5 && eaten > 0.02) {
 		t0 := time.Now()
 		f.pred = f.s.Predict(f.predHorizon(), 400)
 		f.predNs = time.Since(t0).Nanoseconds()
-		f.predAge = 0
+		f.predAge, f.predFrom, f.predKey = 0, f.s.St.T, key
 	}
+	return len(f.pred) > 0
+}
 
-	// Same reason the trail thins itself: at orbital zoom hundreds of points land
-	// on the same pixel, and every one of them is still a separate draw.
-	var px, py float64
-	first := true
-	for i, p := range f.pred {
-		x, y := cam.Project(f.framePoint(p.Pos, p.Center, p.T))
-		if first {
-			px, py, first = x, y, false
-			continue
-		}
-		if math.Abs(x-px)+math.Abs(y-py) < 1.2 && i < len(f.pred)-1 {
-			continue
-		}
-		line(dst, px, py, x, y, 1, colPred)
-		px, py = x, y
+// planKey fingerprints the flight plan and the vehicle's place in it, so that an
+// edited burn redraws its path at once however stale the cached one is allowed to be.
+func (f *FlightScreen) planKey() uint64 {
+	h := uint64(14695981039346656037) // FNV-1a offset basis
+	mix := func(v uint64) {
+		h = (h ^ v) * 1099511628211
 	}
+	mix(uint64(len(f.s.Cfg.Nodes)))
+	mix(f.s.St.NodesDone)
+	mix(uint64(f.s.St.Stage))
+	for i := range f.s.Cfg.Nodes {
+		n := &f.s.Cfg.Nodes[i]
+		mix(math.Float64bits(n.T))
+		mix(math.Float64bits(n.DeltaV))
+		mix(math.Float64bits(n.Pitch))
+		mix(uint64(n.Frame))
+		if n.Separate {
+			mix(1)
+		}
+	}
+	return h
 }
 
 // trailWindow is the shortest stretch of flight, in seconds, that stays drawn

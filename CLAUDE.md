@@ -1047,7 +1047,34 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | one step, solar system | 17.2 µs | **3.1 µs** |
 | one step, single body | 1.08 µs | 0.88 µs |
 | one prediction from the parking orbit | 658 ms | **9.5 ms** |
+| predictions during a real-time coast | 2 per second | **none until the path is flown** |
+| history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
 
+- **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew
+  linearly for as long as the program was left running: 93,000 samples and 43 MB of heap at T+600 days on
+  the Mars preset, each one carrying a `PropFrac` slice of its own for the collector to walk. Past
+  `maxHist` the history *halves* — every second sample dropped, the recording rate halved with it — so a
+  four-hundred-day flight keeps the same twenty thousand samples an hour-long one does. Note that thinning
+  the rate alone would have done nothing: during a coast a sample is written per integrator step and the
+  steps are minutes long, so the interval was never what bound it.
+- **Thinning keeps a coarser record of the whole flight, not a complete record of the recent part.** An
+  ascent five days back is still on the graph at half the resolution it had; dropping the oldest instead
+  would throw the launch away, which is the one part of a flight everybody wants to look at. It also
+  bounds what the trail costs to draw, which is the other thing that had no ceiling — `trailSpan` is
+  `+Inf` for a trajectory that is not coming back round, so an interplanetary cruise draws the whole
+  flight by design.
+- **The prediction is recomputed when the flight has flown into it, not when the clock has ticked.** One
+  is 25 to 90 ms — a ten-day horizon through eighteen bodies — and a timer of half a second meant that
+  hitch twice a second for the whole of a coast, in return for a curve that had not moved by a pixel. The
+  rule is now a floor of half a second of wall clock *and* two per cent of the predicted span actually
+  flown: at ×1e6 the span is eaten in milliseconds and the floor binds, so high warp is unchanged; at ×1
+  it is minutes between recomputes, and paused it is never.
+- **Which is why `planKey` exists, and it is not an optimisation.** A paused flight advances no mission
+  time at all, so without a fingerprint of the plan an edited burn would keep the path it produced before
+  the edit — for as long as the pause lasted.
+- **A stale prediction is free because the path is drawn from the vehicle**, skipping the points already
+  flown. The curve is the same curve either way; the only thing staleness could show is a gap between the
+  vehicle and the start of its own path, and there is now no way for one to open.
 - **A prediction only runs while coasting.** During an ascent the pitch programme
   is flying and a preview of it says nothing — and it is the expensive case,
   because a burn is integrated at the fixed step. The old altitude test let

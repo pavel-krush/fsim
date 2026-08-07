@@ -554,3 +554,54 @@ func TestHoldingTheButtonHoldsTheGround(t *testing.T) {
 		}
 	}
 }
+
+// The prediction is the most expensive thing on the flight screen — 25 to 90 ms for a
+// ten-day horizon through eighteen bodies — and on a timer it ran twice a second for
+// the whole of a coast. At ×1 that is a hitch every half second in exchange for a curve
+// that has not moved by a pixel, which is what "it starts to lag" was.
+//
+// So it is recomputed when the flight has eaten into the path, and a paused flight
+// eats nothing.
+func TestThePredictionIsNotRecomputedForNothing(t *testing.T) {
+	a := &App{ui: NewUI()}
+	a.ui.DT = 1.0 / 60
+	view := Rect{0, 0, 1160, 830}
+
+	s := sim.New(presetNamed(t, "apollo-lunar").Cfg)
+	s.FastForward(20000) // out of the air, coasting, with the plan still ahead
+	f := NewFlightScreen(s)
+	f.updateCamera(a, view)
+
+	// The first frame has to compute one; the next six hundred, at ×1, must not.
+	f.refreshPrediction(a.ui.DT)
+	if f.pred == nil {
+		t.Fatal("no prediction on the first frame")
+	}
+	at := f.predFrom
+	for range 600 {
+		s.Advance(a.ui.DT)
+		f.updateCamera(a, view)
+		f.refreshPrediction(a.ui.DT)
+	}
+	if f.predFrom != at {
+		t.Errorf("recomputed after %.1f s of real-time flight, at T+%.1f", s.St.T-at, f.predFrom)
+	}
+
+	// An edited burn is the exception, and has to be: mission time does not move at
+	// all while the flight is paused, so nothing else would notice.
+	f.s.Cfg.Nodes[0].DeltaV += 10
+	f.refreshPrediction(a.ui.DT)
+	if f.predFrom == at {
+		t.Error("editing a burn did not redraw the path it produces")
+	}
+
+	// And a flight that has flown a long way through the path does recompute: the
+	// drawn curve must not be left behind.
+	before := f.predFrom
+	s.FastForward(s.St.T + 40000)
+	f.updateCamera(a, view)
+	f.refreshPrediction(1.0) // a second of wall clock, which is the floor cleared
+	if f.predFrom == before {
+		t.Error("the prediction was not refreshed after the flight moved along it")
+	}
+}

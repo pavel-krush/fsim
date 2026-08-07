@@ -256,3 +256,53 @@ func TestTranslunarCoastArrivesAtTheMoon(t *testing.T) {
 			s.St.T/86400)
 	}
 }
+
+// The history cannot grow for ever. A settled flight orbits indefinitely, so without
+// a ceiling this is a leak: 93,000 samples and 43 MB of heap at T+600 days on the Mars
+// preset, every one of them carrying a slice for the collector to walk.
+//
+// What has to survive the thinning is the shape of the record — the launch still in it,
+// the samples still in order, still spanning the flight — because the graph screen
+// plots the whole of it.
+func TestTheHistoryStaysBounded(t *testing.T) {
+	s := New(apolloMars().Cfg)
+	s.FastForward(400 * 86400)
+
+	if len(s.Hist) > maxHist {
+		t.Errorf("%d samples, more than the %d cap", len(s.Hist), maxHist)
+	}
+	if len(s.Hist) < maxHist/4 {
+		t.Errorf("%d samples after thinning: the record is coarser than it needs to be",
+			len(s.Hist))
+	}
+	if s.Hist[0].T > 1 {
+		t.Errorf("the record now starts at T+%.1f s: the launch was thrown away", s.Hist[0].T)
+	}
+	if last := s.Hist[len(s.Hist)-1].T; math.Abs(last-s.St.T) > 3600 {
+		t.Errorf("the record ends at T+%.3g s with the flight at T+%.3g s", last, s.St.T)
+	}
+	for i := 1; i < len(s.Hist); i++ {
+		if s.Hist[i].T <= s.Hist[i-1].T {
+			t.Fatalf("sample %d is at T+%.3f, back from T+%.3f",
+				i, s.Hist[i].T, s.Hist[i-1].T)
+		}
+	}
+}
+
+// And thinning is a recording decision, not a physical one: the flight it thins must be
+// the same flight to the last bit.
+func TestThinningDoesNotTouchTheFlight(t *testing.T) {
+	cfg := apolloLunar().Cfg
+
+	a := New(cfg)
+	a.FastForward(3 * 86400)
+
+	b := New(cfg)
+	b.HistInterval = math.Inf(1) // records nothing at all, so nothing is ever thinned
+	b.FastForward(3 * 86400)
+
+	if a.St.Pos != b.St.Pos || a.St.Vel != b.St.Vel || a.St.T != b.St.T {
+		t.Errorf("recording changed the trajectory\n with history %+v\n without %+v",
+			a.St.Pos, b.St.Pos)
+	}
+}
