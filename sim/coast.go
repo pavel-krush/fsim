@@ -152,6 +152,7 @@ func (s *Sim) stepCap() float64 {
 // integrator, so at ×1 — where the cap is the fixed step — a real-time flight is
 // exactly what the simulator has always produced, to the last bit.
 func (s *Sim) advanceOne(h float64) float64 {
+	s.Steps++
 	if h <= FixedStep || !s.coasting() {
 		s.Step(h)
 		return h

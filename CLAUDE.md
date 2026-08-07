@@ -113,6 +113,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
 | `lang.go` | Locale loading and lookup, RU/EN switching, dispatch for events, verdicts, phases, presets, bodies |
 | `assets/locale/*.json` | All interface text, one file per language, flat dotted keys |
+| `perf.go` | The service readout: what a frame costs, split into physics and everything else |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
 | `screen_presets.go` | The first screen: the mission list, and nothing else |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
@@ -964,6 +965,32 @@ the slice it pointed into — so `TestPresetsAreValid`, `TestRemoveRunningNode`,
   because the limit stops applying once there is a verdict. Relying on that is
   relying on an accident, so the limit is now six days — the length of the mission
   it ships with.
+
+## The service readout
+
+Under the mission clock, in the corner of the trajectory view: frames and ticks, the frame period, what
+the physics cost and what it bought, what the rest of the frame cost, the warp actually delivered, the
+last prediction and the size of the history. `perf.go`.
+
+- **The split is the point.** `sim` is the time inside `Advance`; the other line is the whole of `Update`
+  minus that, which is the interface — every widget laid out, every ring tessellated, the trail. Which
+  half is not keeping up is a question this project has had to answer twice by indirect means: once by
+  timing a prediction that turned out to cost 658 ms, and once by taking screenshots at two window sizes
+  to establish that the browser build was bound by pixels rather than arithmetic. Now it is on the screen.
+- **`Update` is not the whole frame, so the frame period is shown too.** What Ebiten spends rasterising
+  and presenting happens after `Update` returns, and the gap between the period and `sim + ui` is exactly
+  that. Four milliseconds of interface at eight frames a second is not a contradiction — it is where the
+  other hundred and twenty went, and in a browser under software rendering that is the usual reading.
+- **Sampled over half a second, not per frame.** Per-frame figures jitter by a factor of two, and in a
+  browser `time.Now()` is quantised to about a tenth of a millisecond — the same order as a frame's
+  integration — so a single frame's measurement is mostly the clock. For the same reason the cost of one
+  step is withheld until a window has twenty of them: a number that is noise is worse than no number.
+- **The warp line only appears when the warp is not being delivered**, and keeps two decimals while it is
+  small: at ×1 asked and a third achieved the interesting figure is 0.33, and rounding it to zero says
+  nothing. It says the simulation is falling behind before `WarpLimited` trips, which only fires once a
+  frame has run out of its step budget entirely.
+- **`Sim.Steps` is the one thing the physics gained**, a plain counter in `advanceOne` that nothing in the
+  model reads. A prediction runs on a copy, so its steps land in the copy's counter.
 
 ## What it costs to run
 

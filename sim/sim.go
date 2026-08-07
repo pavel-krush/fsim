@@ -244,6 +244,12 @@ type Sim struct {
 	// delivered the time asked for, so the flight is going slower than the warp
 	// setting claims.
 	WarpLimited bool
+	// Steps counts the integrator steps taken, fixed and adaptive alike. Nothing in
+	// the physics reads it: it is there so that the interface can say what a step
+	// costs and how many of them a frame is buying, which is the difference between
+	// "the simulation is slow" and "the drawing is slow". A prediction runs on a
+	// copy, so its steps land in the copy's counter and not in this one.
+	Steps int64
 
 	coastH float64 // step the adaptive propagator wants next, s
 
@@ -329,6 +335,7 @@ func (s *Sim) Reset() {
 	s.prevRadialV = 0
 	s.reachedSpace = false
 	s.leftHome = false
+	s.Steps = 0
 	s.mark(EvLiftoff)
 	s.record()
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -45,6 +46,13 @@ type FlightScreen struct {
 	// on the pad to 0 once the view has pulled back off the planet. Set by
 	// updateCamera, read by trackPoint.
 	groundHold float64
+	// What this frame's simulation cost, for the service readout: nanoseconds in
+	// Advance, steps it took, and simulated seconds it bought. predNs is the last
+	// prediction, which is recomputed twice a second at most.
+	simNs    int64
+	simSteps int64
+	simT     float64
+	predNs   int64
 	// frameShown is the frame the picture is being drawn in, noticed by handOver.
 	frameShown int
 	// camHold is where the view was, written from the new centre, and camHoldK how
@@ -238,12 +246,17 @@ func (f *FlightScreen) Update(a *App, dst *ebiten.Image) {
 
 	f.handleKeys(u)
 
+	f.simNs, f.simSteps, f.simT = 0, 0, 0
 	if !f.paused && !f.s.St.Done {
 		// The rate goes in as well as the amount: it caps how far one coast step
 		// may reach, which is what keeps the picture moving at ×1 instead of
 		// jumping ten minutes at a time.
 		f.s.WarpRate = warpSteps[f.warp]
+		t0, steps0, simT0 := time.Now(), f.s.Steps, f.s.St.T
 		f.s.Advance(u.DT * warpSteps[f.warp])
+		f.simNs = time.Since(t0).Nanoseconds()
+		f.simSteps = f.s.Steps - steps0
+		f.simT = f.s.St.T - simT0
 	}
 
 	const pad = 12
@@ -542,7 +555,7 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 	f.drawEventMarkers(clip, cam, padX, padY, padLabelled)
 	f.drawVehicle(clip, cam, tm)
 	f.drawScaleBar(clip, view, cam)
-	f.drawViewHUD(clip, view, tm)
+	f.drawViewHUD(a, clip, view, tm)
 	f.drawNodePanel(a, clip, view)
 	f.drawCamPicker(a, clip, view)
 	f.handleCamera(u, view)
@@ -700,7 +713,9 @@ func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64
 	// a burn runs at the fixed step in the prediction too — and nothing about the
 	// answer changes in that time.
 	if f.pred == nil || f.predAge > 0.5 {
+		t0 := time.Now()
 		f.pred = f.s.Predict(f.predHorizon(), 400)
+		f.predNs = time.Since(t0).Nanoseconds()
 		f.predAge = 0
 	}
 
@@ -1263,7 +1278,7 @@ func (f *FlightScreen) drawScaleBar(dst *ebiten.Image, view Rect, cam *Camera) {
 }
 
 // drawViewHUD is the small overlay in the corner of the trajectory view.
-func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetry) {
+func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.Telemetry) {
 	x, y := view.X+14, view.Y+12
 	drawText(dst, fmtClock(tm.T), fontBig, x, y, colText, alignLeft)
 	y += 30
@@ -1286,6 +1301,16 @@ func (f *FlightScreen) drawViewHUD(dst *ebiten.Image, view Rect, tm sim.Telemetr
 			vc = colWarn
 		}
 		drawText(dst, verdict, fontHead, x, y, vc, alignLeft)
+	}
+
+	// The service readout, under whatever the flight has to say about itself.
+	warp := 0.0
+	if !f.paused && !f.s.St.Done {
+		warp = warpSteps[f.warp]
+	}
+	for _, l := range a.perf.lines(warp, len(f.s.Hist)) {
+		y += 18
+		drawText(dst, l, fontMonoSm, x, y, colTextFaint, alignLeft)
 	}
 
 	// A warp the current regime cannot deliver is worth saying out loud, or the
