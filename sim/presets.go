@@ -85,13 +85,7 @@ func earthFalcon() Preset {
 				MassSource:     FromMass,
 				Mass:           5.97237e24,
 				RotationPeriod: 86164.1,
-			},
-			Atmo: Atmosphere{
-				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
-				Layers:          earthISA(),
-				SurfaceTemp:     288.15,
-				SurfacePressure: 101325,
-				Top:             140000,
+				Atmo:           EarthAir(),
 			},
 			Rocket: Rocket{
 				Payload:  19000,
@@ -156,13 +150,6 @@ func apolloSaturn() Preset {
 			System:     sys,
 			LaunchBody: earth,
 			Body:       sys.Bodies[earth],
-			Atmo: Atmosphere{
-				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
-				Layers:          earthISA(),
-				SurfaceTemp:     288.15,
-				SurfacePressure: 101325,
-				Top:             140000,
-			},
 			Rocket: Rocket{
 				// The spacecraft: command and service module 28.8 t, lunar module
 				// 15.1 t, spacecraft/LM adapter 1.8 t. The escape tower is not
@@ -381,17 +368,13 @@ func apolloMars() Preset {
 func ioJupiter() Preset {
 	sys := SolarSystem()
 	io := sys.IndexOf("io")
+	// Io has an atmosphere of sulphur dioxide at a billionth of a bar, which is
+	// nothing to fly through: vacuum, like the Moon.
 
 	return Preset{
 		Name: "io-jupiter",
 		Cfg: Config{
 			System: sys, LaunchBody: io, Body: sys.Bodies[io],
-			// Io has an atmosphere of sulphur dioxide at a billionth of a bar,
-			// which is nothing to fly through. Treated as vacuum, like the Moon.
-			Atmo: Atmosphere{
-				Fractions:   mix("He", 1),
-				SurfaceTemp: 110,
-			},
 			Rocket: Rocket{
 				Payload: 300, Cd: 0.3, Diameter: 3.0,
 				Stages: []Stage{
@@ -506,13 +489,6 @@ func protonZvezda() Preset {
 		Name: "proton-zvezda",
 		Cfg: Config{
 			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
-			Atmo: Atmosphere{
-				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
-				Layers:          earthISA(),
-				SurfaceTemp:     288.15,
-				SurfacePressure: 101325,
-				Top:             140000,
-			},
 			Rocket: Rocket{
 				// The cargo Zvezda carried inside it; the module itself is the
 				// stage below.
@@ -574,13 +550,6 @@ func protonGeo() Preset {
 		Name: "proton-geo",
 		Cfg: Config{
 			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
-			Atmo: Atmosphere{
-				Fractions:       mix("N2", 0.7808, "O2", 0.2095, "Ar", 0.0093, "CO2", 0.0004),
-				Layers:          earthISA(),
-				SurfaceTemp:     288.15,
-				SurfacePressure: 101325,
-				Top:             140000,
-			},
 			Rocket: Rocket{
 				// Two and a half tonnes of comsat, which is what the belt was worth
 				// in the seventies.
@@ -649,18 +618,9 @@ func titanAscent() Preset {
 	return Preset{
 		Name: "titan-ascent",
 		Cfg: Config{
+			// Titan's air comes with Titan: see TitanAir. 1.5 bar of nitrogen at
+			// 94 K, and the reason this preset was the hardest of the lot.
 			System: sys, LaunchBody: titan, Body: sys.Bodies[titan],
-			Atmo: Atmosphere{
-				// Nitrogen with methane in it, which is the mixture the setup screen
-				// already offers under Titan's name.
-				Fractions: mix("N2", 0.9420, "CH4", 0.0565, "H2", 0.0010),
-				// Cooling to the tropopause at 44 km, then warming again through the
-				// stratosphere, which is the shape Huygens measured on the way down.
-				Layers:          []Layer{{0, -0.00053}, {44000, 0.00053}, {250000, 0}},
-				SurfaceTemp:     93.7,
-				SurfacePressure: 146700,
-				Top:             500000,
-			},
 			Rocket: Rocket{
 				Payload:  400,
 				Cd:       0.25,
@@ -719,13 +679,7 @@ func marsAscent() Preset {
 				MassSource:     FromMass,
 				Mass:           6.4171e23,
 				RotationPeriod: 88642,
-			},
-			Atmo: Atmosphere{
-				Fractions:       mix("CO2", 0.9532, "N2", 0.027, "Ar", 0.016, "O2", 0.0013),
-				Layers:          []Layer{{0, -0.0009}, {60000, 0}},
-				SurfaceTemp:     210,
-				SurfacePressure: 610,
-				Top:             90000,
+				Atmo:           MarsAir(),
 			},
 			Rocket: Rocket{
 				Payload:  400,
@@ -778,13 +732,6 @@ func moonAscent() Preset {
 				Mass:           7.342e22,
 				RotationPeriod: 2360591,
 			},
-			Atmo: Atmosphere{
-				Fractions:       mix("He", 1),
-				Layers:          nil,
-				SurfaceTemp:     250,
-				SurfacePressure: 0,
-				Top:             0,
-			},
 			Rocket: Rocket{
 				Payload:  300,
 				Cd:       0.3,
@@ -830,10 +777,23 @@ func moonAscent() Preset {
 // 600 km planet at one g, a 200 km moon at a sixth of it, twelve thousand
 // kilometres out and tidally locked. The sphere of influence works out at 2430 km,
 // twelve lunar radii, which is what the game says too.
+// kerbinAir is Earth's air on a planet a ninth the size: 1 bar at the surface and all
+// of it gone by 70 km, which is what makes a direct ascent there impossible and the
+// kick stage at apoapsis necessary.
+func kerbinAir() Atmosphere {
+	return Atmosphere{
+		Fractions:       mix("N2", 0.78, "O2", 0.21, "Ar", 0.01),
+		Layers:          []Layer{{0, -0.008}, {9000, -0.004}, {25000, 0.001}, {45000, 0}},
+		SurfaceTemp:     288.15,
+		SurfacePressure: 101325,
+		Top:             70000,
+	}
+}
+
 func kerbinSystem() System {
 	sys := System{Bodies: []Body{
 		{Name: "kerbin", Radius: 600000, MassSource: FromMass, Mass: 5.2915158e22,
-			RotationPeriod: 21549.425},
+			RotationPeriod: 21549.425, Atmo: kerbinAir()},
 		// The mean anomaly is the launch window, solved the same way Mars's was:
 		// fly the transfer, take where and when it crosses the Mun's orbit, and
 		// put the Mun there — then step off it far enough to miss.
@@ -883,13 +843,7 @@ func kerbinAscent() Preset {
 				MassSource:     FromMass,
 				Mass:           5.2915158e22,
 				RotationPeriod: 21549.425,
-			},
-			Atmo: Atmosphere{
-				Fractions:       mix("N2", 0.78, "O2", 0.21, "Ar", 0.01),
-				Layers:          []Layer{{0, -0.008}, {9000, -0.004}, {25000, 0.001}, {45000, 0}},
-				SurfaceTemp:     288.15,
-				SurfacePressure: 101325,
-				Top:             70000,
+				Atmo:           kerbinAir(),
 			},
 			Rocket: Rocket{
 				Payload:  1000,

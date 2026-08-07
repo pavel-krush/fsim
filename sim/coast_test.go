@@ -9,7 +9,7 @@ import (
 // which is the state the adaptive step is for. It starts at periapsis.
 func orbiting(peri, apo float64) *Sim {
 	sys := earthMoon()
-	s := New(Config{System: sys, Atmo: Atmosphere{Top: 140000}, Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
+	s := New(Config{System: withAtmoTop(sys, 0, 140000), Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
 
 	rp := sys.Bodies[0].Radius + peri
 	ra := sys.Bodies[0].Radius + apo
@@ -131,7 +131,7 @@ func TestCoastCannotStepIntoTheAir(t *testing.T) {
 	s := falling(-100000, 8000000) // a periapsis well underground, seen from the top
 	s.WarpRate = 1e6
 
-	top := s.Cfg.Atmo.Top
+	top := s.AtmoTop()
 	for !s.St.Done && s.St.T < 40000 {
 		alt := s.Altitude()
 		h := s.plannedStep()
@@ -158,8 +158,7 @@ func TestCoastCannotStepIntoTheAir(t *testing.T) {
 // has to give up, say so, and still make progress.
 func TestWarpIsLimitedWhereTheStepCannotGrow(t *testing.T) {
 	s := New(Config{
-		System:  earthMoon(),
-		Atmo:    Atmosphere{Top: 140000},
+		System:  withAtmoTop(earthMoon(), 0, 140000),
 		Rocket:  Rocket{Payload: 1000, Diameter: 1},
 		MaxTime: 1e9,
 	})
@@ -205,7 +204,7 @@ func TestTranslunarCoastArrivesAtTheMoon(t *testing.T) {
 		s.Bodies[1].MeanAnom0 = meanAnom0
 		s.Normalize()
 
-		sim := New(Config{System: s, Atmo: Atmosphere{Top: 140000},
+		sim := New(Config{System: withAtmoTop(s, 0, 140000),
 			Rocket: Rocket{Payload: 1000, Diameter: 1}, MaxTime: 1e9})
 		rp := sys.Bodies[0].Radius + 185000
 		a := (rp + moonR) / 2

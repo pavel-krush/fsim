@@ -20,10 +20,10 @@ import (
 // writable at all, since the root's sphere of influence is +Inf and JSON has no way to
 // spell that. On the way back in, EnsureSystem derives them again.
 
-// storeVersion is the format of what is written. It is recorded so that a file from a
-// later version can say so instead of being silently misread; nothing reads an older
-// one differently yet, and JSON already tolerates fields a build does not know.
-const storeVersion = 1
+// storeVersion is the format of what is written. Version 1 kept one atmosphere in the
+// configuration, for the launch body; version 2 keeps one per body, where it belongs.
+// A file from a later version says so instead of being silently misread.
+const storeVersion = 2
 
 // storeKey names the slot. It is the localStorage key in a browser and part of the
 // path natively, so it is one string in one place.
@@ -60,6 +60,9 @@ func decodeConfig(data []byte) (sim.Config, error) {
 		return sim.Config{}, fmt.Errorf("saved by a newer version (%d)", st.Version)
 	}
 	cfg := st.Config
+	if st.Version < 2 {
+		migrateAir(data, &cfg)
+	}
 	// EnsureSystem is the whole of the repair: it builds a one-body system out of
 	// Body when there is no system, normalises the tree, clamps the launch body into
 	// range and mirrors it back. A decoded config cannot hold a NaN — JSON has no
@@ -69,6 +72,32 @@ func decodeConfig(data []byte) (sim.Config, error) {
 		return sim.Config{}, err
 	}
 	return cfg, nil
+}
+
+// migrateAir moves a version 1 file's single atmosphere onto the body it described.
+//
+// The field it comes from does not exist in Config any more, so it is read out of the
+// same bytes a second time through a shape that still has it. Cheap, and it keeps the
+// dead field out of the live struct — a compatibility shim in the type everything else
+// uses would outlive the compatibility.
+func migrateAir(data []byte, cfg *sim.Config) {
+	var old struct {
+		Config struct {
+			Atmo       sim.Atmosphere
+			LaunchBody int
+		}
+	}
+	if err := json.Unmarshal(data, &old); err != nil || old.Config.Atmo.IsVacuum() {
+		return
+	}
+	i := old.Config.LaunchBody
+	switch {
+	case i >= 0 && i < len(cfg.System.Bodies):
+		cfg.System.Bodies[i].Atmo = old.Config.Atmo
+	default:
+		// No system in the file: it was a single planet, and Body is what built it.
+		cfg.Body.Atmo = old.Config.Atmo
+	}
 }
 
 // validConfig is what a configuration has to have to be flown at all. It is not a

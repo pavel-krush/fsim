@@ -246,7 +246,7 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 
 	for steps := 0; steps < maxPredSteps && len(out) < maxPoints && !c.St.Done && c.St.T < end; steps++ {
 		h := FixedStep
-		if c.St.Phase == PhaseBurn && c.Altitude() > c.atmoTop() {
+		if c.St.Phase == PhaseBurn && c.Altitude() > c.AtmoTop() {
 			// A planned burn in vacuum is a smooth arc, and a preview of it does
 			// not need the ascent's step: a translunar injection is five hundred
 			// seconds long, which at 0.02 s is twenty-five thousand steps of work

@@ -133,10 +133,13 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A body's parent always sits at a lower index.** That one invariant makes a cycle impossible to
   express, makes every walk up the tree terminate by construction, and leaves the slice in topological
   order. `Normalize` enforces it, clamping bad data to the root rather than trusting the author.
-- **`Config.Body` is the launch body's editable face.** `New` copies it *into* the system when it has a
-  radius, then mirrors it back, so the setup screen's fields still work on a multi-body preset — the first
-  cut copied the other way and editing the planet was a silent no-op. A caller that fills the system and
-  leaves `Body` empty, which is every test that builds a system by hand, is left alone.
+- **`Config.Body` is an input only when there is no system, and a read-back mirror ever after.** That is
+  what makes a single-planet configuration — and every test that writes one by hand — work, and it is the
+  only direction that leaves the editor working: the first column writes through the tree, because it has
+  to for the other seventeen bodies, and `EnsureSystem` used to copy the stale mirror back over the top on
+  the next call. Diameter, mass, rotation period — every edit to the planet the pad is on snapped back a
+  frame later with nothing on screen to say why. `TestEditingTheLaunchBodySticks` drives a real frame of
+  the editor and pins it; the two directions cannot both be live.
 - **The state is measured from `State.Center`**, the deepest body whose sphere of influence contains the
   vehicle, in a frame that does not rotate with it. Not from the root: heliocentric coordinates are
   ~1.5e11 m, where float64 resolves 3e-5 m, and the ascent tests assert altitudes to 1e-6 m. They would
@@ -162,8 +165,12 @@ body built from `Config.Body`, which is what every single-planet configuration i
 - **A system of one body is the old single-planet model to the last digit.** `Gravity` returns early for
   it, keeping the same arithmetic shape, and `TestOneBodySystemIsTheOldModel` pins that. All five presets
   were checked bit-for-bit across the change, all 17 significant digits of the final state.
-- Only the launch body has an atmosphere. Air on every body waits for a setup screen that can describe
-  it; until then `atmoTop` and the drag lookup return vacuum away from the launch body.
+- **Every body carries its own air**, in `Body.Atmo`, and a zero value is a vacuum. The vehicle flies
+  through whatever it is next to: `forces` reads `Center().Atmo`, `AtmoTop` follows the frame, and the
+  profile of each one is derived in `System.Normalize` with *that body's* surface gravity — the same gas at
+  the same surface pressure thins out at a different rate under a different pull, which is why it cannot be
+  prepared once for the configuration. In the solar system Venus, Earth, Mars and Titan have air and
+  nothing else does.
 
 ## Physics — what matters
 
@@ -332,6 +339,29 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
   net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
   slug-to-key mapping to keep in step with anything.
+
+### The air, per body
+
+`Body.Atmo` is one atmosphere per body, and the four in the solar system that have enough of it to fly
+through are Venus, Earth, Mars and Titan. `EarthAir`, `MarsAir`, `VenusAir` and `TitanAir` in `solar.go`
+are functions rather than values, because an `Atmosphere` carries slices and a shared one would be edited
+from every system built out of that file at once.
+
+- **The gas giants are airless on purpose.** An atmosphere here is measured *from a surface* — a base
+  pressure and a temperature at a radius — and Jupiter has no surface to measure from. Between a made-up
+  cloud deck and nothing, nothing is the honest answer.
+- **Venus is described and not launched from.** 92 bar at 737 K is a surface density of 65 kg/m³, fifty
+  times Earth's, where Titan at four times Earth's was already the hardest preset here to fly.
+- **Above the air, and on a body with none, `State` returns nothing at all** — no temperature and no speed
+  of sound. It used to hand back the surface values, which put a Mach number on a vehicle in orbit: Mach 21
+  at 300 km over the Earth, Mach 33 at ninety million metres from Mars. A surface temperature without air
+  is a radiative question this simulator does not ask, so the two presets that carried a trace atmosphere
+  purely to feed that readout — the Moon and Io — are plain vacuum again.
+- **`surfaceP` stays the launch body's**, because it is the pressure the engine's sea-level Isp was
+  *rated* at, not a property of where the vehicle happens to be. An engine does not get a different rating
+  by flying to Mars.
+- **All thirteen presets are bit-for-bit unchanged across the move**, verified at all 17 digits of the
+  final state: every atmosphere the presets defined was the same data now attached to the body.
 
 ### Apollo goes to the Moon, twice
 
@@ -652,6 +682,11 @@ header, and the stored setup gets a row of its own at the bottom of the mission 
   was not writable at all until they came out. `EnsureSystem` derives them again on the way in, which is
   also what clamps a stale launch body and mirrors `Body` back. `TestASystemOnRailsCanBeWrittenAtAll`
   pins the trap, since the symptom is a whole feature failing over one struct tag in another package.
+- **The format is versioned, and version 2 was the first time that earned its keep.** Version 1 kept one
+  atmosphere in the configuration, for the launch body; version 2 keeps one per body. A version 1 file is
+  read twice — once into the live `Config`, once into a shim that still has the dead field — and its air is
+  put on the body it described. A compatibility field left in the live struct would outlive the
+  compatibility.
 - **A stored file is the one input this program gets from a previous version of itself**, so it is the
   one that has to be doubted: `validConfig` refuses a config with no bodies, no radius, no stages or
   more burns than the bitmask holds, and a `version` from the future says so rather than being misread.
@@ -827,7 +862,9 @@ the time it was measured**.
   `maxRingPx` a disc, beyond that the flat-band mode. A moon you cannot see is a moon you cannot aim at,
   so the dot has a floor of 2 px and a name under it — under, not beside, because beside is where the
   launch pad puts its own label.
-- **Only the launch body has air to draw**, which is the same limitation the physics has.
+- **Every body draws its own air**, which is the same rule the physics follows. A planet arrived at from
+  somewhere else used to be drawn as bare rock, because there was one atmosphere in the picture and it hung
+  around the body the flight started from.
 - **`bodyColors` in `theme.go` is the one place that knows Mars is red.** The physics carries identifiers
   and no colours, the same way it carries no text. An identifier with no entry — anything added in the
   editor — comes out grey.
@@ -886,6 +923,28 @@ the time it was measured**.
   not the screen.
 - **Framing is derived from the eased zoom, not the raw `span`.** Otherwise a step in the span — the
   orbit closing, say — jolts the composition while the zoom is still gliding.
+- **The automatic framing has to keep the vehicle in the picture, and that is solved rather than assumed.**
+  The span was capped at twenty-four body radii, which is a sensible width for a picture *about a planet*
+  and hides the vehicle everywhere else: in the Sun's frame it is 1.7e10 m against a vehicle at 1.5e11, so
+  three days out from the Earth the screen was one yellow dot with the flight six view-widths off the edge,
+  and the same cap bit on the way out of any body past about twelve radii. The cap now yields to the
+  vehicle's own distance — and because *where the centre sits* is itself a function of the span through
+  `camBlend`, the span needed to keep the vehicle is a function of the span too, so `autoScale` iterates
+  three passes of a monotone fixed point instead of guessing at a threshold. The first attempt did guess
+  one, and left the vehicle just off the top edge at 1.9 radii.
+- **The slide to the body's middle stops once the body has stopped being the subject** (`camFarFade`).
+  It is what makes standing on a planet become looking at one, and it assumed there was a planet to stand
+  on: in the Sun's frame the vehicle is two hundred solar radii out and the slide never let go, so the
+  picker said "the vehicle" while the picture was centred on the Sun with the flight off to one side. The
+  fade is zero within four radii — a parking orbit, an approach, anything the body's own shape frames — and
+  one past sixteen. **The rotation ramp keeps the old `camBlend` alone**, because tying *that* to the fade
+  would point the vehicle's heliocentric radius at the top of the screen and turn the whole picture over
+  the months of a cruise.
+- **`camBlend` is the one place that knows how the centre slides from the vehicle to the body.**
+  `autoScale` and `updateCamera` both need it, and the two disagreeing is precisely the fault above: one
+  chose a span believing the centre was still near the vehicle while the other had already moved it to the
+  middle of the planet. `TestTheVehicleStaysInThePicture` walks fourteen moments of the Mars flight,
+  including both sides of the hand-over into the Sun's frame, and asks only that the vehicle is on screen.
 - **The camera focus cannot be lerped towards the planet's centre linearly.** The target is thousands of
   kilometres away, so even a factor of 1e-4 shifts the picture by hundreds of metres and throws the
   launch pad out of a 1.5 km wide view. The blend stays at zero until the span reaches half a planet
@@ -972,8 +1031,9 @@ body on screen a satellite; `× body` deletes one.
   address inside the body being left.
 - **Unticking "launch from this body" does nothing.** The pad has to be somewhere; the way to move it is
   to tick the box on another body.
-- **The atmosphere column is still the launch body's air, whatever body that is.** Move the pad to the
-  Moon and Earth's atmosphere goes with it. Per-body air is the next thing this editor wants.
+- **The atmosphere column edits the air of the selected body**, and says whose it is under the header. A
+  body with none gets a sentence saying so and a `+ atmosphere` button rather than a column of zeroes to
+  puzzle over; one with air gets `× atmosphere`. The offered default is Earth's, as a thing to edit.
 
 ## Stale indices, which is how this thing crashes
 

@@ -261,3 +261,36 @@ func TestTheSavedSetupGetsARowOfItsOwn(t *testing.T) {
 		t.Error("editing the loaded setup changed the stored one")
 	}
 }
+
+// A file written before the air belonged to the bodies still has to load, with its air
+// on the body it described. There is exactly one such file per person who used the
+// version that wrote it, and losing their atmosphere silently is worse than refusing.
+func TestAVersionOneFileKeepsItsAir(t *testing.T) {
+	// A single-planet setup, which is the shape that has no system in it at all.
+	single := `{"version":1,"config":{
+		"Body":{"Name":"earth","Radius":6371000,"MassSource":0,"Mass":5.97237e24},
+		"Atmo":{"Fractions":[0.78,0.21,0,0.01,0,0,0,0],
+			"Layers":[{"BaseAlt":0,"Lapse":-0.0065}],
+			"SurfaceTemp":288.15,"SurfacePressure":101325,"Top":140000},
+		"Rocket":{"Diameter":3,"Cd":0.4,"Stages":[{"DryMass":1000,"PropMass":9000,
+			"ThrustVac":200000,"IspVac":300,"IspSL":280,"Throttle":1}]}}}`
+
+	cfg, err := decodeConfig([]byte(single))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cfg.Body.Atmo.IsVacuum() {
+		t.Fatal("the air was dropped on the way in")
+	}
+	if got := cfg.Body.Atmo.Top; got != 140000 {
+		t.Errorf("the ceiling came back as %g", got)
+	}
+	// And it is the launch body's air, so the simulation finds it.
+	s := sim.New(cfg)
+	if got := s.AtmoTop(); got != 140000 {
+		t.Errorf("the flight launched into a ceiling of %g", got)
+	}
+	if s.Center().Atmo.State(0).Density <= 1 {
+		t.Errorf("surface density came out at %g", s.Center().Atmo.State(0).Density)
+	}
+}

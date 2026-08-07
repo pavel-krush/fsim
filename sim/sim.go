@@ -101,7 +101,6 @@ type Config struct {
 	LaunchLon  float64 // rad, the launch site's angle on that body at t = 0
 
 	Body    Body
-	Atmo    Atmosphere
 	Rocket  Rocket
 	Program Program
 	// Nodes are the scheduled burns, in no particular order: the pitch programme
@@ -120,10 +119,16 @@ type Config struct {
 // system of one body, the launch index is brought into range, and the derived
 // quantities are filled in.
 //
-// Body is the launch body's editable face: it is copied *into* the system when it
-// has a radius, then mirrored back. Copying the other way made editing the planet
-// on a multi-body preset a silent no-op. A caller that fills the system and
-// leaves Body empty — every test that builds one by hand — is left alone.
+// Body is an *input only when there is no system yet*, which is what makes a
+// single-planet configuration — and every test that writes one by hand — work. Once
+// the tree exists, Body is a read-back mirror of the launch body and nothing else.
+//
+// It used to be copied into the system on every call, and that quietly undid every
+// edit made to the launch body: the editor writes through the tree, because it has to
+// for the other seventeen bodies, and the next call put the stale mirror back over the
+// top. Diameter, mass, rotation — all of it snapped back a frame later, with nothing
+// on screen to say why. The two directions cannot both be live; this is the one that
+// leaves the editor working.
 func (c *Config) EnsureSystem() {
 	if len(c.System.Bodies) == 0 {
 		c.System.Bodies = []Body{c.Body}
@@ -131,10 +136,6 @@ func (c *Config) EnsureSystem() {
 	c.System.Normalize()
 	if c.LaunchBody < 0 || c.LaunchBody >= len(c.System.Bodies) {
 		c.LaunchBody = 0
-	}
-	if c.Body.Radius > 0 {
-		c.System.Bodies[c.LaunchBody] = c.Body
-		c.System.Normalize()
 	}
 	c.Body = c.System.Bodies[c.LaunchBody]
 }
@@ -293,7 +294,6 @@ type Sim struct {
 func New(cfg Config) *Sim {
 	cfg.EnsureSystem()
 
-	cfg.Atmo.Prepare(cfg.Body.SurfaceG)
 	cfg.Program.Sort()
 
 	s := &Sim{
@@ -301,7 +301,7 @@ func New(cfg Config) *Sim {
 		HistInterval: 0.1,
 		histThin:     1,
 		WarpRate:     1,
-		surfaceP:     cfg.Atmo.SurfacePressure,
+		surfaceP:     cfg.Body.Atmo.SurfacePressure,
 	}
 	s.Reset()
 	return s
@@ -403,15 +403,10 @@ func (s *Sim) RootVel() Vec2 {
 	return v.Add(s.St.Vel)
 }
 
-// atmoTop is the top of the air around the body the state is measured from.
-// Only the launch body has an atmosphere for now: air on every body needs the
-// setup screen to be able to describe it first.
-func (s *Sim) atmoTop() float64 {
-	if s.St.Center == s.Cfg.LaunchBody {
-		return s.Cfg.Atmo.Top
-	}
-	return 0
-}
+// AtmoTop is the top of the air around the body the state is measured from, and zero
+// where there is none. Every body carries its own atmosphere, so this follows the
+// vehicle from one to the next rather than describing the place it launched from.
+func (s *Sim) AtmoTop() float64 { return s.Center().Atmo.Top }
 
 // refocus moves the state into the frame of whichever body now holds it. The
 // transformation is exact — the same point expressed from a different centre —
@@ -591,7 +586,7 @@ func (s *Sim) Step(dt float64) {
 				// Solve for the instant the node's delta-v lands, so that a
 				// three metre a second correction is not overshot by a whole
 				// step's worth of thrust.
-				p := s.Cfg.Atmo.State(s.Altitude()).Pressure
+				p := s.Center().Atmo.State(s.Altitude()).Pressure
 				if c := s.nodeBurnLeft(stg.Thrust(p, s.surfaceP), ctx.mdot, ctx.m0); c < left {
 					left = c
 				}
@@ -707,9 +702,7 @@ func (s *Sim) forces(t float64, pos, vel Vec2, ctx burnContext) forceSet {
 	h := r - b.Radius
 
 	f.Mass = ctx.massAt(t)
-	if s.St.Center == s.Cfg.LaunchBody {
-		f.Atmo = s.Cfg.Atmo.State(h)
-	}
+	f.Atmo = b.Atmo.State(h)
 	f.Grav = s.gravity(s.St.Center, pos, t)
 
 	// Velocity relative to the rotating atmosphere: what the airframe feels,
@@ -953,7 +946,7 @@ func (s *Sim) checkEnd() {
 	}
 
 	o := ComputeOrbit(s.St.Pos, s.St.Vel, b.Mu)
-	top := s.atmoTop()
+	top := s.AtmoTop()
 	peri := o.PeriapsisAlt(b.Radius)
 	switch {
 	case s.St.Center == 0 && s.Cfg.LaunchBody != 0:
@@ -1026,7 +1019,7 @@ func (s *Sim) postStep() {
 	if alt > s.maxAlt {
 		s.maxAlt = alt
 	}
-	if !s.reachedSpace && alt > s.atmoTop() {
+	if !s.reachedSpace && alt > s.AtmoTop() {
 		s.reachedSpace = true
 	}
 

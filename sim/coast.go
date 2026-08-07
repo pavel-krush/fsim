@@ -53,7 +53,7 @@ func (s *Sim) coasting() bool {
 	if s.St.Landed || s.St.Phase != PhaseCoast {
 		return false
 	}
-	return s.Altitude() > s.atmoTop()
+	return s.Altitude() > s.AtmoTop()
 }
 
 // coastScale is a multiplier on the target step, held on the Sim: a prediction is
@@ -119,7 +119,7 @@ func (s *Sim) plannedStep() float64 {
 	// place it never flew through. Half the time to the boundary, because it is
 	// accelerating downwards and will arrive sooner than this says.
 	if vr := -s.St.Pos.Unit().Dot(s.St.Vel); vr > 0 {
-		if room := s.Altitude() - s.atmoTop(); room > 0 {
+		if room := s.Altitude() - s.AtmoTop(); room > 0 {
 			h = math.Min(h, 0.5*room/vr)
 		}
 	}

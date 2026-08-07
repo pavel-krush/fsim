@@ -284,8 +284,37 @@ func (s *SetupScreen) bodyButtons(a *App, dst *ebiten.Image, c *rowCursor, sys *
 }
 
 func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
-	at := &a.cfg.Atmo
 	u := a.ui
+	b := &a.cfg.System.Bodies[s.selBody]
+	at := &b.Atmo
+
+	// Whose air this is. The body is chosen in the first column and there is nothing
+	// in this one to say so otherwise, which was fine while there was only ever one
+	// atmosphere and is not now.
+	drawText(dst, bodyName(b.Name), fontUISm, c.x, c.next(16).Y+1, colTextDim, alignLeft)
+	c.gap(2)
+
+	// A body with no air gets an offer of some rather than a column of zeroes to
+	// puzzle over: what "surface pressure 0, top 0" means is a vacuum, and saying so
+	// in a sentence beats leaving it to be inferred.
+	if at.IsVacuum() {
+		drawText(dst, T("setup.noAir"), fontUISm, c.x, c.next(16).Y+1, colTextFaint, alignLeft)
+		c.gap(6)
+		if u.Button(dst, c.next(rowH+2), T("setup.addAir"), ButtonNormal) {
+			// Earth's, as a starting point, scaled to nothing about this body: it is
+			// a thing to edit, and every number in it is editable below.
+			u.cancel()
+			*at = sim.EarthAir()
+			at.Prepare(b.SurfaceG)
+		}
+		return
+	}
+	if u.Button(dst, c.next(rowH+2), T("setup.removeAir"), ButtonDanger) {
+		u.cancel()
+		*at = sim.Atmosphere{}
+		return
+	}
+	c.gap(6)
 
 	u.NumField(dst, c.next(rowH), T("setup.surfacePressure"), &at.SurfacePressure, NumOpt{Unit: T("unit.kpa"), Scale: 1000, Min: 0, Max: 1e8, Info: "setup.surfacePressure.info"})
 	u.NumField(dst, c.next(rowH), T("setup.temperature"), &at.SurfaceTemp, NumOpt{Unit: "K", Min: 1, Max: 5000, Info: "setup.temperature.info"})
@@ -313,7 +342,7 @@ func (s *SetupScreen) atmoRows(a *App, dst *ebiten.Image, c *rowCursor) {
 	u.ReadOnly(dst, c.next(rowH), T("setup.total"), formatNum(sum*100, 1), "%")
 
 	// The mixture properties are what the composition actually buys you.
-	at.Prepare(a.cfg.Body.SurfaceG)
+	at.Prepare(b.SurfaceG)
 	u.ReadOnly(dst, c.next(rowH), T("setup.molarMass"), formatNum(at.MolarMass()*1000, 2), T("unit.gmol"))
 	u.ReadOnly(dst, c.next(rowH), T("setup.gamma"), formatNum(at.Gamma(), 3), "")
 	st := at.State(0)
@@ -805,7 +834,7 @@ func (s *SetupScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 
 	rk := &a.cfg.Rocket
 	b := &a.cfg.Body
-	surfaceP := a.cfg.Atmo.SurfacePressure
+	surfaceP := a.cfg.Body.Atmo.SurfacePressure
 	twr := rk.LiftoffTWR(surfaceP, b.SurfaceG)
 	need := b.CircularSpeed(a.cfg.TargetOrbit) - b.EquatorialSpeed()
 

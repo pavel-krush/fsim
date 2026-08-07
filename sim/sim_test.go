@@ -21,7 +21,7 @@ func close(t *testing.T, name string, got, want, tol float64) {
 }
 
 func earthAtmo() *Atmosphere {
-	a := earthFalcon().Cfg.Atmo
+	a := earthFalcon().Cfg.Body.Atmo
 	a.Prepare(9.80665)
 	return &a
 }
@@ -129,9 +129,9 @@ func TestCircularOrbitIsStable(t *testing.T) {
 
 	// A vacuum whose nominal top is above the orbit, so the run does not stop
 	// the instant it notices we are already in orbit.
+	b.Atmo = Atmosphere{Top: 1e9}
 	cfg := Config{
 		Body:    b,
-		Atmo:    Atmosphere{Top: 1e9},
 		Rocket:  Rocket{Payload: 1000, Diameter: 1},
 		MaxTime: 1e9,
 	}
@@ -612,9 +612,9 @@ func stack(n int) Config {
 			Throttle: 1, SepDelay: 2,
 		}
 	}
+	b.Atmo = Atmosphere{Top: 1e9}
 	return Config{
 		Body:    b,
-		Atmo:    Atmosphere{Top: 1e9},
 		Rocket:  Rocket{Payload: 100, Cd: 0, Diameter: 1, Stages: stages},
 		Program: Program{Keys: []Keyframe{{Time: 0, Pitch: 90}}},
 		MaxTime: 1e9,

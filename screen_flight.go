@@ -313,6 +313,49 @@ func (f *FlightScreen) lookAt(target int) {
 // autoScale is the framing the flight would choose for itself: a window holding
 // the vehicle and the ground under it, widening to the whole orbit once there is
 // one.
+// camMargin is how much wider than the vehicle's distance from the centre the view is
+// kept, once the two have parted company. Ten per cent: enough that the marker is not
+// riding the edge, little enough that it does not rewrite framings that already worked.
+const camMargin = 2.2
+
+// camBlend is how far the camera's centre has slid from the vehicle to the middle of
+// the body it is drawn about: 0 standing on the ground, 1 looking at the whole planet.
+//
+// It lives here, in one place, because autoScale and updateCamera both need it and the
+// two of them disagreeing is exactly the fault this fixes — one chose a span assuming
+// the centre was near the vehicle while the other had already moved it to the body.
+func camBlend(span, radius float64) float64 {
+	if radius <= 0 {
+		return 1
+	}
+	u := clamp((span/radius-0.5)/2.1, 0, 1)
+	return u * u * (3 - 2*u)
+}
+
+// camFarFade is how much the body has stopped being the subject of the picture. Zero
+// while the vehicle is within four radii of it — a parking orbit, an approach, anything
+// the body's own shape frames — and one past sixteen, where the body is a dot the flight
+// happens to be passing.
+//
+// Without it the centre slid to the body's middle whenever the view was wide compared
+// with the body, which in the Sun's frame is always: the picker said "the vehicle" and
+// the picture was centred on the Sun with the flight off to one side. In the Sun's frame
+// nobody is standing on anything, which is the whole assumption the slide is built on.
+func camFarFade(dist, radius float64) float64 {
+	if radius <= 0 {
+		return 1
+	}
+	x := clamp((dist/radius-4)/12, 0, 1)
+	return x * x * (3 - 2*x)
+}
+
+// camCentreBlend is how much of the way from the vehicle to the body's middle the centre
+// sits: pulled back far enough for the body to be the subject, and not so far that the
+// body has stopped being one.
+func camCentreBlend(span, radius, dist float64) float64 {
+	return camBlend(span, radius) * (1 - camFarFade(dist, radius))
+}
+
 func (f *FlightScreen) autoScale(view Rect) float64 {
 	b := f.s.Center()
 	pos := f.s.St.Pos
@@ -328,7 +371,21 @@ func (f *FlightScreen) autoScale(view Rect) float64 {
 	case o.Bound() && o.Apoapsis > r:
 		span = math.Max(span, (o.Apoapsis-b.Radius)*2.4)
 	}
-	span = math.Min(span, b.Radius*24)
+	// Twenty-four radii is as far back as a picture *about the body* wants to go, and
+	// it used to be the last word. It cannot be: in the Sun's frame twenty-four solar
+	// radii is 1.7e10 m against a vehicle at 1.5e11, so three days out from the Earth
+	// the screen was one yellow dot with the flight six view-widths off the edge. The
+	// same fault bit on the way out of any body past about twelve radii, where the
+	// trail left the picture with nothing following it.
+	span = math.Min(span, math.Max(b.Radius*24, r*camMargin))
+
+	// The vehicle has to be in shot. Where the centre sits is a function of the span
+	// through camBlend, so how much span it takes to keep the vehicle is a function of
+	// the span too — solved by iterating rather than guessed at with a threshold. It is
+	// monotone and clamped, so three passes is convergence and not hope.
+	for range 3 {
+		span = math.Max(span, camMargin*r*camCentreBlend(span, b.Radius, r))
+	}
 
 	if f.follow >= 0 {
 		// Framed on a body instead: its sphere of influence is what an approach
@@ -408,8 +465,7 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 	// How far the view has pulled back, from "standing on a planet" to "looking
 	// at one". It decides both how much of the vehicle's own position the centre
 	// follows and how hard the camera holds the local vertical.
-	u := clamp((effSpan/b.Radius-0.5)/2.1, 0, 1)
-	u = u * u * (3 - 2*u)
+	u := camBlend(effSpan, b.Radius)
 
 	// The same ramp decides how much of a ground track the flown path is drawn as.
 	// It is only a ground track while the picture is about the ground: see
@@ -436,8 +492,14 @@ func (f *FlightScreen) updateCamera(a *App, view Rect) {
 		// target is thousands of kilometres away, so even a part in ten thousand
 		// would shove the pad off a 1.5 km wide view. Close in, the vehicle sits
 		// a little below centre so it has sky to climb into.
+		//
+		// And the slide stops once the body is no longer the subject: on an
+		// interplanetary cruise the frame body is the Sun, and centring on it while
+		// claiming to follow the vehicle is a lie about the one thing that control is
+		// for. See camFarFade.
 		drawn := f.vehiclePos()
-		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - u)))
+		c := camCentreBlend(effSpan, b.Radius, f.s.St.Pos.Len())
+		f.cam.Center = f.holdView(drawn.Unit().Scale((drawn.Len() + 0.16*effSpan) * (1 - c)))
 	}
 
 	// Rotation tracks the local vertical only while following the vehicle, and only
@@ -735,7 +797,7 @@ func (f *FlightScreen) refreshPrediction(dt float64) bool {
 	// 650 ms of work twice a second in a system of eighteen bodies. That was the
 	// stutter that showed up on the way out of the atmosphere, which is exactly
 	// where the altitude test below starts letting predictions through.
-	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.Cfg.Atmo.Top {
+	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.AtmoTop() {
 		f.pred = nil
 		return false
 	}
@@ -982,17 +1044,14 @@ func (f *FlightScreen) drawBodyLabel(dst *ebiten.Image, view Rect, cam *Camera, 
 }
 
 // drawAir paints the atmosphere as concentric rings above a body's surface.
-// Only the launch body has air to draw: describing it for every body needs a
-// setup screen that can, which is not this one yet.
+// Every body draws its own air, because every body has its own: Venus, Earth, Mars and
+// Titan in the solar system, and whatever the editor has been told about elsewhere.
 func (f *FlightScreen) drawAir(dst *ebiten.Image, cam *Camera, i int, x, y float64) {
-	if i != f.s.Cfg.LaunchBody {
-		return
-	}
-	at := &f.s.Cfg.Atmo
+	b := &f.s.Cfg.System.Bodies[i]
+	at := &b.Atmo
 	if at.IsVacuum() {
 		return
 	}
-	b := &f.s.Cfg.System.Bodies[i]
 	rho0 := at.State(0).Density
 	if rho0 <= 0 {
 		return
@@ -1027,8 +1086,8 @@ func airAlpha(at *sim.Atmosphere, h, rho0 float64) uint8 {
 // horizontal lines rather than arcs of a circle a million pixels across.
 func (f *FlightScreen) drawFlatWorld(dst *ebiten.Image, view Rect, cam *Camera, i int) {
 	b := &f.s.Cfg.System.Bodies[i]
-	at := &f.s.Cfg.Atmo
-	hasAir := i == f.s.Cfg.LaunchBody && !at.IsVacuum()
+	at := &b.Atmo
+	hasAir := !at.IsVacuum()
 
 	surface, rim, _ := bodyPaint(b.Name)
 
@@ -1473,8 +1532,11 @@ func (f *FlightScreen) drawTelemetry(a *App, dst *ebiten.Image, r Rect) {
 
 	c.gap(8)
 	u.SectionHeader(dst, c.next(20), T("flight.secOrbit"))
-	row(T("common.apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, f.s.Cfg.Atmo.Top))
-	row(T("common.periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, f.s.Cfg.Atmo.Top))
+	// Against the air of whatever body the vehicle is at: a 60 km periapsis is a
+	// re-entry at the Earth and a perfectly good orbit at the Moon.
+	top := f.s.AtmoTop()
+	row(T("common.apoapsis"), altText(tm.ApoAlt), apsisColor(tm.ApoAlt, top))
+	row(T("common.periapsis"), altText(tm.PeriAlt), apsisColor(tm.PeriAlt, top))
 	row(T("common.eccentricity"), formatNum(tm.Ecc, 4), colTextDim)
 	if tm.Orbit.Bound() {
 		row(T("common.period"), fmt.Sprintf("%s %s", formatNum(tm.Orbit.Period/60, 1), T("unit.min")), colTextDim)
