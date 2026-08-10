@@ -207,7 +207,12 @@ func TestTsiolkovsky(t *testing.T) {
 	s.St.Landed = false
 
 	want := 300 * G0 * math.Log(10000.0/1000.0)
-	for !s.St.Done && s.St.Phase == PhaseBurn {
+	// Flown until the tank is empty, which is the instant the burn ends. Watching the
+	// *phase* instead costs one step: the engine is shut down by checkPhase on the
+	// call after the propellant runs out, so the loop would leave with 0.02 s of coast
+	// on the clock — and this body is a no-gravity stand-in, so that coast used to end
+	// the run outright by counting as an escape.
+	for !s.St.Done && s.St.Prop[0] > 0 {
 		s.Step(FixedStep)
 	}
 

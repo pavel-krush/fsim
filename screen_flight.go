@@ -1415,7 +1415,7 @@ func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.
 	if f.s.Settled() {
 		vc := colBad
 		switch f.s.St.Outcome {
-		case sim.OutcomeOrbit, sim.OutcomeCaptured, sim.OutcomeReturned:
+		case sim.OutcomeOrbit, sim.OutcomeCaptured, sim.OutcomeReturned, sim.OutcomeEscape:
 			vc = colGood
 		case sim.OutcomeDecaying:
 			vc = colWarn
