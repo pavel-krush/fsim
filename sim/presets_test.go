@@ -84,9 +84,10 @@ func TestPresetsAreValid(t *testing.T) {
 				}
 			}
 
-			// And it has to fly, to roughly where it says it is going.
-			s := New(p.Cfg)
-			s.RunToEnd()
+			// And it has to fly, to roughly where it says it is going. Only as far as
+			// its first verdict: what is being checked is the ascent, and a preset
+			// whose mission runs for twenty-four years should not cost that here.
+			s := flyToVerdict(p.Cfg)
 			if s.St.Outcome != OutcomeOrbit {
 				t.Fatalf("outcome %d at T+%.0f s", s.St.Outcome, s.St.T)
 			}

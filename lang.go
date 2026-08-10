@@ -135,6 +135,8 @@ func eventLabel(e sim.Event, sys *sim.System) string {
 		return T("event.apoapsis")
 	case sim.EvOrbit:
 		return T("event.orbit")
+	case sim.EvEscape:
+		return T("event.escape")
 	case sim.EvEnd:
 		return T("event.end")
 	default:

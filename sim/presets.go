@@ -69,7 +69,7 @@ func earthISA() []Layer {
 func Presets() []Preset {
 	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
 		protonZvezda(), protonGeo(), titanAscent(), ioJupiter(), marsAscent(), moonAscent(),
-		kerbinAscent(), kerbinMun()}
+		kerbinAscent(), kerbinMun(), voyagerTour()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -790,6 +790,128 @@ func moonAscent() Preset {
 // 600 km planet at one g, a 200 km moon at a sixth of it, twelve thousand
 // kilometres out and tidally locked. The sphere of influence works out at 2430 km,
 // twelve lunar radii, which is what the game says too.
+// titanIIIE is the Titan IIIE / Centaur, five stages in a line.
+//
+// It is here rather than an R-7 or a Delta for the same reason Proton-K is: the boosters
+// burn *first and alone*, and the core lights after they are gone, so the whole stack is
+// serial and Rocket.Stages can hold it honestly. The one simplification is three seconds
+// of overlap between the solids burning out and the core igniting.
+func titanIIIE() Rocket {
+	return Rocket{
+		// Voyager 2 itself: 825 kg with its hydrazine.
+		Payload: 825, Cd: 0.3, Diameter: 3.05,
+		Stages: []Stage{
+			// Two UA1205 solids, 193 t of propellant each.
+			{DryMass: 66912, PropMass: 385554, ThrustVac: 12454000, IspVac: 272, IspSL: 237,
+				Throttle: 1, SepDelay: 1},
+			// Titan core stage 1: LR87-AJ-11, two chambers on hypergolics.
+			{DryMass: 8000, PropMass: 123000, ThrustVac: 2340000, IspVac: 302, IspSL: 258,
+				Throttle: 1, SepDelay: 2, Ignition: IgniteAfterDelay},
+			// Core stage 2: LR91-AJ-11.
+			{DryMass: 2830, PropMass: 33152, ThrustVac: 454000, IspVac: 316, IspSL: 316,
+				Throttle: 1, SepDelay: 2, Ignition: IgniteAfterDelay},
+			// Centaur D-1T, two RL10s. It is cut off 70 s in, with eleven and a half
+			// tonnes still aboard: the parking orbit is all the ascent needs, and the
+			// flight plan lights it again for the injection. The same trick Zvezda's
+			// third stage uses to circularise.
+			{DryMass: 1996, PropMass: 13900, ThrustVac: 146800, IspVac: 444, IspSL: 444,
+				Throttle: 1, CutoffTime: 70, Ignition: IgniteAfterDelay, IgnitionDelay: 2},
+			// TE-364-4, the kick stage Voyager carried itself, fired by the plan once
+			// the Centaur has gone.
+			{DryMass: 118, PropMass: 1038, ThrustVac: 66700, IspVac: 286, IspSL: 286,
+				Throttle: 1, Ignition: IgniteOnNode},
+		},
+	}
+}
+
+// voyagerTour is Voyager 2's grand tour: Jupiter, Saturn, Uranus, Neptune and out of
+// the system, on one injection and four gravity assists.
+//
+// The four windows were *solved*, not searched — the mean anomalies here are not an
+// ephemeris, so each planet is put where the flight crosses its orbit by inverting the
+// same Kepler equation the rails run on. But it takes iterating: moving a planet changes
+// the very trajectory the phase was solved from, since its own gravity perturbs years of
+// cruise and every close pass upstream amplifies the difference. One pass leaves a miss
+// of an astronomical unit; four bring it inside the sphere of influence.
+//
+// The passes are farther out than the real ones — 38, 163, 28 and 15 radii against
+// Voyager's 5, 3, 4 and 1 — because these are the four that close *as a chain* in one
+// plane. Each one still does the job: the aphelion grows 23 → 30 → 58 AU and Neptune's
+// pass leaves the vehicle heading out at 34 AU by the thirtieth year.
+//
+// The four encounters are solid; the last verdict is not. A pass at ten radii amplifies
+// the last bit of the integrator, so whether Neptune adds quite enough to leave the Sun
+// for good depends on how the flight was advanced — see the test.
+func voyagerTour() Preset {
+	sys := SolarSystem()
+	earth := sys.IndexOf("earth")
+
+	// The tour, one window per planet. These are the numbers the iteration converged on.
+	for _, w := range []struct {
+		name string
+		m0   float64
+	}{
+		{"jupiter", voyagerJupiterPhase},
+		{"saturn", voyagerSaturnPhase},
+		{"uranus", voyagerUranusPhase},
+		{"neptune", voyagerNeptunePhase},
+	} {
+		sys.Bodies[sys.IndexOf(w.name)].MeanAnom0 = w.m0
+	}
+	sys.Normalize()
+
+	return Preset{
+		Name: "voyager-tour",
+		Cfg: Config{
+			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
+			Rocket: titanIIIE(),
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 16, Pitch: 90},
+				{Time: 39, Pitch: 75.6},
+				{Time: 63, Pitch: 62.5},
+				{Time: 86, Pitch: 50.6},
+				{Time: 109, Pitch: 40.0},
+				{Time: 133, Pitch: 30.6},
+				{Time: 156, Pitch: 22.5},
+				{Time: 179, Pitch: 15.6},
+				{Time: 203, Pitch: 10.0},
+				{Time: 226, Pitch: 5.6},
+				{Time: 249, Pitch: 2.5},
+				{Time: 273, Pitch: 0.6},
+				{Time: 296, Pitch: 0.0},
+			}},
+			// The injection, out of the parking orbit and at the one point in it that
+			// works: T+5300 s is where the escape asymptote comes out along the Earth's
+			// own motion. Half an orbit either side and the same delta-v buys a
+			// heliocentric aphelion of 1.0 AU instead of 10.
+			//
+			// The Centaur is relit for the first 5900 m/s and dropped; the TE-364-4
+			// does the last thousand. That reaches Jupiter's orbit in 689 days, which
+			// is what Voyager 2 took.
+			Nodes: []Node{
+				{T: 5300, Frame: BurnPrograde, DeltaV: 5900, Separate: true},
+				{T: 5700, Frame: BurnPrograde, DeltaV: 1000},
+			},
+			TargetOrbit: 185000,
+			// Thirty years: Neptune is passed in the twenty-third and there is nothing
+			// after it. If the last pass leaves the trajectory unbound the verdict is an
+			// escape, which is a settled one — and the clock is what stops the run, since
+			// a vehicle on its way out has nowhere to be.
+			MaxTime: 30 * 365.25 * 86400,
+		},
+	}
+}
+
+// The four windows, as converged. They are written out rather than solved at startup
+// because a preset is data: the search that found them lived in a throwaway test.
+const (
+	voyagerJupiterPhase = 1.867744
+	voyagerSaturnPhase  = 2.714653
+	voyagerUranusPhase  = 3.438083
+	voyagerNeptunePhase = 3.884496
+)
+
 // kerbinAir is Earth's air on a planet a ninth the size: 1 bar at the surface and all
 // of it gone by 70 km, which is what makes a direct ascent there impossible and the
 // kick stage at apoapsis necessary.

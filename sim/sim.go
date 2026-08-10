@@ -52,8 +52,12 @@ func outcomeRank(o Outcome) int {
 		return 1
 	case OutcomeOrbit:
 		return 2
-	case OutcomeCaptured:
+	case OutcomeEscape:
 		return 3
+	case OutcomeCaptured:
+		// Above escape: arriving somewhere is a bigger piece of news than leaving,
+		// and a vehicle already unbound from the Sun can still be taken by a planet.
+		return 4
 	default:
 		return 0
 	}
@@ -75,6 +79,10 @@ const (
 	// influence, and name the body in Event.Body.
 	EvSOIEnter
 	EvSOIExit
+	// EvEscape is the instant the trajectory stopped being bound to the root. It is
+	// appended rather than slotted next to EvOrbit because the numbering is what the
+	// interface's labels are keyed on.
+	EvEscape
 )
 
 // Event is a timestamped marker used by the trajectory view and the graphs.
@@ -918,9 +926,12 @@ func (s *Sim) checkEnd() {
 		return
 	}
 
-	// The clock is there to cut short a flight that is going nowhere. A
-	// vehicle that made orbit has somewhere to be, and gets to stay there.
-	if s.Cfg.MaxTime > 0 && s.St.T >= s.Cfg.MaxTime && !s.Settled() {
+	// The clock is there to cut short a flight that is going nowhere. A vehicle
+	// that made orbit has somewhere to be and gets to stay there; one that has left
+	// the system does not — it is on its way out for ever, so the limit the mission
+	// set itself is what ends the run.
+	if s.Cfg.MaxTime > 0 && s.St.T >= s.Cfg.MaxTime &&
+		(!s.Settled() || s.St.Outcome == OutcomeEscape) {
 		s.stop(OutcomeTimeout)
 		return
 	}
@@ -940,7 +951,13 @@ func (s *Sim) checkEnd() {
 	if s.St.Center == 0 {
 		root := &s.Cfg.System.Bodies[0]
 		if ro := ComputeOrbit(s.RootPos(), s.RootVel(), root.Mu); ro.Energy >= 0 {
-			s.finish(OutcomeEscape)
+			// Settled, not finished. Leaving the system is a fact about the
+			// trajectory and not the end of the mission: both Voyagers were on
+			// solar escapes from the Jupiter encounter onwards and went on to meet
+			// three more planets. Ending the flight there would have made a grand
+			// tour impossible to express — the vehicle would stop at the first
+			// assist big enough to work.
+			s.settle(OutcomeEscape)
 			return
 		}
 	}
@@ -983,6 +1000,10 @@ func (s *Sim) settle(o Outcome) {
 	}
 	s.St.Outcome = o
 	s.emitMaxQ()
+	if o == OutcomeEscape {
+		s.mark(EvEscape)
+		return
+	}
 	s.mark(EvOrbit)
 }
 

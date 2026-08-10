@@ -18,7 +18,7 @@ a working simulator.
 
 ![The mission list](docs/presets.png)
 
-*Thirteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
+*Fourteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
 take. Picking one opens the editor on it; naming one on the command line skips the list entirely.*
 
 ![Setup screen](docs/setup.png)
@@ -86,7 +86,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Thirteen launchers, all of which actually reach orbit:
+Fourteen launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -102,6 +102,7 @@ Thirteen launchers, all of which actually reach orbit:
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
+| Voyager / the grand tour | Jupiter, Saturn, Uranus, Neptune, then out of the system | 16092 m/s in all | 57.6 kPa at 11 km | 5.0 g |
 | Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
 
 Apoapsis first, and every figure is read where the run ends. That matters for the ones out at a moon or a
@@ -165,6 +166,19 @@ own model stops at until 712 km, which is where a closed orbit starts. So the pr
 climbing straight up at a few hundred metres a second, a turn once the air is behind, and a kick stage at
 apoapsis. Drag still costs 619 m/s and gravity 1860, against the 1682 it takes to be in orbit at all. The
 vehicle is invented; the numbers are Titan's.
+
+The grand tour is the longest flight here and the only one that goes anywhere on borrowed
+energy. One injection out of a parking orbit and four gravity assists: Jupiter at T+1.7
+years, Saturn at 4.3, Uranus at 12.0, Neptune at 22.7, and out past 34 AU by the thirtieth.
+Each pass grows the orbit — 23 AU of aphelion after Jupiter, 30 after Saturn, 58 after
+Uranus — and none of it is thrust: the whole flight spends 16 km/s, of which 9.2 went into
+reaching the parking orbit.
+
+The launcher is the Titan IIIE / Centaur, five stages in a line, which is why it is here
+rather than a Delta: the two solid boosters burn first and alone, so a serial list can
+hold the stack honestly. The Centaur is cut off seventy seconds into its burn with eleven
+tonnes still aboard and the flight plan lights it again for the injection, which is what
+the real one did too.
 
 Io is the smallest sphere of influence anything launches into here: 7840 km, four and a third radii, so
 there is barely room for an orbit and the parking orbit has to be a low one. Getting off Io is easy — 1809

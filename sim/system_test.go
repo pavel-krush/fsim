@@ -667,8 +667,7 @@ func TestKerbinKeepsItsCliff(t *testing.T) {
 func TestEveryPresetClearsTheAirItFliesIn(t *testing.T) {
 	for _, p := range Presets() {
 		t.Run(p.Name, func(t *testing.T) {
-			s := New(p.Cfg)
-			s.RunToEnd()
+			s := flyToVerdict(p.Cfg)
 			top := s.AtmoTop()
 			if top <= 0 {
 				return // an airless body has nothing to clear
@@ -684,4 +683,16 @@ func TestEveryPresetClearsTheAirItFliesIn(t *testing.T) {
 			}
 		})
 	}
+}
+
+// flyToVerdict flies a configuration until it has one — which for every preset here is
+// the orbit its ascent reaches, minutes into the flight. What comes after is the mission,
+// and an audit of the ascent has no business flying it: the grand tour takes twenty-four
+// years and thirty seconds of wall clock to finish.
+func flyToVerdict(cfg Config) *Sim {
+	s := New(cfg)
+	for !s.Settled() && !s.St.Done && s.St.T < 6*3600 {
+		s.Step(FixedStep)
+	}
+	return s
 }

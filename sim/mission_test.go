@@ -717,3 +717,90 @@ func TestIoPresetLeavesForJupiter(t *testing.T) {
 			apo/1e6, sys.Bodies[io].SemiMajor/1e6)
 	}
 }
+
+// The grand tour: four gravity assists on one injection, each planet put where the
+// flight crosses its orbit. What this guards is the *chain* — a preset whose windows have
+// drifted loses the tour at the first planet and sails on through empty space, which is
+// exactly what one rounded pitch keyframe did while this was being found.
+//
+// Flown in a single FastForward and read out of the events afterwards. Polling for the
+// encounters costs six times as much: asking for the state every two days holds the
+// adaptive step down to two days, where left alone it grows to months and the error
+// control is what keeps it honest.
+func TestVoyagerTourFliesPastFourPlanets(t *testing.T) {
+	p := voyagerTour()
+	s := New(p.Cfg)
+	s.FastForward(p.Cfg.MaxTime)
+
+	// The verdict is deliberately not asserted. Flown in one jump the Neptune pass tips
+	// the trajectory out of the system; flown in the jumps a screenshot script makes, the
+	// same pass leaves it just bound. Both are the same tour: see below.
+
+	want := []struct {
+		name             string
+		earliest, latest float64 // years
+	}{
+		{"jupiter", 1.5, 2.5},
+		{"saturn", 4.0, 5.5},
+		{"uranus", 11.0, 14.0},
+		{"neptune", 22.0, 26.0},
+	}
+
+	// Why the times are asserted and the verdict is not. The chain is chaotic: FastForward
+	// lands exactly on the instant it is asked for, so it takes a partial step where
+	// Advance would carry the remainder, and a pass at ten radii amplifies that last bit
+	// into thousands of kilometres by the next encounter. Thousands of kilometres is
+	// nothing against a sphere of influence — Neptune's is half an astronomical unit — so
+	// *which planets are met, and when* is solid to a fraction of a per cent. Whether the
+	// last pass adds quite enough to leave the system is not.
+
+	// Planets only. The departure threads the Moon's sphere of influence on the way out,
+	// which is a real encounter and not one the tour was aimed at.
+	planet := func(i int) bool { return s.Cfg.System.Bodies[i].Parent == 0 }
+
+	got := 0
+	for _, e := range s.Events {
+		if e.Kind != EvSOIEnter || !planet(e.Body) {
+			continue
+		}
+		name := s.Cfg.System.Bodies[e.Body].Name
+		if got >= len(want) {
+			t.Fatalf("an extra encounter with %s at T+%.2f y", name, e.T/(365.25*86400))
+		}
+		w := want[got]
+		y := e.T / (365.25 * 86400)
+		if name != w.name {
+			t.Fatalf("encounter %d is %s at T+%.2f y, expected %s", got+1, name, y, w.name)
+		}
+		if y < w.earliest || y > w.latest {
+			t.Errorf("%s at T+%.2f y, expected between %.1f and %.1f y",
+				w.name, y, w.earliest, w.latest)
+		}
+		got++
+	}
+	if got != len(want) {
+		t.Fatalf("%d of the four planets were met", got)
+	}
+
+	// Each pass has to be a pass and not a collision, and close enough to be one at
+	// all. The history is coarse inside a flyby, so this is a bound and not a
+	// measurement: the numbers it is bounding are 41, 165, 34 and 18 radii.
+	for _, e := range s.Events {
+		if e.Kind != EvSOIEnter || !planet(e.Body) {
+			continue
+		}
+		b := &s.Cfg.System.Bodies[e.Body]
+		best := math.Inf(1)
+		for _, h := range s.Hist {
+			if h.Center == e.Body {
+				best = math.Min(best, h.Pos.Len())
+			}
+		}
+		switch {
+		case best < b.Radius:
+			t.Errorf("%s: the vehicle went through it", b.Name)
+		case best > 400*b.Radius:
+			t.Errorf("%s passed at %.0f radii, which is not a flyby", b.Name, best/b.Radius)
+		}
+	}
+}

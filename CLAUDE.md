@@ -107,7 +107,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
-| `sim/presets.go` | Thirteen of them, and the invented Kerbin system. All reach orbit; eight carry a flight plan and six leave the body they launched from |
+| `sim/presets.go` | Fourteen of them, and the invented Kerbin system. All reach orbit; nine carry a flight plan and seven leave the body they launched from |
 | `main.go` | `App` — the four-screen state machine, `startScreen`, `newApp`, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
@@ -335,7 +335,7 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   arrives nose-first. What it does *not* claim is that anything aboard survived.
 - **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
   `eventLabel` takes the whole event so it can name it.
-- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and thirteen presets is where
+- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and fourteen presets is where
   a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
   net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
   slug-to-key mapping to keep in step with anything.
@@ -437,6 +437,63 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
 - **Five metres a second either side of the injection is a crater.** 3700 m/s hits Mars; 3690 passes at
   95209 km. The gradient through the encounter is about 7000 km per m/s, so the preset ships the value that
   fails *gracefully* — a bad periapsis is a worse orbit, an impact is the end of the mission.
+
+### The grand tour, which is four windows solved one after another
+
+`voyager-tour` is Voyager 2's mission: one injection and four gravity assists, Jupiter to
+Saturn to Uranus to Neptune and out of the system. It is the longest flight here — twenty-four
+years to the last encounter — and the only one that gets where it is going on borrowed energy.
+
+- **The windows are solved, not searched.** The mean anomalies in `solar.go` are not an
+  ephemeris, so each planet can be *put* where the flight crosses its orbit: fly the
+  trajectory, take the crossing time and heliocentric longitude, and invert the same Kepler
+  equation the rails run on for the mean anomaly that body needs at t = 0. The same trick as
+  Mars's window, four times over.
+- **But it has to be iterated, and that is the interesting part.** Moving a planet changes
+  the very trajectory the phase was solved from: its own gravity perturbs years of cruise,
+  and every close pass upstream amplifies the difference. One pass leaves a miss of a whole
+  astronomical unit; four bring it inside the sphere of influence. Chained assists are
+  chaotic and this is what that looks like in numbers.
+- **Which is also why the phases had to be re-solved against the configuration that ships.**
+  The pitch keyframes were rounded to one decimal place for readability, and that alone moved
+  the Jupiter pass by six radii and lost the rest of the tour — the preset sailed past Uranus
+  at thirteen hundred radii, ninety-seven years out. A preset is data; the data has to be
+  solved for the data.
+- **`OutcomeEscape` had to stop being terminal, and that is a model fix rather than a preset
+  one.** Both Voyagers were on solar escapes from the Jupiter encounter onwards and went on
+  to meet three more planets. Ending the flight at the first unbound orbit made a grand tour
+  impossible to express. Escape is now a settled verdict — a high-water mark, like the rest —
+  with its own `EvEscape` marker, and it is the one settled verdict the clock still binds:
+  an orbit has somewhere to be, and a vehicle leaving for good does not.
+- **The four encounters are reproducible and the final verdict is not, which is worth
+  understanding.** `FastForward` lands exactly on the instant asked for, so it takes a partial
+  step where `Advance` would carry the remainder — and a pass at ten radii amplifies that last
+  bit into thousands of kilometres by the next planet. Thousands of kilometres is nothing
+  against a sphere of influence half an astronomical unit across, so *which* planets are met
+  and *when* holds to a fraction of a per cent however the flight is advanced. Whether the
+  Neptune pass adds quite enough to leave the Sun for good does not: one jump says escape, the
+  screenshot script's jumps say a 61 AU ellipse. The test asserts the tour and leaves the
+  verdict alone.
+- **The passes are farther out than the real ones** — 41, 165, 34 and 10 radii against
+  Voyager's 5, 3, 4 and 1 — because these are the four that close *as a chain*. Each one
+  still does its job: the aphelion goes 23 → 30 → 58 AU and Neptune's pass takes it out of
+  the system.
+- **The launcher is a Titan IIIE / Centaur** for the reason Proton-K is a Proton-K: the two
+  UA1205 solids burn first and alone, and the core lights after they are gone, so the stack
+  is genuinely serial. Five stages, of which the last two are the interesting ones — the
+  Centaur is cut off seventy seconds in with eleven and a half tonnes left and relit by the
+  plan, the same leftovers trick `proton-zvezda` uses, and the TE-364-4 is an `IgniteOnNode`
+  stage that finishes the injection.
+- **The injection only works at one point in the parking orbit**, as ever: T+5300 s puts the
+  escape asymptote along the Earth's own motion and buys a heliocentric aphelion of 10 AU.
+  Half an orbit away the same delta-v buys 1.0 AU. It reaches Jupiter's orbit in 689 days,
+  against Voyager 2's 688.
+- **The audits stop at the first verdict rather than flying the mission** (`flyToVerdict`).
+  What they check is the ascent, and a preset whose flight runs for twenty-four years should
+  not cost thirty seconds of wall clock in a test about whether its parking orbit clears the
+  air. `TestVoyagerTourFliesPastFourPlanets` is the one that flies the whole thing, in a
+  single `FastForward` with the encounters read out of the events afterwards: polling every
+  two days holds the adaptive step down to two days, where left alone it grows to months.
 
 ### Io, where there is no room
 
@@ -667,7 +724,7 @@ Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet we
 
 ## The first screen
 
-`ScreenPresets` is where a run begins: thirteen missions, one per row, and nothing else. What used to be
+`ScreenPresets` is where a run begins: fourteen missions, one per row, and nothing else. What used to be
 first — four columns of every number the model has — is a great deal to be handed before you have said
 what you are trying to fly, so it comes second.
 
