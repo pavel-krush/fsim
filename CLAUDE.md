@@ -107,7 +107,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
-| `sim/presets.go` | Fourteen of them, and the invented Kerbin system. All reach orbit; nine carry a flight plan and seven leave the body they launched from |
+| `sim/presets.go` | Fifteen of them, and the invented Kerbin system. All reach orbit; nine carry a flight plan and seven leave the body they launched from |
 | `main.go` | `App` — the four-screen state machine, `startScreen`, `newApp`, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
@@ -335,7 +335,7 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   arrives nose-first. What it does *not* claim is that anything aboard survived.
 - **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
   `eventLabel` takes the whole event so it can name it.
-- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and fourteen presets is where
+- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and fifteen presets is where
   a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
   net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
   slug-to-key mapping to keep in step with anything.
@@ -494,6 +494,37 @@ years to the last encounter — and the only one that gets where it is going on 
   air. `TestVoyagerTourFliesPastFourPlanets` is the one that flies the whole thing, in a
   single `FastForward` with the encounters read out of the events afterwards: polling every
   two days holds the adaptive step down to two days, where left alone it grows to months.
+
+### Parker, which spends its energy going down
+
+`parker-solar` is the fastest flight here and the only one where every sign is reversed: the
+injection is aimed *against* the Earth's motion, and the Venus flyby takes angular momentum
+away rather than adding it. First perihelion is 37.1 solar radii at 93.4 km/s — the real
+mission's first was 35.7 radii at 95.
+
+- **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape
+  asymptote against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU;
+  half an orbit later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the
+  system. It is the same sweep Voyager's injection needed, read from the other end.
+- **One Venus flyby, not seven.** The real mission walks the perihelion down over seven years
+  by *resonant returns* — each pass leaves the vehicle in an orbit commensurate with Venus's
+  year so the next one lines up. A single choice of Venus's phase arranges one encounter; the
+  rest would need a search over the resonances, which is a different piece of work. What ships
+  is the mission's first orbit, and it is the same first orbit: Venus at 45.5 days against the
+  real 46.
+- **The pass has to be on the way *in*.** `crossP` looks for the inbound crossing of Venus's
+  ellipse, because a pass on the falling leg is the one that takes energy out. It buys
+  2.5 solar radii of perihelion — 39.6 without Venus, 37.1 with — which is the same order as
+  the real flybys' 0.02 AU apiece.
+- **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together
+  off the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone
+  is a thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust
+  phase* — stage 1 has all three engines and the propellant burned before the sides go (the
+  two sides entire, plus the four minutes the core spends throttled to 55%), and stage 2 is
+  the core's remaining 96 t. Liftoff TWR comes out 1.18 against the real 1.2.
+- **It is reproducible where the grand tour is not**, and for the reason the tour is not: one
+  flyby amplifies nothing. Flown in one jump, in 30-day jumps or in 12-hour jumps, the
+  perihelion agrees to a metre a second.
 
 ### Io, where there is no room
 
@@ -724,7 +755,7 @@ Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet we
 
 ## The first screen
 
-`ScreenPresets` is where a run begins: fourteen missions, one per row, and nothing else. What used to be
+`ScreenPresets` is where a run begins: fifteen missions, one per row, and nothing else. What used to be
 first — four columns of every number the model has — is a great deal to be handed before you have said
 what you are trying to fly, so it comes second.
 
