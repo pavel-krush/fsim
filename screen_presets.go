@@ -55,8 +55,11 @@ func (s *PresetScreen) rows() int {
 // to fit, and presetListW how wide the list is: enough for the longest name in
 // either language with the identifier beside it.
 const (
-	presetRowH   = 42.0
-	presetRowMin = 22.0
+	presetRowH = 42.0
+	// The floor is what a full list needs in the smallest window worth supporting.
+	// Fifteen rows and the hint under them do not fit a 500 px window at 22 px each —
+	// they overflowed it by two pixels — and a row still has to hold a line of text.
+	presetRowMin = 18.0
 	presetListW  = 640.0
 	presetRowGap = 6.0
 )

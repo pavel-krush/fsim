@@ -18,7 +18,7 @@ a working simulator.
 
 ![The mission list](docs/presets.png)
 
-*Fourteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
+*Fifteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
 take. Picking one opens the editor on it; naming one on the command line skips the list entirely.*
 
 ![Setup screen](docs/setup.png)
@@ -86,7 +86,7 @@ into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
 
 ## Presets
 
-Fourteen launchers, all of which actually reach orbit:
+Fifteen launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -102,6 +102,7 @@ Fourteen launchers, all of which actually reach orbit:
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
+| Parker / into the corona | 37 solar radii at 93 km/s, past one Venus flyby | 9308 m/s to orbit, 19.6 km/s in all | 26.7 kPa at 11 km | 8.3 g |
 | Voyager / the grand tour | Jupiter, Saturn, Uranus, Neptune, then out of the system | 16092 m/s in all | 57.6 kPa at 11 km | 5.0 g |
 | Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
 
@@ -166,6 +167,14 @@ own model stops at until 712 km, which is where a closed orbit starts. So the pr
 climbing straight up at a few hundred metres a second, a turn once the air is behind, and a kick stage at
 apoapsis. Drag still costs 619 m/s and gravity 1860, against the 1682 it takes to be in orbit at all. The
 vehicle is invented; the numbers are Titan's.
+
+Parker is the other direction. It is the only preset that spends its energy going *down*: the
+injection is aimed against the Earth's own motion, so what it buys is not distance but the
+loss of heliocentric angular momentum, and the Venus flyby takes more away. First perihelion
+37 solar radii at 93 km/s — three times the Earth's orbital speed, and eleven times anything
+else here reaches. The real mission needed seven Venus flybys over seven years to walk that
+down to 9.9 radii; one is what a single choice of Venus's phase can arrange, so this is the
+mission's first orbit — Venus at 46 days, perihelion at 110.
 
 The grand tour is the longest flight here and the only one that goes anywhere on borrowed
 energy. One injection out of a parking orbit and four gravity assists: Jupiter at T+1.7

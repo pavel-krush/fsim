@@ -69,7 +69,7 @@ func earthISA() []Layer {
 func Presets() []Preset {
 	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
 		protonZvezda(), protonGeo(), titanAscent(), ioJupiter(), marsAscent(), moonAscent(),
-		kerbinAscent(), kerbinMun(), voyagerTour()}
+		kerbinAscent(), kerbinMun(), voyagerTour(), parkerSolar()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -911,6 +911,101 @@ const (
 	voyagerUranusPhase  = 3.438083
 	voyagerNeptunePhase = 3.884496
 )
+
+// deltaIVHeavy is the Delta IV Heavy with a Star 48BV on top, which is what threw the
+// Parker Solar Probe onto the highest C3 ever flown.
+//
+// Three common cores burn together off the pad and a serial list cannot hold that. Giving
+// stage 1 the two side boosters alone does not work either: that is a thrust-to-weight of
+// 0.79 and the stack sits there. So the split here is by *thrust phase* rather than by
+// hardware — stage 1 has all three engines and the propellant they burn before the sides
+// separate, which is the two sides entire plus the four minutes the core spends throttled
+// to 55%, and stage 2 is the core's remaining 96 t on its own engine. Liftoff
+// thrust-to-weight comes out 1.18 against the real 1.2.
+func deltaIVHeavy() Rocket {
+	return Rocket{
+		// Parker itself, 685 kg with its heat shield.
+		Payload: 685, Cd: 0.35, Diameter: 5.0,
+		Stages: []Stage{
+			{DryMass: 53520, PropMass: 502580, ThrustVac: 9411000, IspVac: 412, IspSL: 362,
+				Throttle: 1, SepDelay: 1},
+			{DryMass: 26760, PropMass: 96340, ThrustVac: 3137000, IspVac: 412, IspSL: 362,
+				Throttle: 1, SepDelay: 2, Ignition: IgniteAfterDelay},
+			// The 5-metre Delta Cryogenic Second Stage, one RL10B-2. Cut off in the
+			// parking orbit with 22 t left and relit by the plan.
+			{DryMass: 3490, PropMass: 27220, ThrustVac: 110000, IspVac: 462, IspSL: 462,
+				Throttle: 1, CutoffTime: 180, Ignition: IgniteAfterDelay, IgnitionDelay: 2},
+			// Star 48BV, the solid that finishes the job.
+			{DryMass: 130, PropMass: 2010, ThrustVac: 68600, IspVac: 286, IspSL: 286,
+				Throttle: 1, Ignition: IgniteOnNode},
+		},
+	}
+}
+
+// parkerSolar is the Parker Solar Probe: the only preset here that spends its energy going
+// *down*, and the fastest thing in the collection.
+//
+// Everything about it is backwards from the rest. The injection is aimed against the
+// Earth's own motion rather than along it — what it buys is not distance but the loss of
+// heliocentric angular momentum — and the Venus flyby takes energy *out*. The first
+// perihelion is 36.6 solar radii at 94 km/s, which is three times the Earth's orbital
+// speed and eleven times anything else here reaches.
+//
+// The real mission needed seven Venus flybys over seven years to walk the perihelion down
+// to 9.86 radii. One is what a single choice of Venus's phase can arrange: the rest are
+// resonant returns, where each pass has to leave the vehicle in an orbit commensurate with
+// Venus's year so the next one lines up. So this is the mission's first orbit, and it is
+// the same first orbit — Venus at 47 days against the real 46, and a first perihelion of
+// 36.6 radii against 35.7.
+func parkerSolar() Preset {
+	sys := SolarSystem()
+	earth := sys.IndexOf("earth")
+	// Venus, put where the vehicle crosses its orbit on the way *down*: a pass on the
+	// inbound leg is the one that takes angular momentum away. Solved by iteration
+	// against this configuration, rounded keyframes and all.
+	sys.Bodies[sys.IndexOf("venus")].MeanAnom0 = parkerVenusPhase
+	sys.Normalize()
+
+	return Preset{
+		Name: "parker-solar",
+		Cfg: Config{
+			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
+			Rocket: deltaIVHeavy(),
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 28, Pitch: 90},
+				{Time: 53, Pitch: 76.7},
+				{Time: 78, Pitch: 64.3},
+				{Time: 103, Pitch: 52.8},
+				{Time: 128, Pitch: 42.2},
+				{Time: 153, Pitch: 32.6},
+				{Time: 178, Pitch: 23.9},
+				{Time: 203, Pitch: 16.3},
+				{Time: 228, Pitch: 9.7},
+				{Time: 253, Pitch: 4.3},
+				{Time: 278, Pitch: 0.1},
+				{Time: 303, Pitch: -2.8},
+				{Time: 328, Pitch: -4.0},
+			}},
+			// The injection, and the point in the parking orbit is everything: T+2350 s
+			// puts the escape asymptote against the Earth's motion and drops the
+			// perihelion to 0.18 AU. Half an orbit later the same 10.3 km/s buys a
+			// perihelion of 0.98 AU and an escape from the system instead — the same
+			// sweep as Voyager's, read from the other end.
+			Nodes: []Node{
+				{T: 2350, Frame: BurnPrograde, DeltaV: 6900, Separate: true},
+				{T: 2750, Frame: BurnPrograde, DeltaV: 3400},
+			},
+			TargetOrbit: 190000,
+			// Four years, which is nine of its own orbits.
+			MaxTime: 4 * 365.25 * 86400,
+		},
+	}
+}
+
+// parkerVenusPhase is where Venus has to be, as converged. See voyagerTour for why this is
+// a number rather than a search.
+const parkerVenusPhase = 5.557125
 
 // kerbinAir is Earth's air on a planet a ninth the size: 1 bar at the surface and all
 // of it gone by 70 km, which is what makes a direct ascent there impossible and the

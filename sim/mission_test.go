@@ -804,3 +804,51 @@ func TestVoyagerTourFliesPastFourPlanets(t *testing.T) {
 		}
 	}
 }
+
+// Parker is the fastest thing here and the only one that spends its energy going down: the
+// injection is aimed against the Earth's motion and the Venus flyby takes angular momentum
+// away rather than adding it. What the test pins is the shape of that — one Venus pass, a
+// perihelion deep inside Mercury's orbit, and a speed nothing else here comes near.
+//
+// Flown for 250 days rather than the preset's four years: Venus is at 46 and the first
+// perihelion at 110, and everything after that is the same ellipse going round again.
+func TestParkerReachesTheCorona(t *testing.T) {
+	p := parkerSolar()
+	s := New(p.Cfg)
+	s.FastForward(250 * 86400)
+
+	venus := 0
+	for _, e := range s.Events {
+		if e.Kind != EvSOIEnter || s.Cfg.System.Bodies[e.Body].Name != "venus" {
+			continue
+		}
+		venus++
+		if d := e.T / 86400; d < 40 || d > 55 {
+			t.Errorf("the Venus flyby is at T+%.1f d, expected the mission's 46", d)
+		}
+	}
+	if venus != 1 {
+		t.Errorf("%d Venus encounters, expected the one a single phase can arrange", venus)
+	}
+
+	sun := &s.Cfg.System.Bodies[0]
+	best, fastest := math.Inf(1), 0.0
+	for _, h := range s.Hist {
+		if h.Center != 0 {
+			continue
+		}
+		best = math.Min(best, h.Pos.Len())
+		fastest = math.Max(fastest, h.Speed)
+	}
+	if r := best / sun.Radius; r > 45 {
+		t.Errorf("closest approach %.1f solar radii: the real first perihelion is 35.7", r)
+	}
+	if fastest < 85000 {
+		t.Errorf("fastest %.0f m/s, and the real thing passes perihelion at 95 km/s", fastest)
+	}
+	// Inside Mercury's orbit, which is the point of the mission.
+	if merc := s.Cfg.System.Bodies[s.Cfg.System.IndexOf("mercury")]; best > merc.SemiMajor {
+		t.Errorf("closest approach %.3g m does not reach inside Mercury's orbit (%.3g m)",
+			best, merc.SemiMajor)
+	}
+}
