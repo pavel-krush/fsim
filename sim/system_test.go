@@ -609,3 +609,79 @@ func TestEachAtmosphereIsPreparedWithItsOwnGravity(t *testing.T) {
 			wrong.State(h).Pressure)
 	}
 }
+
+// vacuumDensity is where a body's air is taken to have ended: the density Earth's own
+// ceiling cuts off at. It is the convention every atmosphere here is measured against,
+// and it exists as a number because it used to exist only as an intention.
+const vacuumDensity = 1e-9 // kg/m^3
+
+// Top has to mean the same thing on every body. It did not: each was set to whatever
+// suited the preset launched from it, so Mars stopped at 90 km with the profile still
+// at 7.8e-7 kg/m³ — 2600 times Earth's cutoff — and Titan at 500 km with 660 times.
+// That mattered beyond tidiness, because Top is also the line an orbit has to clear to
+// count as one: both presets were reaching "orbit" with their periapsis a few kilometres
+// above a cliff edge drawn just under it.
+func TestEveryCeilingIsAtTheSameDensity(t *testing.T) {
+	sys := SolarSystem()
+	sys.Normalize()
+
+	for i := range sys.Bodies {
+		b := &sys.Bodies[i]
+		if b.Atmo.IsVacuum() {
+			continue
+		}
+		at := &b.Atmo
+		rho := at.DensityAt(at.Top)
+		if rho > 10*vacuumDensity {
+			t.Errorf("%s: the air is cut off at %.0f km where the profile still gives "+
+				"%.3g kg/m³, %.0f times the %g it should be",
+				b.Name, at.Top/1000, rho, rho/vacuumDensity, vacuumDensity)
+		}
+		// And not absurdly deep either, which is a hundred kilometres of nothing that
+		// an orbit still has to clear: Venus was cut off at 1e-19.
+		if rho < vacuumDensity/1000 {
+			t.Errorf("%s: cut off at %.0f km where the profile gives %.3g kg/m³, far "+
+				"below the %g it should be", b.Name, at.Top/1000, rho, vacuumDensity)
+		}
+	}
+}
+
+// Kerbin is the exception, on purpose. It is a game's planet and in that game the air
+// ends abruptly at 70 km, where a real profile would still have a millionth of a
+// kilogram in it — so the cutoff is a cliff, and it is the source's cliff. Anything
+// that made it consistent with the real bodies would stop it being Kerbin.
+func TestKerbinKeepsItsCliff(t *testing.T) {
+	b := kerbinSystem().Bodies[0]
+	if b.Atmo.Top != 70000 {
+		t.Errorf("Kerbin's air ends at %.0f km, and the game says 70", b.Atmo.Top/1000)
+	}
+	if rho := b.Atmo.DensityAt(b.Atmo.Top); rho < 100*vacuumDensity {
+		t.Errorf("Kerbin's cutoff is at %.3g kg/m³, which is no longer the cliff this "+
+			"test is about", rho)
+	}
+}
+
+// Every preset has to reach an orbit that clears its own body's air by a margin, not by
+// a rounding error. Two of them used to clear it by two and four kilometres, which is
+// how the shallow ceilings stayed unnoticed.
+func TestEveryPresetClearsTheAirItFliesIn(t *testing.T) {
+	for _, p := range Presets() {
+		t.Run(p.Name, func(t *testing.T) {
+			s := New(p.Cfg)
+			s.RunToEnd()
+			top := s.AtmoTop()
+			if top <= 0 {
+				return // an airless body has nothing to clear
+			}
+			peri := s.Telemetry().PeriAlt
+			if peri < top*1.1 {
+				t.Errorf("periapsis %.0f km against a ceiling at %.0f km: %.0f km of "+
+					"margin, which is not a margin", peri/1000, top/1000, (peri-top)/1000)
+			}
+			if s.Cfg.TargetOrbit <= top {
+				t.Errorf("the target orbit is %.0f km, inside the air it launches "+
+					"through (%.0f km)", s.Cfg.TargetOrbit/1000, top/1000)
+			}
+		})
+	}
+}

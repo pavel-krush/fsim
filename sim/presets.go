@@ -639,31 +639,35 @@ func titanAscent() Preset {
 						// side of the orbit at 50 km however it was tuned.
 						DryMass: 300, PropMass: 1300,
 						ThrustVac: 5000, IspVac: 340, IspSL: 340,
-						Throttle: 1, CutoffTime: 300,
+						Throttle: 1, CutoffTime: 420,
 						Ignition: IgniteAtApoapsis,
 					},
 				},
 			},
-			// Seven and a half minutes of vertical. Anything less and the turn happens
-			// in air thick enough to eat two kilometres a second of drag; anything
-			// more and there is not enough propellant left to build the horizontal
-			// speed.
+			// Nine minutes of vertical. Anything less and the turn happens in air thick
+			// enough to eat two kilometres a second of drag; anything more and there is
+			// not enough propellant left to build the horizontal speed. It was seven
+			// and a half until Titan's ceiling moved from 500 km to 720 — the depth at
+			// which its air actually reaches Earth's cutoff density — and the orbit had
+			// to go up with it. The kick stage had the propellant for it all along: it
+			// was burning 450 kg of the 1300 it carries.
 			Program: Program{Keys: []Keyframe{
 				{Time: 0, Pitch: 90},
-				{Time: 450, Pitch: 90},
-				{Time: 477, Pitch: 76},
-				{Time: 505, Pitch: 63},
-				{Time: 532, Pitch: 52},
-				{Time: 559, Pitch: 42},
-				{Time: 586, Pitch: 33},
-				{Time: 614, Pitch: 26},
-				{Time: 641, Pitch: 20},
-				{Time: 668, Pitch: 15},
-				{Time: 695, Pitch: 12},
-				{Time: 723, Pitch: 10},
-				{Time: 750, Pitch: 9},
+				{Time: 550, Pitch: 90},
+				{Time: 585, Pitch: 75.6},
+				{Time: 620, Pitch: 62.7},
+				{Time: 655, Pitch: 51.4},
+				{Time: 690, Pitch: 41.5},
+				{Time: 725, Pitch: 33.1},
+				{Time: 760, Pitch: 26.0},
+				{Time: 795, Pitch: 20.3},
+				{Time: 830, Pitch: 15.8},
+				{Time: 865, Pitch: 12.6},
+				{Time: 900, Pitch: 10.4},
+				{Time: 935, Pitch: 9.3},
+				{Time: 970, Pitch: 9.0},
 			}},
-			TargetOrbit: 600000,
+			TargetOrbit: 1000000,
 			MaxTime:     6 * 3600,
 		},
 	}
@@ -694,28 +698,37 @@ func marsAscent() Preset {
 					{
 						DryMass: 400, PropMass: 900,
 						ThrustVac: 12000, IspVac: 350, IspSL: 350,
-						Throttle: 1, CutoffTime: 164.0,
+						Throttle: 1, CutoffTime: 205.0,
 						Ignition: IgniteAfterDelay, IgnitionDelay: 3,
 					},
 				},
 			},
+			// Found by search again, because Mars's air got deeper: the ceiling moved
+			// from 90 km to 150, and the old programme parked its periapsis at 92.
+			// The tail is *below* the horizon — thrust pointed 18° down at the end of
+			// the burn is what stops the climb while the horizontal speed is still
+			// building, and it is the only thing in this family that raises a
+			// periapsis rather than an apoapsis. A kick stage at apoapsis, which is
+			// how Kerbin and Titan solve the same problem, cannot work here: this
+			// upper stage has 2.6 km/s and circularising at apoapsis from a standstill
+			// wants 3.5.
 			Program: Program{Keys: []Keyframe{
 				{Time: 0, Pitch: 90},
-				{Time: 20, Pitch: 90},
-				{Time: 37, Pitch: 84},
-				{Time: 53, Pitch: 78},
-				{Time: 70, Pitch: 71},
-				{Time: 87, Pitch: 65},
-				{Time: 103, Pitch: 58},
-				{Time: 120, Pitch: 52},
-				{Time: 137, Pitch: 45},
-				{Time: 153, Pitch: 37},
-				{Time: 170, Pitch: 30},
-				{Time: 187, Pitch: 21},
-				{Time: 203, Pitch: 12},
-				{Time: 220, Pitch: 0},
+				{Time: 12, Pitch: 90},
+				{Time: 37, Pitch: 85.0},
+				{Time: 62, Pitch: 79.7},
+				{Time: 87, Pitch: 74.2},
+				{Time: 112, Pitch: 68.4},
+				{Time: 137, Pitch: 62.3},
+				{Time: 162, Pitch: 55.8},
+				{Time: 187, Pitch: 48.7},
+				{Time: 212, Pitch: 41.0},
+				{Time: 237, Pitch: 32.4},
+				{Time: 262, Pitch: 22.3},
+				{Time: 287, Pitch: 9.5},
+				{Time: 312, Pitch: -18.0},
 			}},
-			TargetOrbit: 120000,
+			TargetOrbit: 200000,
 			MaxTime:     3600,
 		},
 	}
