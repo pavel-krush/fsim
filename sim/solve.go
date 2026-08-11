@@ -18,12 +18,13 @@ import "math"
 //   - A copy never solves. It inherits whatever its control points have already been solved
 //     to and flies those, so the recursion is one level deep by construction.
 
-// solveSteps is how many flights one control point costs: the bracket plus the bisection.
-// Twenty-eight halvings of the limit is a resolution of a millimetre a second on a 300 m/s
-// correction, which is far past what the aim can use.
+// How many flights one control point costs: the bracket plus the bisection, twenty-five in all.
+// Sixteen halvings of a 150 m/s budget is a resolution of two thousandths of a metre a second,
+// which is already far past what an aim can use — the chaos of the approach is worth kilometres,
+// not millimetres — and each halving is a whole flight of the mission ahead.
 const (
 	solveBracket = 9
-	solveHalving = 22
+	solveHalving = 16
 )
 
 // solveNode fills in the delta-v for a control point and marks whether it got there.

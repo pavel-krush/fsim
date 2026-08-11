@@ -499,34 +499,53 @@ years to the last encounter — and the only one that gets where it is going on 
 
 ### Parker, which spends its energy going down
 
-`parker-solar` is the fastest flight here and the only one where every sign is reversed: the
-injection is aimed *against* the Earth's motion, and the Venus flyby takes angular momentum
-away rather than adding it. First perihelion is 37.1 solar radii at 93.4 km/s — the real
-mission's first was 35.7 radii at 95.
+`parker-solar` is the fastest flight here, the only one where every sign is reversed, and the only
+one whose mission is a *chain* rather than a trajectory: the injection is aimed against the Earth's
+motion and every Venus flyby takes angular momentum away. Three of them walk the perihelion from
+39 solar radii to **23.7, at 119 km/s**.
 
-- **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape
-  asymptote against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU;
-  half an orbit later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the
-  system. It is the same sweep Voyager's injection needed, read from the other end.
-- **One Venus flyby, not seven.** The real mission walks the perihelion down over seven years
-  by *resonant returns* — each pass leaves the vehicle in an orbit commensurate with Venus's
-  year so the next one lines up. A single choice of Venus's phase arranges one encounter; the
-  rest would need a search over the resonances, which is a different piece of work. What ships
-  is the mission's first orbit, and it is the same first orbit: Venus at 45.5 days against the
-  real 46.
-- **The pass has to be on the way *in*.** `crossP` looks for the inbound crossing of Venus's
-  ellipse, because a pass on the falling leg is the one that takes energy out. It buys
-  2.5 solar radii of perihelion — 39.6 without Venus, 37.1 with — which is the same order as
-  the real flybys' 0.02 AU apiece.
-- **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together
-  off the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone
-  is a thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust
-  phase* — stage 1 has all three engines and the propellant burned before the sides go (the
-  two sides entire, plus the four minutes the core spends throttled to 55%), and stage 2 is
-  the core's remaining 96 t. Liftoff TWR comes out 1.18 against the real 1.2.
-- **It is reproducible where the grand tour is not**, and for the reason the tour is not: one
-  flyby amplifies nothing. Flown in one jump, in 30-day jumps or in 12-hour jumps, the
-  perihelion agrees to a metre a second.
+- **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape asymptote
+  against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU; half an orbit
+  later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the system. It is the
+  same sweep Voyager's injection needed, read from the other end.
+- **The flybys are aims, not numbers**, and that is what makes this chain reproducible where the
+  grand tour's is not: each control point says which side of Venus to pass and how close, and the
+  delta-v is solved when the moment arrives. Flown in one jump, in 30-day jumps or in 12-hour
+  jumps, the three aims come out at 12.1, 32.9 and 94 m/s and the passes land in the same places.
+- **The side is the sign, and it decides everything.** A pass on the negative side takes angular
+  momentum away — 0.1728 AU of perihelion becomes 0.1463 at 1.5 radii — and the positive side
+  *raises* it, to 0.2330. Closer is more: about five solar radii of perihelion per pass at two
+  radii of Venus.
+- **The resonance is what brings it back, and the pass is what sets the resonance.** A pass at
+  −3.0 radii leaves a period of 149.8 days, which is two thirds of Venus's year, so three orbits
+  later the vehicle is back where Venus is; the second pass, at −2.1 radii, leaves 134.9 days —
+  three fifths — and five orbits after that the third pass happens. The aim distances were chosen
+  offline *for their periods*: distance-to-period is monotone and the aim is solved robustly,
+  where aiming a period directly has a branch point at the impact and a bisection cannot be
+  trusted across it.
+- **Corrections go close to the pass, not early.** Sixty days out a burn moves the miss distance
+  and barely touches the period. Six hundred days out it is ten times cheaper — and it changes the
+  period too, which breaks the resonance and leaves nothing to aim at. The price of doing it late
+  is delta-v: 94 m/s for the third pass against 12 for the first.
+- **Three flybys are what the propellant buys.** The corrections total 139 m/s of the 178 that 52
+  kg of hydrazine carries, and a fourth pass would cost another hundred. The real mission's other
+  four are bought with geometry over years of design, not with thrust. The Star 48BV is dropped
+  before any of this: a solid fires once, so the leftovers trick `proton-zvezda` uses is not
+  available here.
+- **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together off
+  the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone is a
+  thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust phase* —
+  stage 1 has all three engines and the propellant burned before the sides go, and stage 2 is the
+  core's remaining 96 t. Liftoff TWR comes out 1.18 against the real 1.2. The spacecraft is the
+  last stage rather than payload, because it steers.
+- **Its gravity losses go negative, and that is the accounting being honest about a dive.** The
+  figure integrates `-g·sin(flight path angle)`, which is a loss while climbing and a gain while
+  falling; a vehicle spending three years dropping towards the Sun collects −76 km/s of it. The
+  number means what it always meant, but "losses" is the wrong word for the second half of an
+  orbit like this one.
+- **It costs the test suite a minute and a half**, which is the honest price of three solves and a
+  three-and-a-half-year flight. `MaxTime` is trimmed to just past the third flyby for the same
+  reason: every full-mission run pays it, the screenshot script included.
 
 ### Io, where there is no room
 

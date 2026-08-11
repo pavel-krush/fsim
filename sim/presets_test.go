@@ -72,7 +72,16 @@ func TestPresetsAreValid(t *testing.T) {
 			// happens today because a verdict disables the limit, which is an
 			// accident and not something to rely on.
 			for i, n := range cfg.Nodes {
-				if n.DeltaV <= 0 {
+				// A control point's delta-v is an output, so what it has to carry is a
+				// budget to spend and an aim to spend it on.
+				if n.Target != TargetNone {
+					if n.Limit <= 0 {
+						t.Errorf("control point %d has nothing to spend", i)
+					}
+					if n.Horizon <= 0 {
+						t.Errorf("control point %d measures its aim over no time at all", i)
+					}
+				} else if n.DeltaV <= 0 {
 					t.Errorf("node %d asks for no delta-v", i)
 				}
 				if n.T < 0 {
