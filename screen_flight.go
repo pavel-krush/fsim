@@ -771,8 +771,7 @@ func (f *FlightScreen) drawAimRow(a *App, dst *ebiten.Image, r Rect, n *sim.Node
 
 	if done {
 		// History: what it was aiming at, and nothing to press.
-		drawText(dst, fmt.Sprintf("%s %s %s", nodeTargetName(n.Target), bodyName(b.Name),
-			aimValueText(n, b)), fontUISm, r.X+8, r.Y+5, colNodeDone, alignLeft)
+		drawText(dst, aimSummary(n, sys), fontUISm, r.X+8, r.Y+5, colNodeDone, alignLeft)
 		return
 	}
 
@@ -813,6 +812,24 @@ func aimValueText(n *sim.Node, b *sim.Body) string {
 		return fmt.Sprintf("%s %s", formatNum(n.TargetValue/86400, 2), T("unit.d"))
 	}
 	return fmt.Sprintf("%s %s", formatNum(n.TargetValue/b.Radius, 2), T("unit.radii"))
+}
+
+// aimSummary is a control point's whole aim in one line.
+//
+// One format string per target rather than three fragments glued together: word order differs
+// between languages, and "пролёт в Венера" is what gluing gets you.
+func aimSummary(n *sim.Node, sys *sim.System) string {
+	b := &sys.Bodies[0]
+	if n.TargetBody >= 0 && n.TargetBody < len(sys.Bodies) {
+		b = &sys.Bodies[n.TargetBody]
+	}
+	switch n.Target {
+	case sim.TargetPeriod:
+		return fmt.Sprintf(T("node.aimPeriodSum"), aimValueText(n, b))
+	case sim.TargetPeriodAfterFlyby:
+		return fmt.Sprintf(T("node.aimResonanceSum"), bodyName(b.Name), aimValueText(n, b))
+	}
+	return fmt.Sprintf(T("node.aimFlybySum"), bodyName(b.Name), aimValueText(n, b))
 }
 
 // nodeTargetName is what a control point's aim is called on screen.

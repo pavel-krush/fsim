@@ -885,6 +885,12 @@ what you are trying to fly, so it comes second.
   The grand tour takes half a minute to fly and nobody is waiting for that to read a paragraph. The
   time limit is written as a duration rather than a mission clock: "T+10957d 12:00:00" is a correct
   answer to how long the tour may run and a useless one to read.
+- **A control point has no delta-v to quote**, so the plan lists its *aim* and its budget
+  instead — "flyby: Venus, −3.00 R ≤150". Printing the zero it starts life with would be a lie
+  about the mission, and the time goes in days rather than as a mission clock, because
+  "T+1100d 00:00:00" beside an aim runs straight into it.
+- **The aim is one format string, not three fragments.** Word order differs between languages and
+  "пролёт в Венера" is what gluing gets you — the same rule the max-q readout follows.
 - **The timings in the prose are the tested ones.** T+604 s, 1926 × 1776 km, 37 solar radii: every
   number quoted in a description is one the mission tests already pin, so the two drift together or
   not at all.
