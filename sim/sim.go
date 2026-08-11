@@ -278,8 +278,10 @@ type Sim struct {
 	ephPos  [ephSlots][]Vec2
 	ephNext int
 
-	coastScale   float64 // multiplier on the adaptive step; 0 means one
-	accum        float64 // leftover real time not yet turned into a fixed step
+	job          *solveJob // a control point being worked out; no time passes while it is
+	coastScale   float64   // multiplier on the adaptive step; 0 means one
+	burnStep     float64   // step a vacuum burn is integrated at; 0 means the fixed one
+	accum        float64   // leftover real time not yet turned into a fixed step
 	surfaceP     float64
 	launchAngle  float64
 	maxQ         float64
@@ -340,6 +342,7 @@ func (s *Sim) Reset() {
 	}
 
 	s.St = st
+	s.job = nil
 	s.Hist = s.Hist[:0]
 	s.Events = s.Events[:0]
 	s.maxQ, s.maxQAlt, s.maxG, s.maxAlt = 0, 0, 0, 0
@@ -362,6 +365,21 @@ func (s *Sim) Mass() float64 {
 		m += s.Cfg.Rocket.Stages[i].DryMass + s.St.Prop[i]
 	}
 	return m
+}
+
+// dropEphemeris cuts a copy loose from the flight's ephemeris cache.
+//
+// The cache is an array of slices, so copying a Sim copies the array and leaves both of them
+// pointing at the same backing arrays: the copy then fills a slot for its own instant while the
+// original's ephT still claims that slot holds another one, and the flight reads positions from
+// a time it is not at. It is the sort of fault that never announces itself — a trajectory quietly
+// a little wrong, amplified by every flyby downstream — and it is why nothing that copies a Sim
+// may skip this.
+func (s *Sim) dropEphemeris() {
+	s.ephPos = [ephSlots][]Vec2{}
+	s.ephHas = [ephSlots]bool{}
+	s.ephT = [ephSlots]float64{}
+	s.ephNext = 0
 }
 
 // ephSlots is how many instants the ephemeris cache holds. A step asks for t,
@@ -469,6 +487,13 @@ func (s *Sim) Advance(dt float64) {
 	if dt <= 0 {
 		return
 	}
+	if s.job != nil {
+		// A correction is being worked out. No mission time passes until it is: the state it
+		// is solved against is this one, and one candidate flight per frame is what keeps the
+		// window answering while it happens.
+		s.pumpSolve(1)
+		return
+	}
 	s.accum += dt
 	s.WarpLimited = false
 
@@ -501,6 +526,15 @@ func (s *Sim) Advance(dt float64) {
 // for "show me the state four hours in".
 func (s *Sim) FastForward(target float64) {
 	for !s.St.Done && s.St.T < target {
+		if s.job != nil {
+			// Nothing is being played to anybody here, so a solve is finished on the spot.
+			s.finishSolve()
+			continue
+		}
+		// A step that consumed no time is either the end of the flight or a control point
+		// that has just come due, and the two have to be told apart: breaking out of the
+		// loop on a pending solve would leave the mission stopped at the correction.
+
 		// The same step planner the live flight uses, minus the warp cap. Rolling
 		// its own — "fixed step, or the coast target if coasting" — left out both
 		// of the guards that live in it: a ten-minute step sailed past a scheduled
@@ -511,7 +545,7 @@ func (s *Sim) FastForward(target float64) {
 		if h > target-s.St.T {
 			h = target - s.St.T
 		}
-		if s.advanceOne(h) <= 0 {
+		if s.advanceOne(h) <= 0 && s.job == nil {
 			break
 		}
 	}
@@ -529,7 +563,11 @@ func (s *Sim) RunToEnd() {
 	// step is whatever the state can carry. That is what makes a three-day
 	// mission finish in the time it takes to ask for it.
 	for !s.St.Done && !s.Settled() && s.St.T < limit {
-		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+		if s.job != nil {
+			s.finishSolve()
+			continue
+		}
+		if s.advanceOne(s.plannedStepUncapped()) <= 0 && s.job == nil {
 			break
 		}
 	}
@@ -570,6 +608,12 @@ func (s *Sim) Step(dt float64) {
 
 	s.checkPhase()
 	if s.St.Done {
+		return
+	}
+	if s.job != nil {
+		// A control point has come due and is being worked out. Nothing may move until it
+		// is: the delta-v is being solved against *this* state, and a step taken meanwhile
+		// would have the burn start from somewhere else.
 		return
 	}
 

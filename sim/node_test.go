@@ -400,3 +400,89 @@ func TestAResonantReturnComesBack(t *testing.T) {
 		}
 	}
 }
+
+// A solve is spread over as many calls as the interface has frames, and the answer must not
+// depend on how many candidates each of them ran. Otherwise the trajectory would depend on the
+// frame rate, which is the one thing this simulator refuses to let anything depend on.
+//
+// A control point costs twenty-five flights of the mission ahead — six seconds of them on
+// Parker's third correction — so doing it inside one frame was a window that had stopped
+// answering, with no way to draw a word of explanation until the frame ended.
+func TestASolveSpreadOverFramesGivesTheSameAnswer(t *testing.T) {
+	fly := func(budget int) (float64, float64, [4]float64) {
+		s := New(kerbinMun().Cfg)
+		mun := s.Cfg.System.IndexOf("mun")
+		s.Cfg.Nodes = []Node{s.Cfg.Nodes[0],
+			{T: 4000, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+				TargetBody: mun, TargetValue: 700e3, Limit: 200, Horizon: 6 * 86400}}
+		// One frame at a time, as the flight screen drives it, rather than in one jump.
+		for s.St.T < 2*86400 && !s.St.Done {
+			if _, _, solving := s.Solving(); solving {
+				s.PumpSolve(budget)
+				continue
+			}
+			s.WarpRate = 10000
+			s.Advance(1.0 / 60)
+		}
+		n := s.Cfg.Nodes[1]
+		return n.DeltaV, s.St.T, [4]float64{s.St.Pos.X, s.St.Pos.Y, s.St.Vel.X, s.St.Vel.Y}
+	}
+
+	dv1, t1, st1 := fly(1)
+	dv2, t2, st2 := fly(4)
+	if dv1 != dv2 || t1 != t2 || st1 != st2 {
+		t.Errorf("one candidate a frame and four gave different flights:\n %g at %g %v\n %g at %g %v",
+			dv1, t1, st1, dv2, t2, st2)
+	}
+	if dv1 <= 0 {
+		t.Errorf("the correction solved to %g m/s", dv1)
+	}
+}
+
+// No mission time passes while a correction is being worked out, and the burn still starts at
+// the instant the plan asked for. Out beyond the air a coast step is minutes long, so a flight
+// that kept stepping through a solve would have the engine light minutes late — and solve the
+// correction for a state it had already flown out of.
+func TestNoTimePassesWhileSolving(t *testing.T) {
+	s := New(kerbinMun().Cfg)
+	mun := s.Cfg.System.IndexOf("mun")
+	const when = 4000.0
+	s.Cfg.Nodes = []Node{s.Cfg.Nodes[0],
+		{T: when, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+			TargetBody: mun, TargetValue: 700e3, Limit: 200, Horizon: 6 * 86400}}
+
+	s.WarpRate = 10000
+	solving := false
+	for s.St.T < when+3600 && !s.St.Done && !solving {
+		s.Advance(1.0 / 60)
+		_, _, solving = s.Solving()
+	}
+	if !solving {
+		t.Fatalf("no solve started by T+%g s", s.St.T)
+	}
+	// Not before the node's own time. It can be after: the plan's earlier burn was still
+	// running at T+4000, and the sequence it is in the middle of comes first.
+	held := s.St.T
+	if held < when-1e-6 {
+		t.Errorf("the solve began at T+%g s, before the T+%g the plan asked for", held, when)
+	}
+	for range 5 {
+		s.Advance(1.0 / 60)
+		if s.St.T != held {
+			t.Fatalf("the clock moved to %g while a correction was being solved", s.St.T)
+		}
+	}
+	for {
+		if _, _, solving := s.Solving(); !solving {
+			break
+		}
+		s.PumpSolve(1)
+	}
+	if s.St.T != held {
+		t.Errorf("finishing the solve moved the clock to %g", s.St.T)
+	}
+	if s.St.Phase != PhaseBurn || s.St.Node != 1 {
+		t.Errorf("the burn did not start when the solve finished: phase %v, node %d",
+			s.St.Phase, s.St.Node)
+	}
+}

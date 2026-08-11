@@ -250,7 +250,14 @@ func (f *FlightScreen) Update(a *App, dst *ebiten.Image) {
 	f.handleKeys(u)
 
 	f.simNs, f.simSteps, f.simT = 0, 0, 0
-	if !f.paused && !f.s.St.Done {
+	// A control point that has come due is worked out one candidate flight per frame, and the
+	// mission clock stands still while it is. Driven pause or no pause: the solve is not
+	// mission time, and a paused flight would otherwise never come out of one.
+	if _, _, solving := f.s.Solving(); solving {
+		t0 := time.Now()
+		f.s.PumpSolve(1)
+		f.simNs = time.Since(t0).Nanoseconds()
+	} else if !f.paused && !f.s.St.Done {
 		// The rate goes in as well as the amount: it caps how far one coast step
 		// may reach, which is what keeps the picture moving at ×1 instead of
 		// jumping ten minutes at a time.
@@ -928,6 +935,12 @@ func (f *FlightScreen) refreshPrediction(dt float64) bool {
 		f.pred = nil
 		return false
 	}
+	// Not while a correction is being solved. The frame already has one candidate flight of
+	// the mission ahead in it, and a prediction is another twenty-five — it would double the
+	// only cost this screen has, to draw a path that is about to change anyway.
+	if _, _, solving := f.s.Solving(); solving {
+		return f.pred != nil
+	}
 
 	// Recomputed when the flight has eaten into the path, not when the clock has
 	// ticked. On a timer it landed twice a second for the whole of a coast, which at
@@ -1585,7 +1598,17 @@ func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.
 	// A warp the current regime cannot deliver is worth saying out loud, or the
 	// setting looks broken: inside the atmosphere the step cannot grow, so a
 	// million times real time is not on offer at any price.
-	if f.s.WarpLimited && !f.paused {
+	//
+	// And a correction being worked out, which is the other reason the clock can stand still.
+	// Without a word on screen a stopped clock reads as a hang — which is exactly what it was
+	// before the solve was spread over frames. It takes the same corner and hides the warp
+	// warning while it is there: nothing is being warped through, and a warning left over from
+	// before the solve would print on top of it.
+	switch node, flights, solving := f.s.Solving(); {
+	case solving:
+		drawText(dst, fmt.Sprintf(T("flight.solving"), node+1, flights, sim.SolveFlights),
+			fontUISm, view.Right()-14, view.Y+30, colAccent, alignRight)
+	case f.s.WarpLimited && !f.paused:
 		drawText(dst, T("flight.warpLimited"), fontUISm, view.Right()-14, view.Y+30, colWarn, alignRight)
 	}
 }

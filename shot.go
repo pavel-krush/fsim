@@ -429,18 +429,34 @@ func (sr *shotRunner) step(a *App) bool {
 		}
 		a.flight.lookAt(focus)
 		if st.aimNode {
+			body := sr.tl.crossing
+			if body < 0 {
+				body = 0
+			}
+			aim := sim.Node{
+				T: math.Round(a.flight.s.St.T + 120), Frame: sim.BurnRadialOut,
+				Target: sim.TargetFlybyPeriapsis, TargetBody: body,
+				TargetValue: 4 * a.flight.s.Cfg.System.Bodies[body].Radius,
+				Limit:       60, Horizon: 30 * 86400,
+			}
+			// The plan's first burn that has not fired yet becomes the control point, and if
+			// there is none, one is added. The preset flown by a capture is whichever one
+			// -shot was started on, and the default has no plan at all — so a step that could
+			// only convert an existing burn captured an empty panel and called it a control
+			// point.
+			converted := false
 			for i := range a.flight.s.Cfg.Nodes {
 				if a.flight.s.St.NodesDone&(1<<uint(i)) != 0 {
 					continue
 				}
 				n := &a.flight.s.Cfg.Nodes[i]
-				n.Target, n.TargetBody = sim.TargetFlybyPeriapsis, sr.tl.crossing
-				if n.TargetBody < 0 {
-					n.TargetBody = 0
-				}
-				n.TargetValue = 4 * a.flight.s.Cfg.System.Bodies[n.TargetBody].Radius
-				n.Limit, n.Horizon = 60, 30*86400
+				n.Target, n.TargetBody, n.TargetValue = aim.Target, aim.TargetBody, aim.TargetValue
+				n.Limit, n.Horizon = aim.Limit, aim.Horizon
+				converted = true
 				break
+			}
+			if !converted {
+				a.flight.s.Cfg.Nodes = append(a.flight.s.Cfg.Nodes, aim)
 			}
 		}
 		if st.freeHalfway {

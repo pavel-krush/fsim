@@ -710,10 +710,47 @@ against the path the flight is actually on, which is what a real trajectory corr
 - **The method is a bracket and a bisection over flown copies**, the same integrator over the
   same plan and bodies. Nothing cheaper is honest: a conic approximation gives an answer the
   flight then misses, which is the failure a correction exists to prevent. One control point
-  costs about thirty flights and solves in a tenth of a second at lunar range.
+  costs twenty-seven flights of the mission ahead — a tenth of a second at lunar range, and
+  seconds when the mission ahead is interplanetary.
 - **The iteration count is fixed, never a time budget.** A solver that stopped when it ran out
   of milliseconds would make the trajectory depend on how busy the machine was, which is the
-  one thing nothing here is allowed to depend on. `TestSolvingIsDeterministic` pins it.
+  one thing nothing here is allowed to depend on.
+- **So the solve is spread over frames instead, and the mission clock stops while it is.** At the
+  fixed step Parker's three corrections cost 10, 13 and 33 seconds inside one frame each — a
+  window that has stopped answering, with no way to draw a word of explanation, because nothing
+  reaches the screen until the frame ends. `pumpSolve` flies one candidate per call, the flight
+  screen drives it pause or no pause, and the corner says which correction is being worked out
+  and how far along it is.
+- **What makes that safe is that the sequence of candidates is unchanged**, so the answer cannot
+  depend on how many ran per frame — and therefore not on the frame rate or the machine. It is
+  the same promise the integrator makes about ragged frame times.
+  `TestASolveSpreadOverFramesGivesTheSameAnswer` pins it by flying one candidate a frame against
+  four and comparing the flights bit for bit.
+- **Nothing may move while a solve is pending, and that took three guards rather than one.** The
+  phase machine runs at the *top* of a step — `Step` and `coastStep` both call `checkPhase` before
+  integrating — because that is where a burn gets lit. With the solve deferred, the step no longer
+  found an engine running and simply carried on: out beyond the air that is minutes of coast, so
+  the correction was worked out for a state the vehicle had already flown out of and the engine lit
+  late. `advanceOne`, `Step` and `coastStep` now all return without taking time while `job` is set,
+  and `FastForward`, `RunToEnd` and `Predict` tell that zero apart from the end of a flight and
+  finish the solve instead of stalling on it. `TestNoTimePassesWhileSolving` is that fault as a
+  test; the symptom that found it was Parker's answers moving in the third decimal.
+- **A candidate burn is integrated at a second a step, not at 0.02.** That is where the ten
+  seconds went: the correction engine is a hydrazine thruster of a few tens of newtons, so a
+  candidate burn runs for minutes, and twenty-seven of those at the fixed step is tens of millions
+  of steps. The figure is the one a drawn prediction already uses, and for the same reason — the
+  arc is smooth vacuum thrust and the cutoff is solved rather than watched for, so a coarser step
+  costs the shape of the burn and not where it ends. Parker's three solved to the same values.
+- **The coast is not coarsened in a candidate, and that is measured rather than cautious.** A
+  drawn prediction coasts five times coarser than the flight; a candidate at four times came out
+  costing exactly the same, because the step is already held down by how finely the approach has
+  to be sampled to measure it at all. There was no accuracy left to trade for anything.
+- **A copy must be cut loose from the ephemeris cache** (`dropEphemeris`), and that was a real
+  fault rather than a tidiness: the cache is an array of slices, so copying a `Sim` copies the
+  array and leaves both pointing at the same backing arrays. A candidate flight then filled a slot
+  for its own instant while the flight's own `ephT` still claimed that slot held another one — a
+  trajectory quietly a little wrong, amplified by every flyby downstream. It moved Parker's third
+  correction by 5 mm/s, which is one step of the bisection.
 - **A copy never solves.** It inherits whatever its control points are already solved to and
   flies those, so the recursion is one level deep by construction.
 - **`Predict` had to start copying the plan**, and that was a live bug rather than a nicety:
@@ -1345,6 +1382,8 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | one prediction from the parking orbit | 658 ms | **9.5 ms** |
 | predictions during a real-time coast | 2 per second | **none until the path is flown** |
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
+| Parker's three corrections | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
+| and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
 
 - **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew
   linearly for as long as the program was left running: 93,000 samples and 43 MB of heap at T+600 days on
@@ -1359,6 +1398,12 @@ numbers said the prediction was taking **658 ms** and running twice a second.
   bounds what the trail costs to draw, which is the other thing that had no ceiling — `trailSpan` is
   `+Inf` for a trajectory that is not coming back round, so an interplanetary cruise draws the whole
   flight by design.
+- **A correction is not paid for in one frame.** A control point is twenty-seven flights of the
+  mission ahead, and at the fixed step Parker's third was thirty-three seconds of them inside one
+  frame — a hang, as reported. Two things fixed it: a candidate burn integrated at a second a step
+  rather than 0.02, which is four to five times less work for the same answers, and spreading the
+  candidates over frames so the window keeps answering and can say what it is doing. See the control
+  points section; the second half is a change to *when* the work happens and not to what it computes.
 - **The prediction is recomputed when the flight has flown into it, not when the clock has ticked.** One
   is 25 to 90 ms — a ten-day horizon through eighteen bodies — and a timer of half a second meant that
   hitch twice a second for the whole of a coast, in return for a curve that had not moved by a pixel. The

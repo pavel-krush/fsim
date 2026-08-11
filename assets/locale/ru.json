@@ -87,6 +87,7 @@
   "flight.twr": "тяговооружённость",
   "flight.vertical": "вертикальная",
   "flight.warpLimited": "варп ограничен текущим режимом полёта",
+  "flight.solving": "расчёт поправки %d — %d/%d",
   "graph.atAltitude": "на высоте",
   "graph.dragLoss": "потери аэро",
   "graph.duration": "длительность",

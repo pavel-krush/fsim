@@ -101,6 +101,15 @@ func clampStep(h float64) float64 {
 // long the last frame took.
 func (s *Sim) plannedStep() float64 {
 	if !s.coasting() {
+		// A vacuum burn on a throwaway flight does not need the ascent's step. A
+		// hydrazine correction is minutes long against a 17 N engine, which at 0.02 s
+		// is tens of thousands of steps per candidate delta-v — and a control point
+		// flies twenty of those inside one frame, which is what the freeze was. The
+		// cutoff is still solved and Step still lands exactly on it, so what a coarser
+		// step costs is the shape of the arc during the burn and not its end.
+		if s.burnStep > FixedStep && s.St.Phase == PhaseBurn && s.Altitude() > s.AtmoTop() {
+			return s.burnStep
+		}
 		return FixedStep
 	}
 
@@ -152,6 +161,9 @@ func (s *Sim) stepCap() float64 {
 // integrator, so at ×1 — where the cap is the fixed step — a real-time flight is
 // exactly what the simulator has always produced, to the last bit.
 func (s *Sim) advanceOne(h float64) float64 {
+	if s.job != nil {
+		return 0
+	}
 	s.Steps++
 	if h <= FixedStep || !s.coasting() {
 		s.Step(h)
@@ -166,6 +178,12 @@ func (s *Sim) advanceOne(h float64) float64 {
 func (s *Sim) coastStep(h float64) float64 {
 	s.checkPhase()
 	if s.St.Done {
+		return 0
+	}
+	if s.job != nil {
+		// A control point came due at the start of this step and is being solved. Take no
+		// time at all: out here a coast step is minutes long, and one taken now would leave
+		// the correction solved for a state the vehicle has already flown out of.
 		return 0
 	}
 	if !s.coasting() {
