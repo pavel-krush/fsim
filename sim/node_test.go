@@ -486,3 +486,52 @@ func TestNoTimePassesWhileSolving(t *testing.T) {
 			s.St.Phase, s.St.Node)
 	}
 }
+
+// A prediction must not solve a control point, and this is the expensive half of "a copy never
+// solves". A drawn path that solved the corrections in the plan cost twenty-seven flights of the
+// mission ahead every time it was recomputed — 2.4 seconds of them once Parker's first control
+// point came inside the ten-day horizon, several times over during the coast to Venus. It was
+// reported as the simulation freezing, and it was.
+//
+// What is drawn instead is the path with the pending correction left out, which is the honest
+// answer: nobody knows its size until the moment arrives. So the predicted curve has to match,
+// point for point, the one a plan with that burn set to nothing produces.
+func TestAPredictionDoesNotSolveAControlPoint(t *testing.T) {
+	base := parkerSolar().Cfg
+	ven := base.System.IndexOf("venus")
+
+	aimed := New(base)
+	aimed.FastForward(15 * 86400) // inside the first control point's horizon, before its time
+
+	// The same flight with the control point reduced to a burn of nothing, which is what a
+	// pending correction is worth to anybody drawing a path.
+	plain := New(base)
+	plain.FastForward(15 * 86400)
+	for i := range plain.Cfg.Nodes {
+		if n := &plain.Cfg.Nodes[i]; n.Target != TargetNone {
+			n.Target, n.DeltaV, n.Limit = TargetNone, 0, 0
+		}
+	}
+
+	got := aimed.Predict(10*86400, 400)
+	want := plain.Predict(10*86400, 400)
+	if len(got) != len(want) || len(got) < 10 {
+		t.Fatalf("%d points against %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("point %d differs: %+v against %+v — the prediction solved the correction",
+				i, got[i], want[i])
+		}
+	}
+
+	// And the flight's own plan is untouched: still unsolved, still aiming at Venus.
+	for i, n := range aimed.Cfg.Nodes {
+		if n.Target == TargetNone {
+			continue
+		}
+		if n.Solved || n.DeltaV != 0 || n.TargetBody != ven {
+			t.Errorf("node %d came back as %+v", i, n)
+		}
+	}
+}

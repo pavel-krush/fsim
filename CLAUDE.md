@@ -751,8 +751,15 @@ against the path the flight is actually on, which is what a real trajectory corr
   for its own instant while the flight's own `ephT` still claimed that slot held another one — a
   trajectory quietly a little wrong, amplified by every flyby downstream. It moved Parker's third
   correction by 5 mm/s, which is one step of the bisection.
-- **A copy never solves.** It inherits whatever its control points are already solved to and
-  flies those, so the recursion is one level deep by construction.
+- **A copy never solves** (`noSolve`), and that is enforced rather than merely stated, because it
+  is where the last of the freeze was. A drawn prediction *did* solve: from the moment a control
+  point came inside its ten-day horizon every recompute cost twenty-seven flights of the mission
+  ahead — **2.4 seconds, against 23 ms once it stopped** — several times over during the coast to
+  Venus, which is exactly the stall that was reported after the solve at the node had been fixed.
+  A pending correction is one nobody knows the size of yet, so a copy flies the path without it
+  and the drawn curve says what happens if nothing is done.
+  `TestAPredictionDoesNotSolveAControlPoint` compares it point for point against a plan whose
+  correction is a burn of nothing.
 - **`Predict` had to start copying the plan**, and that was a live bug rather than a nicety:
   `Nodes` is a slice, so a copied `Sim` shared it, and a drawn prediction solving a control
   point would have written its answer into the flight's own plan.
@@ -1383,6 +1390,7 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | predictions during a real-time coast | 2 per second | **none until the path is flown** |
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
 | Parker's three corrections | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
+| one prediction with a control point ahead | 2419 ms | **23 ms** |
 | and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
 
 - **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew
@@ -1416,6 +1424,10 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 - **A stale prediction is free because the path is drawn from the vehicle**, skipping the points already
   flown. The curve is the same curve either way; the only thing staleness could show is a gap between the
   vehicle and the start of its own path, and there is now no way for one to open.
+- **And a prediction never solves a control point**, which was the other half of the same
+  complaint: the corrections were being solved twenty-seven flights at a time by the *drawing*,
+  a couple of times a second, for the whole of the coast to the first flyby. See the control
+  points section.
 - **A prediction only runs while coasting.** During an ascent the pitch programme
   is flying and a preview of it says nothing — and it is the expensive case,
   because a burn is integrated at the fixed step. The old altitude test let

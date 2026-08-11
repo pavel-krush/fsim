@@ -266,8 +266,10 @@ func (s *Sim) solveCopy() *Sim {
 	// held down by how finely the approach has to be sampled to measure it. So there is no
 	// accuracy to trade away in exchange for anything.
 	// A copy never solves: it inherits whatever the control points have been solved to and
-	// flies those, which is what keeps the recursion one level deep by construction.
-	c.job = nil
+	// flies those, which is what keeps the recursion one level deep by construction. A
+	// candidate that solved a later control point would cost twenty-seven flights inside one
+	// of twenty-seven flights.
+	c.job, c.noSolve = nil, true
 	c.dropEphemeris()
 	// The coast is *not* coarsened, unlike a drawn prediction. A prediction that is a few
 	// metres off is a line a few metres off; a solve that is a few metres off is a flyby

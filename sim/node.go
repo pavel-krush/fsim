@@ -190,6 +190,18 @@ func (s *Sim) checkNodes() {
 	// flights of the mission ahead, and no clock advances until it is finished. Whoever
 	// finishes it calls igniteNode, so the burn still starts at this exact instant.
 	if s.Cfg.Nodes[i].Target != TargetNone && !s.Cfg.Nodes[i].Solved {
+		if s.noSolve {
+			// A copy never solves, and this is where that rule is enforced rather than
+			// merely stated. A control point costs twenty-seven flights of the mission
+			// ahead, so a copy that solved one would cost that on top of its own flight —
+			// which is what a drawn prediction was doing from the moment a control point
+			// came inside its horizon: 2.4 seconds per prediction, several times over on
+			// the way to Venus, and reported as the simulation freezing. A pending
+			// correction is one nobody knows the size of yet, so the copy flies the path
+			// without it and the drawn curve says what happens if nothing is done.
+			s.igniteNode(i)
+			return
+		}
 		s.startSolve(i)
 		if s.job != nil {
 			return
@@ -294,7 +306,7 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 	c.HistInterval = math.Inf(1)
 	c.accum = 0
 	c.dropEphemeris()
-	c.job = nil
+	c.job, c.noSolve = nil, true
 	// Uncapped, whatever the live flight is playing at. Inheriting the warp rate
 	// would leave the prediction running fixed 0.02 s steps at ×1 — and taking
 	// the step size from here while routing on that cap means a minute-long
@@ -338,13 +350,6 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 			h = c.plannedStepUncapped()
 		}
 		if c.advanceOne(h) <= 0 {
-			if c.job != nil {
-				// A control point on the predicted path. It is solved here rather than
-				// skipped, because a drawn path that ignored the corrections in the plan
-				// would not be the path the vehicle is going to fly.
-				c.finishSolve()
-				continue
-			}
 			break
 		}
 		if c.St.T-last >= interval {
