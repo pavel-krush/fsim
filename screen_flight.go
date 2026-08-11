@@ -250,7 +250,14 @@ func (f *FlightScreen) Update(a *App, dst *ebiten.Image) {
 	f.handleKeys(u)
 
 	f.simNs, f.simSteps, f.simT = 0, 0, 0
-	if !f.paused && !f.s.St.Done {
+	// A control point that has come due is worked out one candidate flight per frame, and the
+	// mission clock stands still while it is. Driven pause or no pause: the solve is not
+	// mission time, and a paused flight would otherwise never come out of one.
+	if _, _, solving := f.s.Solving(); solving {
+		t0 := time.Now()
+		f.s.PumpSolve(1)
+		f.simNs = time.Since(t0).Nanoseconds()
+	} else if !f.paused && !f.s.St.Done {
 		// The rate goes in as well as the amount: it caps how far one coast step
 		// may reach, which is what keeps the picture moving at ×1 instead of
 		// jumping ten minutes at a time.
@@ -771,8 +778,7 @@ func (f *FlightScreen) drawAimRow(a *App, dst *ebiten.Image, r Rect, n *sim.Node
 
 	if done {
 		// History: what it was aiming at, and nothing to press.
-		drawText(dst, fmt.Sprintf("%s %s %s", nodeTargetName(n.Target), bodyName(b.Name),
-			aimValueText(n, b)), fontUISm, r.X+8, r.Y+5, colNodeDone, alignLeft)
+		drawText(dst, aimSummary(n, sys), fontUISm, r.X+8, r.Y+5, colNodeDone, alignLeft)
 		return
 	}
 
@@ -813,6 +819,24 @@ func aimValueText(n *sim.Node, b *sim.Body) string {
 		return fmt.Sprintf("%s %s", formatNum(n.TargetValue/86400, 2), T("unit.d"))
 	}
 	return fmt.Sprintf("%s %s", formatNum(n.TargetValue/b.Radius, 2), T("unit.radii"))
+}
+
+// aimSummary is a control point's whole aim in one line.
+//
+// One format string per target rather than three fragments glued together: word order differs
+// between languages, and "пролёт в Венера" is what gluing gets you.
+func aimSummary(n *sim.Node, sys *sim.System) string {
+	b := &sys.Bodies[0]
+	if n.TargetBody >= 0 && n.TargetBody < len(sys.Bodies) {
+		b = &sys.Bodies[n.TargetBody]
+	}
+	switch n.Target {
+	case sim.TargetPeriod:
+		return fmt.Sprintf(T("node.aimPeriodSum"), aimValueText(n, b))
+	case sim.TargetPeriodAfterFlyby:
+		return fmt.Sprintf(T("node.aimResonanceSum"), bodyName(b.Name), aimValueText(n, b))
+	}
+	return fmt.Sprintf(T("node.aimFlybySum"), bodyName(b.Name), aimValueText(n, b))
 }
 
 // nodeTargetName is what a control point's aim is called on screen.
@@ -910,6 +934,12 @@ func (f *FlightScreen) refreshPrediction(dt float64) bool {
 	if f.s.St.Done || f.s.St.Phase != sim.PhaseCoast || f.s.Altitude() <= f.s.AtmoTop() {
 		f.pred = nil
 		return false
+	}
+	// Not while a correction is being solved. The frame already has one candidate flight of
+	// the mission ahead in it, and a prediction is another twenty-five — it would double the
+	// only cost this screen has, to draw a path that is about to change anyway.
+	if _, _, solving := f.s.Solving(); solving {
+		return f.pred != nil
 	}
 
 	// Recomputed when the flight has eaten into the path, not when the clock has
@@ -1568,7 +1598,17 @@ func (f *FlightScreen) drawViewHUD(a *App, dst *ebiten.Image, view Rect, tm sim.
 	// A warp the current regime cannot deliver is worth saying out loud, or the
 	// setting looks broken: inside the atmosphere the step cannot grow, so a
 	// million times real time is not on offer at any price.
-	if f.s.WarpLimited && !f.paused {
+	//
+	// And a correction being worked out, which is the other reason the clock can stand still.
+	// Without a word on screen a stopped clock reads as a hang — which is exactly what it was
+	// before the solve was spread over frames. It takes the same corner and hides the warp
+	// warning while it is there: nothing is being warped through, and a warning left over from
+	// before the solve would print on top of it.
+	switch node, flights, solving := f.s.Solving(); {
+	case solving:
+		drawText(dst, fmt.Sprintf(T("flight.solving"), node+1, flights, sim.SolveFlights),
+			fontUISm, view.Right()-14, view.Y+30, colAccent, alignRight)
+	case f.s.WarpLimited && !f.paused:
 		drawText(dst, T("flight.warpLimited"), fontUISm, view.Right()-14, view.Y+30, colWarn, alignRight)
 	}
 }

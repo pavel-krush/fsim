@@ -499,34 +499,53 @@ years to the last encounter — and the only one that gets where it is going on 
 
 ### Parker, which spends its energy going down
 
-`parker-solar` is the fastest flight here and the only one where every sign is reversed: the
-injection is aimed *against* the Earth's motion, and the Venus flyby takes angular momentum
-away rather than adding it. First perihelion is 37.1 solar radii at 93.4 km/s — the real
-mission's first was 35.7 radii at 95.
+`parker-solar` is the fastest flight here, the only one where every sign is reversed, and the only
+one whose mission is a *chain* rather than a trajectory: the injection is aimed against the Earth's
+motion and every Venus flyby takes angular momentum away. Three of them walk the perihelion from
+39 solar radii to **23.7, at 119 km/s**.
 
-- **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape
-  asymptote against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU;
-  half an orbit later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the
-  system. It is the same sweep Voyager's injection needed, read from the other end.
-- **One Venus flyby, not seven.** The real mission walks the perihelion down over seven years
-  by *resonant returns* — each pass leaves the vehicle in an orbit commensurate with Venus's
-  year so the next one lines up. A single choice of Venus's phase arranges one encounter; the
-  rest would need a search over the resonances, which is a different piece of work. What ships
-  is the mission's first orbit, and it is the same first orbit: Venus at 45.5 days against the
-  real 46.
-- **The pass has to be on the way *in*.** `crossP` looks for the inbound crossing of Venus's
-  ellipse, because a pass on the falling leg is the one that takes energy out. It buys
-  2.5 solar radii of perihelion — 39.6 without Venus, 37.1 with — which is the same order as
-  the real flybys' 0.02 AU apiece.
-- **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together
-  off the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone
-  is a thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust
-  phase* — stage 1 has all three engines and the propellant burned before the sides go (the
-  two sides entire, plus the four minutes the core spends throttled to 55%), and stage 2 is
-  the core's remaining 96 t. Liftoff TWR comes out 1.18 against the real 1.2.
-- **It is reproducible where the grand tour is not**, and for the reason the tour is not: one
-  flyby amplifies nothing. Flown in one jump, in 30-day jumps or in 12-hour jumps, the
-  perihelion agrees to a metre a second.
+- **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape asymptote
+  against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU; half an orbit
+  later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the system. It is the
+  same sweep Voyager's injection needed, read from the other end.
+- **The flybys are aims, not numbers**, and that is what makes this chain reproducible where the
+  grand tour's is not: each control point says which side of Venus to pass and how close, and the
+  delta-v is solved when the moment arrives. Flown in one jump, in 30-day jumps or in 12-hour
+  jumps, the three aims come out at 12.1, 32.9 and 94 m/s and the passes land in the same places.
+- **The side is the sign, and it decides everything.** A pass on the negative side takes angular
+  momentum away — 0.1728 AU of perihelion becomes 0.1463 at 1.5 radii — and the positive side
+  *raises* it, to 0.2330. Closer is more: about five solar radii of perihelion per pass at two
+  radii of Venus.
+- **The resonance is what brings it back, and the pass is what sets the resonance.** A pass at
+  −3.0 radii leaves a period of 149.8 days, which is two thirds of Venus's year, so three orbits
+  later the vehicle is back where Venus is; the second pass, at −2.1 radii, leaves 134.9 days —
+  three fifths — and five orbits after that the third pass happens. The aim distances were chosen
+  offline *for their periods*: distance-to-period is monotone and the aim is solved robustly,
+  where aiming a period directly has a branch point at the impact and a bisection cannot be
+  trusted across it.
+- **Corrections go close to the pass, not early.** Sixty days out a burn moves the miss distance
+  and barely touches the period. Six hundred days out it is ten times cheaper — and it changes the
+  period too, which breaks the resonance and leaves nothing to aim at. The price of doing it late
+  is delta-v: 94 m/s for the third pass against 12 for the first.
+- **Three flybys are what the propellant buys.** The corrections total 139 m/s of the 178 that 52
+  kg of hydrazine carries, and a fourth pass would cost another hundred. The real mission's other
+  four are bought with geometry over years of design, not with thrust. The Star 48BV is dropped
+  before any of this: a solid fires once, so the leftovers trick `proton-zvezda` uses is not
+  available here.
+- **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together off
+  the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone is a
+  thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust phase* —
+  stage 1 has all three engines and the propellant burned before the sides go, and stage 2 is the
+  core's remaining 96 t. Liftoff TWR comes out 1.18 against the real 1.2. The spacecraft is the
+  last stage rather than payload, because it steers.
+- **Its gravity losses go negative, and that is the accounting being honest about a dive.** The
+  figure integrates `-g·sin(flight path angle)`, which is a loss while climbing and a gain while
+  falling; a vehicle spending three years dropping towards the Sun collects −76 km/s of it. The
+  number means what it always meant, but "losses" is the wrong word for the second half of an
+  orbit like this one.
+- **It costs the test suite a minute and a half**, which is the honest price of three solves and a
+  three-and-a-half-year flight. `MaxTime` is trimmed to just past the third flyby for the same
+  reason: every full-mission run pays it, the screenshot script included.
 
 ### Io, where there is no room
 
@@ -691,12 +710,56 @@ against the path the flight is actually on, which is what a real trajectory corr
 - **The method is a bracket and a bisection over flown copies**, the same integrator over the
   same plan and bodies. Nothing cheaper is honest: a conic approximation gives an answer the
   flight then misses, which is the failure a correction exists to prevent. One control point
-  costs about thirty flights and solves in a tenth of a second at lunar range.
+  costs twenty-seven flights of the mission ahead — a tenth of a second at lunar range, and
+  seconds when the mission ahead is interplanetary.
 - **The iteration count is fixed, never a time budget.** A solver that stopped when it ran out
   of milliseconds would make the trajectory depend on how busy the machine was, which is the
-  one thing nothing here is allowed to depend on. `TestSolvingIsDeterministic` pins it.
-- **A copy never solves.** It inherits whatever its control points are already solved to and
-  flies those, so the recursion is one level deep by construction.
+  one thing nothing here is allowed to depend on.
+- **So the solve is spread over frames instead, and the mission clock stops while it is.** At the
+  fixed step Parker's three corrections cost 10, 13 and 33 seconds inside one frame each — a
+  window that has stopped answering, with no way to draw a word of explanation, because nothing
+  reaches the screen until the frame ends. `pumpSolve` flies one candidate per call, the flight
+  screen drives it pause or no pause, and the corner says which correction is being worked out
+  and how far along it is.
+- **What makes that safe is that the sequence of candidates is unchanged**, so the answer cannot
+  depend on how many ran per frame — and therefore not on the frame rate or the machine. It is
+  the same promise the integrator makes about ragged frame times.
+  `TestASolveSpreadOverFramesGivesTheSameAnswer` pins it by flying one candidate a frame against
+  four and comparing the flights bit for bit.
+- **Nothing may move while a solve is pending, and that took three guards rather than one.** The
+  phase machine runs at the *top* of a step — `Step` and `coastStep` both call `checkPhase` before
+  integrating — because that is where a burn gets lit. With the solve deferred, the step no longer
+  found an engine running and simply carried on: out beyond the air that is minutes of coast, so
+  the correction was worked out for a state the vehicle had already flown out of and the engine lit
+  late. `advanceOne`, `Step` and `coastStep` now all return without taking time while `job` is set,
+  and `FastForward`, `RunToEnd` and `Predict` tell that zero apart from the end of a flight and
+  finish the solve instead of stalling on it. `TestNoTimePassesWhileSolving` is that fault as a
+  test; the symptom that found it was Parker's answers moving in the third decimal.
+- **A candidate burn is integrated at a second a step, not at 0.02.** That is where the ten
+  seconds went: the correction engine is a hydrazine thruster of a few tens of newtons, so a
+  candidate burn runs for minutes, and twenty-seven of those at the fixed step is tens of millions
+  of steps. The figure is the one a drawn prediction already uses, and for the same reason — the
+  arc is smooth vacuum thrust and the cutoff is solved rather than watched for, so a coarser step
+  costs the shape of the burn and not where it ends. Parker's three solved to the same values.
+- **The coast is not coarsened in a candidate, and that is measured rather than cautious.** A
+  drawn prediction coasts five times coarser than the flight; a candidate at four times came out
+  costing exactly the same, because the step is already held down by how finely the approach has
+  to be sampled to measure it at all. There was no accuracy left to trade for anything.
+- **A copy must be cut loose from the ephemeris cache** (`dropEphemeris`), and that was a real
+  fault rather than a tidiness: the cache is an array of slices, so copying a `Sim` copies the
+  array and leaves both pointing at the same backing arrays. A candidate flight then filled a slot
+  for its own instant while the flight's own `ephT` still claimed that slot held another one — a
+  trajectory quietly a little wrong, amplified by every flyby downstream. It moved Parker's third
+  correction by 5 mm/s, which is one step of the bisection.
+- **A copy never solves** (`noSolve`), and that is enforced rather than merely stated, because it
+  is where the last of the freeze was. A drawn prediction *did* solve: from the moment a control
+  point came inside its ten-day horizon every recompute cost twenty-seven flights of the mission
+  ahead — **2.4 seconds, against 23 ms once it stopped** — several times over during the coast to
+  Venus, which is exactly the stall that was reported after the solve at the node had been fixed.
+  A pending correction is one nobody knows the size of yet, so a copy flies the path without it
+  and the drawn curve says what happens if nothing is done.
+  `TestAPredictionDoesNotSolveAControlPoint` compares it point for point against a plan whose
+  correction is a burn of nothing.
 - **`Predict` had to start copying the plan**, and that was a live bug rather than a nicety:
   `Nodes` is a slice, so a copied `Sim` shared it, and a drawn prediction solving a control
   point would have written its answer into the flight's own plan.
@@ -866,6 +929,12 @@ what you are trying to fly, so it comes second.
   The grand tour takes half a minute to fly and nobody is waiting for that to read a paragraph. The
   time limit is written as a duration rather than a mission clock: "T+10957d 12:00:00" is a correct
   answer to how long the tour may run and a useless one to read.
+- **A control point has no delta-v to quote**, so the plan lists its *aim* and its budget
+  instead — "flyby: Venus, −3.00 R ≤150". Printing the zero it starts life with would be a lie
+  about the mission, and the time goes in days rather than as a mission clock, because
+  "T+1100d 00:00:00" beside an aim runs straight into it.
+- **The aim is one format string, not three fragments.** Word order differs between languages and
+  "пролёт в Венера" is what gluing gets you — the same rule the max-q readout follows.
 - **The timings in the prose are the tested ones.** T+604 s, 1926 × 1776 km, 37 solar radii: every
   number quoted in a description is one the mission tests already pin, so the two drift together or
   not at all.
@@ -1320,6 +1389,9 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | one prediction from the parking orbit | 658 ms | **9.5 ms** |
 | predictions during a real-time coast | 2 per second | **none until the path is flown** |
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
+| Parker's three corrections | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
+| one prediction with a control point ahead | 2419 ms | **23 ms** |
+| and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
 
 - **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew
   linearly for as long as the program was left running: 93,000 samples and 43 MB of heap at T+600 days on
@@ -1334,6 +1406,12 @@ numbers said the prediction was taking **658 ms** and running twice a second.
   bounds what the trail costs to draw, which is the other thing that had no ceiling — `trailSpan` is
   `+Inf` for a trajectory that is not coming back round, so an interplanetary cruise draws the whole
   flight by design.
+- **A correction is not paid for in one frame.** A control point is twenty-seven flights of the
+  mission ahead, and at the fixed step Parker's third was thirty-three seconds of them inside one
+  frame — a hang, as reported. Two things fixed it: a candidate burn integrated at a second a step
+  rather than 0.02, which is four to five times less work for the same answers, and spreading the
+  candidates over frames so the window keeps answering and can say what it is doing. See the control
+  points section; the second half is a change to *when* the work happens and not to what it computes.
 - **The prediction is recomputed when the flight has flown into it, not when the clock has ticked.** One
   is 25 to 90 ms — a ten-day horizon through eighteen bodies — and a timer of half a second meant that
   hitch twice a second for the whole of a coast, in return for a curve that had not moved by a pixel. The
@@ -1346,6 +1424,10 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 - **A stale prediction is free because the path is drawn from the vehicle**, skipping the points already
   flown. The curve is the same curve either way; the only thing staleness could show is a gap between the
   vehicle and the start of its own path, and there is now no way for one to open.
+- **And a prediction never solves a control point**, which was the other half of the same
+  complaint: the corrections were being solved twenty-seven flights at a time by the *drawing*,
+  a couple of times a second, for the whole of the coast to the first flyby. See the control
+  points section.
 - **A prediction only runs while coasting.** During an ascent the pitch programme
   is flying and a preview of it says nothing — and it is the expensive case,
   because a burn is integrated at the fixed step. The old altitude test let

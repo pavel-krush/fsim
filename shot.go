@@ -310,10 +310,6 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// and the prediction shows where it goes.
 			{name: "8d-plan", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.06},
 			{name: "8e-plan-wide", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.012},
-			// The same panel with a control point in it: an aim rather than a number, and
-			// the delta-v solved for when the moment arrives.
-			{name: "8e1-plan-aim", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.06,
-				aimNode: true},
 			// The middle of the cruise, at both scales that make sense there: the
 			// system, and the frame the vehicle is actually in.
 			{name: "8e2-cruise", screen: ScreenFlight, at: atCruise(), focusBody: "root", zoom: 0.004},
@@ -343,6 +339,12 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// Last, because they edit the configuration: a four-stage vehicle
 			// assembled out of a two-stage preset is not something the flight
 			// captures above should be flying.
+			// The plan with a control point in it: an aim rather than a number, and the
+			// delta-v solved for when the moment arrives. It comes after every other
+			// flight capture because it *edits the plan*, and the flight carries that
+			// edit into everything drawn after it — the same rule the four-stage setup
+			// captures follow.
+			{name: "8z-plan-aim", screen: ScreenFlight, zoom: 0.06, aimNode: true},
 			// The body editor, on a moon rather than on the launch body: that is
 			// where the orbital elements are.
 			{name: "9c-setup-body", screen: ScreenSetup, selBody: "moon"},
@@ -427,18 +429,34 @@ func (sr *shotRunner) step(a *App) bool {
 		}
 		a.flight.lookAt(focus)
 		if st.aimNode {
+			body := sr.tl.crossing
+			if body < 0 {
+				body = 0
+			}
+			aim := sim.Node{
+				T: math.Round(a.flight.s.St.T + 120), Frame: sim.BurnRadialOut,
+				Target: sim.TargetFlybyPeriapsis, TargetBody: body,
+				TargetValue: 4 * a.flight.s.Cfg.System.Bodies[body].Radius,
+				Limit:       60, Horizon: 30 * 86400,
+			}
+			// The plan's first burn that has not fired yet becomes the control point, and if
+			// there is none, one is added. The preset flown by a capture is whichever one
+			// -shot was started on, and the default has no plan at all — so a step that could
+			// only convert an existing burn captured an empty panel and called it a control
+			// point.
+			converted := false
 			for i := range a.flight.s.Cfg.Nodes {
 				if a.flight.s.St.NodesDone&(1<<uint(i)) != 0 {
 					continue
 				}
 				n := &a.flight.s.Cfg.Nodes[i]
-				n.Target, n.TargetBody = sim.TargetFlybyPeriapsis, sr.tl.crossing
-				if n.TargetBody < 0 {
-					n.TargetBody = 0
-				}
-				n.TargetValue = 4 * a.flight.s.Cfg.System.Bodies[n.TargetBody].Radius
-				n.Limit, n.Horizon = 60, 30*86400
+				n.Target, n.TargetBody, n.TargetValue = aim.Target, aim.TargetBody, aim.TargetValue
+				n.Limit, n.Horizon = aim.Limit, aim.Horizon
+				converted = true
 				break
+			}
+			if !converted {
+				a.flight.s.Cfg.Nodes = append(a.flight.s.Cfg.Nodes, aim)
 			}
 		}
 		if st.freeHalfway {

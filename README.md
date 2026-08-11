@@ -102,7 +102,7 @@ Fifteen launchers, all of which actually reach orbit:
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
-| Parker / into the corona | 37 solar radii at 93 km/s, past one Venus flyby | 9308 m/s to orbit, 19.6 km/s in all | 26.7 kPa at 11 km | 8.3 g |
+| Parker / into the corona | 23.7 solar radii at 119 km/s, past three Venus flybys | 9308 m/s to orbit, 19.7 km/s in all | 26.7 kPa at 11 km | 8.3 g |
 | Voyager / the grand tour | Jupiter, Saturn, Uranus, Neptune, then out of the system | 16092 m/s in all | 57.6 kPa at 11 km | 5.0 g |
 | Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
 
@@ -169,12 +169,14 @@ apoapsis. Drag still costs 619 m/s and gravity 1860, against the 1682 it takes t
 vehicle is invented; the numbers are Titan's.
 
 Parker is the other direction. It is the only preset that spends its energy going *down*: the
-injection is aimed against the Earth's own motion, so what it buys is not distance but the
-loss of heliocentric angular momentum, and the Venus flyby takes more away. First perihelion
-37 solar radii at 93 km/s — three times the Earth's orbital speed, and eleven times anything
-else here reaches. The real mission needed seven Venus flybys over seven years to walk that
-down to 9.9 radii; one is what a single choice of Venus's phase can arrange, so this is the
-mission's first orbit — Venus at 46 days, perihelion at 110.
+injection is aimed against the Earth's own motion, so what it buys is not distance but the loss
+of heliocentric angular momentum, and every Venus flyby takes more away. Three of them — at 46,
+495 and 1169 days, each brought round by the resonance the one before it left — walk the
+perihelion from 39 solar radii to 23.7, where the vehicle passes at 119 km/s, four times the
+Earth's orbital speed. The flybys are written as *aims* rather than as burns, so the corrections
+solve themselves in flight: 12, 33 and 94 m/s of the 178 the spacecraft's hydrazine carries. The
+real mission needed seven flybys over seven years to reach 9.9 radii, and bought the rest with
+geometry rather than propellant.
 
 The grand tour is the longest flight here and the only one that goes anywhere on borrowed
 energy. One injection out of a parking orbit and four gravity assists: Jupiter at T+1.7

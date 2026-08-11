@@ -231,8 +231,21 @@ func (p *missionPanel) factRows(a *App, dst *ebiten.Image, r Rect, sel int, y *f
 			}
 		}
 		for i := range nodes {
-			row(fmtClock(nodes[i].T), fmt.Sprintf("%s %s", formatNum(nodes[i].DeltaV, 0),
-				T("unit.mps")), nodeFrameName(nodes[i].Frame))
+			n := &nodes[i]
+			// A control point has no delta-v to quote — that is the whole point of it, and
+			// printing the zero it starts life with would be a lie about the mission. What
+			// it has instead is an aim and a budget.
+			if n.Target != sim.TargetNone {
+				// Days rather than a mission clock: "T+1100d 00:00:00" beside an aim runs
+				// straight into it, and the hours of a correction three years out are not
+				// the interesting part of it.
+				when, unit := fmtSpan(n.T)
+				row(fmt.Sprintf("T+%s %s", when, unit), aimSummary(n, &cfg.System),
+					fmt.Sprintf("≤%s", formatNum(n.Limit, 0)))
+				continue
+			}
+			row(fmtClock(n.T), fmt.Sprintf("%s %s", formatNum(n.DeltaV, 0),
+				T("unit.mps")), nodeFrameName(n.Frame))
 		}
 	}
 }

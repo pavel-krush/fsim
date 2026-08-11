@@ -185,10 +185,35 @@ func (s *Sim) checkNodes() {
 
 	// A control point is solved at the instant it is reached, which is when the state it
 	// has to correct is finally known. Real navigation works the same way round.
-	if s.Cfg.Nodes[i].Target != TargetNone {
-		s.solveNode(i)
+	//
+	// The solve is spread over the calls that follow rather than done here: it is twenty-five
+	// flights of the mission ahead, and no clock advances until it is finished. Whoever
+	// finishes it calls igniteNode, so the burn still starts at this exact instant.
+	if s.Cfg.Nodes[i].Target != TargetNone && !s.Cfg.Nodes[i].Solved {
+		if s.noSolve {
+			// A copy never solves, and this is where that rule is enforced rather than
+			// merely stated. A control point costs twenty-seven flights of the mission
+			// ahead, so a copy that solved one would cost that on top of its own flight —
+			// which is what a drawn prediction was doing from the moment a control point
+			// came inside its horizon: 2.4 seconds per prediction, several times over on
+			// the way to Venus, and reported as the simulation freezing. A pending
+			// correction is one nobody knows the size of yet, so the copy flies the path
+			// without it and the drawn curve says what happens if nothing is done.
+			s.igniteNode(i)
+			return
+		}
+		s.startSolve(i)
+		if s.job != nil {
+			return
+		}
 	}
 
+	s.igniteNode(i)
+}
+
+// igniteNode is the rest of checkNodes, from the point where the delta-v is known: mark the node
+// spent and light the engine, or mark it spent and do not.
+func (s *Sim) igniteNode(i int) {
 	s.St.NodesDone |= 1 << uint(i)
 	if s.Cfg.Nodes[i].DeltaV <= 0 || s.St.Stage >= len(s.Cfg.Rocket.Stages) ||
 		s.St.Prop[s.St.Stage] <= 1e-9 {
@@ -280,6 +305,8 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 	c.Hist, c.Events = nil, nil
 	c.HistInterval = math.Inf(1)
 	c.accum = 0
+	c.dropEphemeris()
+	c.job, c.noSolve = nil, true
 	// Uncapped, whatever the live flight is playing at. Inheriting the warp rate
 	// would leave the prediction running fixed 0.02 s steps at ×1 — and taking
 	// the step size from here while routing on that cap means a minute-long

@@ -924,8 +924,8 @@ const (
 // thrust-to-weight comes out 1.18 against the real 1.2.
 func deltaIVHeavy() Rocket {
 	return Rocket{
-		// Parker itself, 685 kg with its heat shield.
-		Payload: 685, Cd: 0.35, Diameter: 5.0,
+		// No payload of its own: the spacecraft is the last stage, because it steers.
+		Payload: 0, Cd: 0.35, Diameter: 5.0,
 		Stages: []Stage{
 			{DryMass: 53520, PropMass: 502580, ThrustVac: 9411000, IspVac: 412, IspSL: 362,
 				Throttle: 1, SepDelay: 1},
@@ -935,36 +935,59 @@ func deltaIVHeavy() Rocket {
 			// parking orbit with 22 t left and relit by the plan.
 			{DryMass: 3490, PropMass: 27220, ThrustVac: 110000, IspVac: 462, IspSL: 462,
 				Throttle: 1, CutoffTime: 180, Ignition: IgniteAfterDelay, IgnitionDelay: 2},
-			// Star 48BV, the solid that finishes the job.
+			// Star 48BV, the solid that finishes the job. A solid fires once, which is
+			// why the corrections below are not taken out of its leftovers the way
+			// Zvezda's are: the flight plan drops it and steers with the spacecraft.
 			{DryMass: 130, PropMass: 2010, ThrustVac: 68600, IspVac: 286, IspSL: 286,
+				Throttle: 1, Ignition: IgniteOnNode},
+			// Parker itself, which is a stage here rather than payload because it does
+			// its own manoeuvring: 52 kg of hydrazine behind four 4.4 N thrusters is
+			// 178 m/s, and a correction of twenty metres a second takes fourteen minutes
+			// of it.
+			{DryMass: 633, PropMass: 52, ThrustVac: 17.6, IspVac: 230, IspSL: 230,
 				Throttle: 1, Ignition: IgniteOnNode},
 		},
 	}
 }
 
 // parkerSolar is the Parker Solar Probe: the only preset here that spends its energy going
-// *down*, and the fastest thing in the collection.
+// *down*, the fastest thing in the collection, and the one whose mission is a chain rather than
+// a trajectory.
 //
-// Everything about it is backwards from the rest. The injection is aimed against the
-// Earth's own motion rather than along it — what it buys is not distance but the loss of
-// heliocentric angular momentum — and the Venus flyby takes energy *out*. The first
-// perihelion is 36.6 solar radii at 94 km/s, which is three times the Earth's orbital
-// speed and eleven times anything else here reaches.
+// Everything about it is backwards from the rest. The injection is aimed against the Earth's own
+// motion rather than along it — what it buys is not distance but the loss of heliocentric angular
+// momentum — and every Venus flyby takes energy *out*. Three of them walk the perihelion from
+// 39 solar radii to 23.7, where the vehicle is doing over a hundred kilometres a second.
 //
-// The real mission needed seven Venus flybys over seven years to walk the perihelion down
-// to 9.86 radii. One is what a single choice of Venus's phase can arrange: the rest are
-// resonant returns, where each pass has to leave the vehicle in an orbit commensurate with
-// Venus's year so the next one lines up. So this is the mission's first orbit, and it is
-// the same first orbit — Venus at 47 days against the real 46, and a first perihelion of
-// 36.6 radii against 35.7.
+// The flybys are held by **control points** rather than by numbers: each says which side of Venus
+// to pass and how close, and the delta-v is solved for when the moment arrives. That is what makes
+// this chain reproducible where the grand tour's is not — an aim re-solves against the path the
+// flight is actually on, and a chain of fixed numbers is a chain solved for one exact path through
+// the arithmetic.
+//
+// The real mission needed seven flybys over seven years to reach 9.9 radii. Three is what 52 kg
+// of hydrazine buys: 139 m/s of the 178 aboard, and the fourth would cost another hundred. The
+// rest of the real chain is bought with geometry rather than propellant, over years of design.
 func parkerSolar() Preset {
 	sys := SolarSystem()
 	earth := sys.IndexOf("earth")
-	// Venus, put where the vehicle crosses its orbit on the way *down*: a pass on the
-	// inbound leg is the one that takes angular momentum away. Solved by iteration
-	// against this configuration, rounded keyframes and all.
-	sys.Bodies[sys.IndexOf("venus")].MeanAnom0 = parkerVenusPhase
+	ven := sys.IndexOf("venus")
+	vr := sys.Bodies[ven].Radius
+	// Venus, put where the vehicle crosses its orbit on the way *down*: a pass on the inbound
+	// leg is the one that takes angular momentum away. Solved by iteration against this
+	// configuration, rounded keyframes and all.
+	sys.Bodies[ven].MeanAnom0 = parkerVenusPhase
 	sys.Normalize()
+
+	// One aim per flyby, each a couple of months before its pass. Negative is the side that
+	// removes angular momentum — positive would raise the perihelion instead — and closer is
+	// more of it: at these speeds a pass at two radii is worth some five solar radii of
+	// perihelion. Close to the pass rather than early: a correction far out changes the
+	// *period* as well, which breaks the resonance that brings the vehicle back at all.
+	aim := func(t, radii, limit float64) Node {
+		return Node{T: t, Frame: BurnRadialOut, Target: TargetFlybyPeriapsis,
+			TargetBody: ven, TargetValue: radii * vr, Limit: limit, Horizon: 120 * 86400}
+	}
 
 	return Preset{
 		Name: "parker-solar",
@@ -987,18 +1010,27 @@ func parkerSolar() Preset {
 				{Time: 303, Pitch: -2.8},
 				{Time: 328, Pitch: -4.0},
 			}},
-			// The injection, and the point in the parking orbit is everything: T+2350 s
-			// puts the escape asymptote against the Earth's motion and drops the
-			// perihelion to 0.18 AU. Half an orbit later the same 10.3 km/s buys a
-			// perihelion of 0.98 AU and an escape from the system instead — the same
-			// sweep as Voyager's, read from the other end.
+			// The injection, and the point in the parking orbit is everything: T+2350 s puts
+			// the escape asymptote against the Earth's motion and drops the perihelion to
+			// 0.18 AU. Half an orbit later the same 10.3 km/s buys a perihelion of 0.98 AU
+			// and an escape from the system instead — the same sweep as Voyager's, read from
+			// the other end. The Star 48BV goes overboard afterwards: the spacecraft steers
+			// from here on.
 			Nodes: []Node{
 				{T: 2350, Frame: BurnPrograde, DeltaV: 6900, Separate: true},
-				{T: 2750, Frame: BurnPrograde, DeltaV: 3400},
+				{T: 2750, Frame: BurnPrograde, DeltaV: 3400, Separate: true},
+				// The three passes: T+46 days, then T+495 and T+1169, each brought round
+				// by the resonance the one before it left — three of its orbits to two
+				// Venus years, then five to three.
+				aim(20*86400, -3.0, 150),
+				aim(430*86400, -2.1, 60),
+				aim(1100*86400, -1.8, 150),
 			},
 			TargetOrbit: 190000,
-			// Four years, which is nine of its own orbits.
-			MaxTime: 4 * 365.25 * 86400,
+			// Three and a half years: the third flyby is in the fourth year and there is
+			// nothing after it but the same ellipse going round. Every full-mission run
+			// pays for this one, the screenshot script included.
+			MaxTime: 3.5 * 365.25 * 86400,
 		},
 	}
 }
