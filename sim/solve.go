@@ -131,15 +131,16 @@ func (s *Sim) nodeMiss(i int, dv float64) (float64, bool) {
 	// concerned, which is what keeps a solve out of a solve.
 	n.Target = TargetNone
 
-	switch s.Cfg.Nodes[i].Target {
+	n2 := s.Cfg.Nodes[i]
+	switch n2.Target {
 	case TargetFlybyPeriapsis:
-		d, ok := c.flyPastBody(s.Cfg.Nodes[i], false)
-		return d - s.Cfg.Nodes[i].TargetValue, ok
+		d, _, ok := c.flyPastBody(n2, false)
+		return d - n2.TargetValue, ok
 	case TargetPeriodAfterFlyby:
-		p, ok := c.flyPastBody(s.Cfg.Nodes[i], true)
-		return p - s.Cfg.Nodes[i].TargetValue, ok
+		_, p, ok := c.flyPastBody(n2, true)
+		return p - n2.TargetValue, ok
 	case TargetPeriod:
-		return c.periodMiss(s.Cfg.Nodes[i])
+		return c.periodMiss(n2)
 	}
 	return 0, false
 }
@@ -173,9 +174,9 @@ func (s *Sim) solveCopy() *Sim {
 // measures the closest approach to whatever it happens to sample — 1300 km of it at cruising
 // speed, coarser than the aim being solved for, and the solver spent its precision chasing
 // that instead of the trajectory.
-func (c *Sim) flyPastBody(n Node, wantPeriod bool) (float64, bool) {
+func (c *Sim) flyPastBody(n Node, wantPeriod bool) (dist, period float64, ok bool) {
 	if n.TargetBody < 0 || n.TargetBody >= len(c.Cfg.System.Bodies) {
-		return 0, false
+		return 0, 0, false
 	}
 	horizon := n.Horizon
 	if horizon <= 0 {
@@ -236,18 +237,17 @@ func (c *Sim) flyPastBody(n Node, wantPeriod bool) (float64, bool) {
 		}
 	}
 	if math.IsInf(best, 1) {
-		return 0, false
+		return 0, 0, false
 	}
-	if !wantPeriod {
-		return bestSign * best, true
-	}
+	dist = bestSign * best
 	o := ComputeOrbit(c.RootPos(), c.RootVel(), c.Cfg.System.Bodies[0].Mu)
-	if !o.Bound() || o.Period <= 0 {
-		// Unbound is infinitely long, which is the far side of every target a resonance
-		// asks for and gives the bisection somewhere to walk.
-		return 1e12, true
+	period = 1e12
+	if o.Bound() && o.Period > 0 {
+		period = o.Period
 	}
-	return o.Period, true
+	// Unbound counts as infinitely long, which is the far side of every target a resonance
+	// asks for and gives the search somewhere to walk.
+	return dist, period, true
 }
 
 // periodMiss flies just past the burn and reports the orbital period it left behind, less the

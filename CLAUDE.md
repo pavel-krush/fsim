@@ -720,12 +720,23 @@ against the path the flight is actually on, which is what a real trajectory corr
   may well hit it.
 - **`TargetPeriodAfterFlyby` is the one that makes a resonant return writable at all.** The
   propellant to reshape an orbit by months is not aboard and does not have to be: the flyby
-  does the reshaping and the correction only decides where the flyby happens. Thirty-two metres
-  a second on the way to Venus moved the pass to 1.02 radii — which is also the limit of this
-  machinery, because a resonant chain wants *two* things at once, a safe pass distance and a
-  particular period, and one knob can hold one target. Two-dimensional targeting — a magnitude
-  and a direction, the B-plane pair a real design solves — is what the seven-flyby Parker needs
-  and this is not yet.
+  does the reshaping and the correction only decides where the flyby happens. **Measured:
+  56 m/s twenty days out from Venus puts the pass at 8.1 radii and leaves a period of 166 days
+  — three quarters of Venus's year — and four orbits later, at T+720 days, the vehicle is back
+  at Venus.** That is the mechanism the seven-flyby Parker is made of, and
+  `TestAResonantReturnComesBack` pins it.
+- **Two aims are held by two nodes, not by one.** A chain wants a safe pass distance *and* a
+  particular period, and one knob holds one target. The obvious answer — solve a thrust vector,
+  magnitude and angle, over both residuals at once — was written and deleted: Newton through a
+  close flyby does not converge from any start worth having. The residuals are also nothing
+  like each other in scale, and at zero delta-v the direction has no effect at all, so the
+  Jacobian is singular exactly where the search begins. What works is the decoupling a real
+  design uses: an early, large correction for the energy (the period the pass will leave) and a
+  late, small one for the aim (where the pass happens). Both are one-dimensional and both are
+  the machinery above.
+- **Late corrections want radial, not prograde.** Close to a target, a prograde burn changes
+  the arrival *time* and hardly moves the miss distance; a radial one moves it directly. That is
+  why the aim node in the tests is `BurnRadialOut` while the energy node is prograde.
 - **The panel edits it in the units the aim means**: radii of the body for a flyby, days for a
   period, both bound straight to the value with a `Scale` rather than through a converted local
   — the toolkit identifies a field by the address of what it edits, and a shared scratch
