@@ -253,6 +253,9 @@ type shotStep struct {
 	// freeHalfway drops the camera into a free view, which no script can reach by
 	// dragging: there is no mouse.
 	freeHalfway bool
+	// aimNode turns the plan's first pending burn into a control point, so that the panel
+	// can be captured with one in it. Nothing else in the script edits the plan.
+	aimNode bool
 }
 
 type shotRunner struct {
@@ -307,6 +310,10 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 			// and the prediction shows where it goes.
 			{name: "8d-plan", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.06},
 			{name: "8e-plan-wide", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.012},
+			// The same panel with a control point in it: an aim rather than a number, and
+			// the delta-v solved for when the moment arrives.
+			{name: "8e1-plan-aim", screen: ScreenFlight, at: atNode(0, -60), zoom: 0.06,
+				aimNode: true},
 			// The middle of the cruise, at both scales that make sense there: the
 			// system, and the frame the vehicle is actually in.
 			{name: "8e2-cruise", screen: ScreenFlight, at: atCruise(), focusBody: "root", zoom: 0.004},
@@ -419,6 +426,21 @@ func (sr *shotRunner) step(a *App) bool {
 			}
 		}
 		a.flight.lookAt(focus)
+		if st.aimNode {
+			for i := range a.flight.s.Cfg.Nodes {
+				if a.flight.s.St.NodesDone&(1<<uint(i)) != 0 {
+					continue
+				}
+				n := &a.flight.s.Cfg.Nodes[i]
+				n.Target, n.TargetBody = sim.TargetFlybyPeriapsis, sr.tl.crossing
+				if n.TargetBody < 0 {
+					n.TargetBody = 0
+				}
+				n.TargetValue = 4 * a.flight.s.Cfg.System.Bodies[n.TargetBody].Radius
+				n.Limit, n.Horizon = 60, 30*86400
+				break
+			}
+		}
 		if st.freeHalfway {
 			a.flight.takeFree()
 			a.flight.setFree(a.flight.framePoint(sim.Vec2{}, sr.tl.crossing, a.flight.s.St.T).Scale(0.5))

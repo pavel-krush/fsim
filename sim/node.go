@@ -46,7 +46,36 @@ const maxPredSteps = 20000
 // and whoever reads one has to know what will fit.
 const MaxNodes = 64
 
-// Node is one scheduled burn.
+// NodeTarget is what a control point aims at, when it is not simply told what to burn.
+//
+// A node with a target is a correction rather than a manoeuvre: it says where the
+// trajectory should end up and the delta-v is solved for when the moment arrives. That is
+// what a real trajectory correction is, and it is the only way a chain of gravity assists
+// can be written down at all — a chained flyby amplifies the last bit of the integrator, so
+// a plan of fixed numbers is a plan solved for one exact path through the arithmetic and no
+// other. A correction re-solves against the path the flight is actually on.
+type NodeTarget int
+
+const (
+	// TargetNone is a plain burn: DeltaV is what it spends.
+	TargetNone NodeTarget = iota
+	// TargetFlybyPeriapsis aims the closest approach to TargetBody at TargetValue metres
+	// from its centre. The value is *signed*: which side the vehicle passes decides
+	// whether the pass adds energy or takes it away, so it is part of the aim and not a
+	// detail of it.
+	TargetFlybyPeriapsis
+	// TargetPeriod aims the orbital period about the body the vehicle is at, in seconds,
+	// straight out of this burn.
+	TargetPeriod
+	// TargetPeriodAfterFlyby aims the period the *next pass of TargetBody* leaves behind.
+	// This is how a resonant return is actually written: the propellant to reshape an orbit
+	// by months is not aboard, and does not have to be — the flyby does the reshaping and
+	// the correction only decides where the flyby happens. A few metres a second a hundred
+	// million kilometres out is worth kilometres of aim at the planet.
+	TargetPeriodAfterFlyby
+)
+
+// Node is one scheduled burn, or one control point.
 type Node struct {
 	T      float64   // s since liftoff, when to light the engine
 	Frame  BurnFrame //
@@ -55,6 +84,20 @@ type Node struct {
 	// Separate drops the stage this burn used once it is over. A spent booster
 	// carried through a coast has to go before the engine above it can fire.
 	Separate bool
+
+	// Target, and what it wants. With a target, DeltaV is an output: Limit is the most
+	// the correction may spend and Horizon how far ahead the aim is measured.
+	Target      NodeTarget
+	TargetBody  int
+	TargetValue float64
+	Limit       float64
+	Horizon     float64
+
+	// Solved says the delta-v in DeltaV came from the solver rather than from an author,
+	// and Missed that the solver could not get there. Both are read by the interface and
+	// neither is an input.
+	Solved bool
+	Missed bool
 }
 
 // Direction is the unit vector the node wants thrust along, given the state
@@ -133,6 +176,12 @@ func (s *Sim) checkNodes() {
 	for s.St.Stage < len(s.Cfg.Rocket.Stages)-1 && s.St.Prop[s.St.Stage] <= 1e-9 {
 		s.St.Stage++
 		s.mark(EvSeparation)
+	}
+
+	// A control point is solved at the instant it is reached, which is when the state it
+	// has to correct is finally known. Real navigation works the same way round.
+	if s.Cfg.Nodes[i].Target != TargetNone {
+		s.solveNode(i)
 	}
 
 	s.St.NodesDone |= 1 << uint(i)
@@ -219,6 +268,10 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 
 	c := *s
 	c.St.Prop = append([]float64(nil), s.St.Prop...)
+	// The plan is a slice, so a copy of the Sim shares it. That was harmless while every
+	// node was a fixed number; a control point writes its solved delta-v back into the
+	// plan, and a prediction solving one would edit the flight's own.
+	c.Cfg.Nodes = append([]Node(nil), s.Cfg.Nodes...)
 	c.Hist, c.Events = nil, nil
 	c.HistInterval = math.Inf(1)
 	c.accum = 0

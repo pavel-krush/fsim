@@ -226,6 +226,14 @@ does, and the figures, from liftoff mass to the flight plan's burns, before the 
 columns say how any of it is done. A click selects, a second click or Enter opens the editor,
 and `-preset` skips the screen altogether, since naming a mission is the choice it exists for.
 
+A burn in the flight plan can also be a *control point*: instead of a delta-v it carries an aim
+— pass this body at four radii, or leave an orbit of this period — and the simulation solves for
+the burn when the moment arrives, by bisecting over flown copies of the flight. That is what a
+real trajectory correction is, and it is the only way a chain of gravity assists survives being
+written down: a plan of fixed numbers is a plan solved for one exact path through the arithmetic,
+and a close flyby amplifies the difference between that path and any other. An aim that cannot be
+reached says so rather than pretending.
+
 A setup you have edited can be kept: `SAVE` and `LOAD` in the setup header write it to one slot — a file
 in your config directory, or `localStorage` in a browser — and a saved setup then gets a row of its own at
 the bottom of the mission list.

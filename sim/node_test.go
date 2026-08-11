@@ -211,3 +211,124 @@ func TestPredictionMatchesTheFlight(t *testing.T) {
 		t.Errorf("prediction ended %.1f m from where the flight did", gap)
 	}
 }
+
+// A control point aims rather than burns: it says where the trajectory should end up and the
+// delta-v is solved for when the moment arrives. This is the Mun flyby aimed by hand in the
+// kerbin-mun preset, expressed as an aim instead of a number.
+func TestAControlPointAimsAFlyby(t *testing.T) {
+	base := kerbinMun().Cfg
+	mun := base.System.IndexOf("mun")
+
+	for _, want := range []float64{700e3, 1200e3, -900e3} {
+		cfg := base
+		cfg.Nodes = []Node{
+			base.Nodes[0],
+			{T: 4000, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+				TargetBody: mun, TargetValue: want, Limit: 200, Horizon: 6 * 86400},
+		}
+
+		s := New(cfg)
+		s.FastForward(6 * 86400)
+		n := s.Cfg.Nodes[1]
+		if !n.Solved || n.Missed {
+			t.Errorf("aiming %+.0f km: solved %v, missed %v", want/1000, n.Solved, n.Missed)
+			continue
+		}
+		if n.DeltaV <= 0 || n.DeltaV > 200 {
+			t.Errorf("aiming %+.0f km: solved to %g m/s", want/1000, n.DeltaV)
+		}
+
+		// And the flight it flies passes where it was aimed. Ten kilometres of tolerance
+		// on seven hundred: what is left is the chaos of the approach itself, which is
+		// what a second, later correction is for.
+		s2 := New(cfg)
+		best := math.Inf(1)
+		for s2.St.T < 6*86400 && !s2.St.Done {
+			step := 600.0
+			if s2.St.Center != 0 {
+				step = 2
+			}
+			s2.FastForward(s2.St.T + step)
+			bp, _ := s2.Cfg.System.StateAt(mun, s2.St.T)
+			if d := s2.RootPos().Sub(bp).Len(); d < best {
+				best = d
+			}
+		}
+		if off := math.Abs(best - math.Abs(want)); off > 12e3 {
+			t.Errorf("aimed %+.0f km, passed %.0f km: off by %.0f km",
+				want/1000, best/1000, off/1000)
+		}
+	}
+}
+
+// An aim that cannot be reached has to say so and fly anyway. Silently spending the limit and
+// calling it a solution is how a plan lies about what it did.
+func TestAControlPointSaysWhenItCannot(t *testing.T) {
+	base := kerbinMun().Cfg
+	mun := base.System.IndexOf("mun")
+	cfg := base
+	cfg.Nodes = []Node{
+		base.Nodes[0],
+		// A metre a second cannot move a flyby by a hundred thousand kilometres.
+		{T: 4000, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+			TargetBody: mun, TargetValue: 100e6, Limit: 1, Horizon: 6 * 86400},
+	}
+
+	s := New(cfg)
+	s.FastForward(6 * 86400)
+	n := s.Cfg.Nodes[1]
+	if !n.Solved || !n.Missed {
+		t.Errorf("solved %v, missed %v: an unreachable aim has to be marked", n.Solved, n.Missed)
+	}
+	if n.DeltaV > 1 {
+		t.Errorf("spent %g m/s against a limit of 1", n.DeltaV)
+	}
+	// Where the flight ends up is not the point and not asserted: a vehicle that failed to
+	// aim past something may well hit it, which is the honest consequence of the miss.
+}
+
+// The solver may not depend on anything but the state. A fixed number of flights, never a time
+// budget: a solver that stopped when it ran out of milliseconds would make the trajectory
+// depend on how busy the machine was.
+func TestSolvingIsDeterministic(t *testing.T) {
+	base := kerbinMun().Cfg
+	mun := base.System.IndexOf("mun")
+	cfg := base
+	cfg.Nodes = []Node{
+		base.Nodes[0],
+		{T: 4000, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+			TargetBody: mun, TargetValue: 900e3, Limit: 200, Horizon: 6 * 86400},
+	}
+
+	var got [2]Node
+	for i := range got {
+		s := New(cfg)
+		s.FastForward(5000)
+		got[i] = s.Cfg.Nodes[1]
+	}
+	if got[0].DeltaV != got[1].DeltaV || got[0].Frame != got[1].Frame {
+		t.Errorf("two runs solved to %v and %v", got[0], got[1])
+	}
+}
+
+// A prediction must not solve the flight's own plan. The plan is a slice, so a copy of the Sim
+// shares it — harmless while every node was a fixed number, and a way to have the drawn path
+// rewrite the mission once a control point writes its answer back.
+func TestAPredictionLeavesThePlanAlone(t *testing.T) {
+	base := kerbinMun().Cfg
+	mun := base.System.IndexOf("mun")
+	cfg := base
+	cfg.Nodes = []Node{
+		base.Nodes[0],
+		{T: 20000, Frame: BurnPrograde, Target: TargetFlybyPeriapsis,
+			TargetBody: mun, TargetValue: 900e3, Limit: 200, Horizon: 6 * 86400},
+	}
+
+	s := New(cfg)
+	s.FastForward(3000)
+	s.Predict(4*86400, 200)
+
+	if n := s.Cfg.Nodes[1]; n.Solved || n.DeltaV != 0 {
+		t.Errorf("the prediction wrote %+v into the live plan", n)
+	}
+}

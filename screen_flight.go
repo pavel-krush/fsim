@@ -627,7 +627,8 @@ func (f *FlightScreen) drawTrajectory(a *App, dst *ebiten.Image, view Rect) {
 }
 
 // nodePanelW is the width of the manoeuvre panel. It fits a time, a direction, a
-// delta-v and a delete button on one row, which is the whole of what a node is.
+// delta-v and a delete button on one row, which is the whole of what a node is — and a
+// control point's aim on a second row under it.
 const nodePanelW = 392
 
 // drawNodePanel is the flight plan: what burns are scheduled, and the controls to
@@ -640,7 +641,7 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 
 	rows := len(nodes)
 	for i := range nodes {
-		if nodes[i].Frame == sim.BurnPitch {
+		if nodes[i].Frame == sim.BurnPitch || nodes[i].Target != sim.TargetNone {
 			rows++
 		}
 	}
@@ -669,16 +670,32 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 			if n.Separate {
 				mark = " ⤓"
 			}
-			drawText(dst, fmt.Sprintf("%.0f %s%s", n.DeltaV, T("unit.mps"), mark), fontMonoSm,
-				row.Right()-24, row.Y+5, colNodeDone, alignRight)
+			// A solved control point is worth two decimals: the interesting thing about a
+			// correction is how little it took. One that could not reach its aim says so
+			// in the colour of bad news rather than by pretending to a number.
+			col, dv := colNodeDone, fmt.Sprintf("%.0f %s%s", n.DeltaV, T("unit.mps"), mark)
+			if n.Solved {
+				dv = fmt.Sprintf("%.2f %s%s", n.DeltaV, T("unit.mps"), mark)
+				if n.Missed {
+					col = colBad
+				}
+			}
+			drawText(dst, dv, fontMonoSm, row.Right()-24, row.Y+5, col, alignRight)
 		} else {
 			u.NumField(dst, Rect{row.X, row.Y, 104, 20}, "", &n.T,
 				NumOpt{Unit: T("unit.s"), Dec: 0, Min: 0, Max: 1e9})
 			if u.Button(dst, Rect{row.X + 108, row.Y, 96, 20}, nodeFrameName(n.Frame), ButtonNormal) {
 				n.Frame = (n.Frame + 1) % (sim.BurnPitch + 1)
 			}
-			u.NumField(dst, Rect{row.X + 208, row.Y, 104, 20}, "", &n.DeltaV,
-				NumOpt{Unit: T("unit.mps"), Dec: 0, Min: 0, Max: 1e6})
+			if n.Target != sim.TargetNone {
+				// A control point's delta-v is an output, so the field is the limit it
+				// may spend instead: what is being edited is the budget, not the burn.
+				u.NumField(dst, Rect{row.X + 208, row.Y, 104, 20}, "", &n.Limit,
+					NumOpt{Unit: T("unit.mps"), Dec: 0, Min: 0, Max: 1e6})
+			} else {
+				u.NumField(dst, Rect{row.X + 208, row.Y, 104, 20}, "", &n.DeltaV,
+					NumOpt{Unit: T("unit.mps"), Dec: 0, Min: 0, Max: 1e6})
+			}
 			// Whether the stage this burn used goes overboard when it is done. A
 			// spent booster carried through a coast has to go before the engine
 			// above it can fire, and there is nowhere else to say so.
@@ -691,6 +708,9 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 			sub := c.next(24)
 			u.NumField(dst, Rect{sub.X + 108, sub.Y, 96, 20}, "", &n.Pitch,
 				NumOpt{Unit: "°", Min: -90, Max: 90, Dec: 0})
+		}
+		if n.Target != sim.TargetNone {
+			f.drawAimRow(a, dst, c.next(24), n, done)
 		}
 	}
 
@@ -705,17 +725,107 @@ func (f *FlightScreen) drawNodePanel(a *App, dst *ebiten.Image, view Rect) {
 	}
 
 	add := c.next(24)
-	if len(f.s.Cfg.Nodes) < 8 && u.Button(dst, Rect{add.X, add.Y, 120, 20}, T("flight.addNode"), ButtonNormal) {
-		u.cancel()
-		f.s.Cfg.Nodes = append(f.s.Cfg.Nodes, sim.Node{
-			T: math.Round(f.s.St.T + 120), Frame: sim.BurnPrograde, DeltaV: 50,
-		})
+	if len(f.s.Cfg.Nodes) < 8 {
+		if u.Button(dst, Rect{add.X, add.Y, 120, 20}, T("flight.addNode"), ButtonNormal) {
+			u.cancel()
+			f.s.Cfg.Nodes = append(f.s.Cfg.Nodes, sim.Node{
+				T: math.Round(f.s.St.T + 120), Frame: sim.BurnPrograde, DeltaV: 50,
+			})
+		}
+		// A control point rather than a burn: it aims at something and the delta-v is
+		// solved for when the moment comes. The default aim is a flyby of whatever body
+		// the vehicle is heading for, because that is what one is nearly always for.
+		if u.Button(dst, Rect{add.X + 126, add.Y, 130, 20}, T("flight.addAim"), ButtonNormal) {
+			u.cancel()
+			body := f.s.St.Center
+			if b := f.frameBody(); b != f.s.Cfg.LaunchBody {
+				body = b
+			}
+			f.s.Cfg.Nodes = append(f.s.Cfg.Nodes, sim.Node{
+				T: math.Round(f.s.St.T + 120), Frame: sim.BurnPrograde,
+				Target: sim.TargetFlybyPeriapsis, TargetBody: body,
+				TargetValue: 4 * f.s.Cfg.System.Bodies[body].Radius,
+				Limit:       50, Horizon: 30 * 86400,
+			})
+		}
 	}
 	if f.s.St.Node >= 0 {
 		drawText(dst, fmt.Sprintf(T("flight.burning"), f.s.St.NodeDV,
 			f.s.Cfg.Nodes[f.s.St.Node].DeltaV), fontUISm,
 			add.Right(), add.Y+4, colPred, alignRight)
 	}
+}
+
+// drawAimRow is the second line of a control point: what it aims at, at which body, and how
+// far ahead the aim is measured.
+//
+// A target needs four things where a burn needs one, which is why it gets a row of its own
+// rather than a wider panel: the panel already sits inside the trajectory view.
+func (f *FlightScreen) drawAimRow(a *App, dst *ebiten.Image, r Rect, n *sim.Node, done bool) {
+	u := a.ui
+	sys := &f.s.Cfg.System
+	if n.TargetBody < 0 || n.TargetBody >= len(sys.Bodies) {
+		n.TargetBody = 0
+	}
+	b := &sys.Bodies[n.TargetBody]
+
+	if done {
+		// History: what it was aiming at, and nothing to press.
+		drawText(dst, fmt.Sprintf("%s %s %s", nodeTargetName(n.Target), bodyName(b.Name),
+			aimValueText(n, b)), fontUISm, r.X+8, r.Y+5, colNodeDone, alignLeft)
+		return
+	}
+
+	if u.Button(dst, Rect{r.X, r.Y, 104, 20}, nodeTargetName(n.Target), ButtonNormal) {
+		n.Target = sim.TargetFlybyPeriapsis + (n.Target-sim.TargetFlybyPeriapsis+1)%3
+	}
+	// The body the aim is about. Only one is offered when there is only one, which is what
+	// a single-planet configuration is.
+	items := make([]string, len(sys.Bodies))
+	for i := range sys.Bodies {
+		items[i] = bodyName(sys.Bodies[i].Name)
+	}
+	if picked := u.Dropdown(dst, Rect{r.X + 108, r.Y, 96, 20}, fmt.Sprintf("aim%p", n),
+		items, n.TargetBody); picked != n.TargetBody {
+		u.cancel()
+		n.TargetBody = picked
+	}
+
+	// The value, in the unit the target actually means: radii of the body for a flyby,
+	// days for a period. A flyby distance in metres is a number nobody can judge.
+	// Bound straight to the value with a scale, not through a converted local: the toolkit
+	// identifies a field by the address of what it edits, and a shared scratch variable
+	// would have two control points fighting over one field.
+	switch n.Target {
+	case sim.TargetPeriod, sim.TargetPeriodAfterFlyby:
+		u.NumField(dst, Rect{r.X + 208, r.Y, 104, 20}, "", &n.TargetValue,
+			NumOpt{Unit: T("unit.d"), Scale: 86400, Dec: 2, Min: 0, Max: 1e12})
+	default:
+		u.NumField(dst, Rect{r.X + 208, r.Y, 104, 20}, "", &n.TargetValue,
+			NumOpt{Unit: T("unit.radii"), Scale: b.Radius, Dec: 2, Min: -1e12, Max: 1e12})
+	}
+}
+
+// aimValueText is an aim written the way it was entered.
+func aimValueText(n *sim.Node, b *sim.Body) string {
+	switch n.Target {
+	case sim.TargetPeriod, sim.TargetPeriodAfterFlyby:
+		return fmt.Sprintf("%s %s", formatNum(n.TargetValue/86400, 2), T("unit.d"))
+	}
+	return fmt.Sprintf("%s %s", formatNum(n.TargetValue/b.Radius, 2), T("unit.radii"))
+}
+
+// nodeTargetName is what a control point's aim is called on screen.
+func nodeTargetName(t sim.NodeTarget) string {
+	switch t {
+	case sim.TargetFlybyPeriapsis:
+		return T("node.aimFlyby")
+	case sim.TargetPeriod:
+		return T("node.aimPeriod")
+	case sim.TargetPeriodAfterFlyby:
+		return T("node.aimResonance")
+	}
+	return T("node.aimFlyby")
 }
 
 // nodeFrameName is what a burn direction is called on screen.
