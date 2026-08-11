@@ -9,23 +9,23 @@ import (
 	"github.com/pavel-krush/fsim/sim"
 )
 
-// The second screen: what the mission you just picked actually is, before the four
-// columns of numbers that let you change it.
+// The description beside the mission list: what the real mission was, what this one does,
+// and the figures worth knowing before flying it.
 //
-// Picking a row used to drop straight into the editor, which is a lot of parameters to be
-// handed with no idea what they add up to — "Proton-K / Blok DM to geostationary" says
-// nothing about three burns and five and a half hours of coasting. So there is a page in
-// between: what the real mission was, what this one does, and the figures worth knowing
-// before flying it.
+// The list used to drop straight into the editor, which is a lot of parameters to be handed
+// with no idea what they add up to — "Proton-K / Blok DM to geostationary" says nothing about
+// three burns and five and a half hours of coasting. So the list moved into a column of its
+// own and this took the rest of the screen: the arrow keys are now a way of reading down the
+// missions rather than only of choosing one.
 //
-// The prose lives in the locale files, keyed by the preset's identifier, because the
-// physics package holds no text. The figures are read out of the configuration and not
-// from a flight: the grand tour takes half a minute to fly and nobody is waiting for that
-// to read a description.
+// The prose lives in the locale files, keyed by the preset's identifier, because the physics
+// package holds no text. The figures are read out of the configuration and not from a flight:
+// the grand tour takes half a minute to fly and nobody is waiting for that to read a
+// paragraph.
 
 // fmtSpan writes a length of time the way a description wants it rather than the way the
-// mission clock does: "T+10957d 12:00:00" is a correct answer to how long the grand tour
-// is allowed to run and a useless one to read.
+// mission clock does: "T+10957d 12:00:00" is a correct answer to how long the grand tour is
+// allowed to run and a useless one to read.
 func fmtSpan(t float64) (string, string) {
 	switch {
 	case t <= 0:
@@ -45,15 +45,14 @@ func fmtSpan(t float64) (string, string) {
 // would otherwise hand it.
 const proseMeasure = 720.0
 
-// MissionScreen shows one mission in detail.
-type MissionScreen struct {
-	// sel is the row picked in the list, which is an index into the same list — the
-	// presets plus, possibly, the saved setup on the end.
-	sel  int
+// missionPanel is the description, and all it owns is where it has been scrolled to. Which
+// mission it describes is the list's business, handed in per frame.
+type missionPanel struct {
 	body Scroll
+	// shown is the row the scroll position belongs to, so that arrowing onto a new
+	// mission starts at the top of it rather than half way down the last one.
+	shown int
 }
-
-func NewMissionScreen(sel int) *MissionScreen { return &MissionScreen{sel: sel} }
 
 // missionKey is the locale prefix for a mission's prose. The saved setup has no
 // identifier and no history, so it gets one of its own.
@@ -89,108 +88,63 @@ func missionTitle(sel int) (name, slug string) {
 	return T("presets.saved"), ""
 }
 
-// proceed opens the editor on this mission, which is what the list used to do directly.
-func (s *MissionScreen) proceed(a *App) {
-	cfg, ok := missionConfig(s.sel)
-	if !ok {
-		return
+// draw puts the description in r, and reports whether the button in it was pressed.
+//
+// The title spans both columns rather than sitting in the prose one: "Proton-K / Blok DM to
+// geostationary" at this size is wider than half the panel, and it ran straight over the
+// figures when it lived in the left-hand column.
+func (p *missionPanel) draw(a *App, dst *ebiten.Image, r Rect, sel int) (open bool) {
+	if sel != p.shown {
+		p.shown, p.body.Offset = sel, 0
 	}
-	// Every field in the editor is bound to an address inside the configuration being
-	// replaced, so the pending edit goes first — the same care loadPreset takes.
-	a.ui.cancel()
-	a.cfg = cfg
-	a.cfg.EnsureSystem()
-	// Which preset the editor's dropdown shows. The saved setup came from nowhere in
-	// particular and the dropdown has no way to say so, so it says the first one.
-	preset := 0
-	if s.sel >= 0 && s.sel < len(sim.Presets()) {
-		preset = s.sel
+	panel(dst, r, colPanel)
+
+	inner := Rect{r.X + 18, r.Y + 14, r.W - 36, r.H - 28}
+
+	name, slug := missionTitle(sel)
+	drawText(dst, name, fontBig, inner.X, inner.Y, colText, alignLeft)
+	if slug != "" {
+		drawText(dst, slug, fontMono, inner.X+textWidth(name, fontBig)+14,
+			inner.Y+fontBig.Size-fontMono.Size-2, colTextFaint, alignLeft)
 	}
-	a.setup = NewSetupScreen(preset)
-	a.screen = ScreenSetup
-}
+	titleH := fontBig.Size + 20
 
-func (s *MissionScreen) back(a *App) {
-	a.ui.cancel()
-	a.presets = NewPresetScreen(s.sel)
-	a.screen = ScreenPresets
-}
+	// The way on, at the bottom of the description rather than under the list: it belongs
+	// to the mission being described.
+	const btnH = 38.0
+	btn := Rect{inner.Right() - 220, inner.Bottom() - btnH, 220, btnH}
+	open = a.ui.Button(dst, btn, T("mission.open"), ButtonPrimary)
 
-func (s *MissionScreen) Update(a *App, dst *ebiten.Image) {
-	u := a.ui
-	b := a.Bounds()
+	content := Rect{inner.X, inner.Y + titleH, inner.W, inner.H - titleH - btnH - 12}
 
-	if u.keyPressed(ebiten.KeyEscape) {
-		s.back(a)
-		return
-	}
-	if u.keyPressed(ebiten.KeyEnter) || u.keyPressed(ebiten.KeyNumpadEnter) {
-		s.proceed(a)
-		return
-	}
-
-	const pad = 12
-	headH, footH := 44.0, 52.0
-	panel(dst, Rect{pad, pad, b.W - 2*pad, headH}, colPanel)
-	drawText(dst, "FSIM", fontBig, pad+14, pad+(headH-fontBig.Size)/2-2, colAccent, alignLeft)
-	drawText(dst, T("setup.tagline"), fontUISm, pad+14+textWidth("FSIM", fontBig)+10,
-		pad+(headH-fontUISm.Size)/2, colTextFaint, alignLeft)
-	u.LangPicker(dst, Rect{b.W - pad - 10 - langPickerW, pad + 8, langPickerW, headH - 16})
-
-	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - footH - 3*pad - 8}
-	panel(dst, body, colPanel)
-
-	// The facts sit in a column of their own on the right, wide enough for the longest
-	// label in either language, and the prose takes what is left. In a narrow window
-	// the facts go under the prose instead of squeezing both.
-	factsW := math.Min(340, body.W*0.42)
-	stacked := body.W < 720
-	prose := Rect{body.X + 18, body.Y + 14, body.W - 36, body.H - 28}
+	// The figures take a column of their own where there is room for one, and follow the
+	// prose where there is not.
+	factsW := math.Min(340, content.W*0.42)
+	stacked := content.W < 620
+	prose := content
 	facts := Rect{}
 	if !stacked {
-		// The prose is capped at a readable measure rather than stretched to the
-		// window: a line of a hundred and forty characters is a line nobody follows
-		// back to its start. The facts keep the right-hand edge.
-		prose.W = math.Min(proseMeasure, body.W-factsW-54)
-		facts = Rect{body.Right() - 18 - factsW, body.Y + 14, factsW, body.H - 28}
+		// The prose is capped at a readable measure rather than stretched to the panel:
+		// a line of a hundred and forty characters is a line nobody follows back to its
+		// start. The figures keep the right-hand edge.
+		prose.W = math.Min(proseMeasure, content.W-factsW-36)
+		facts = Rect{content.Right() - factsW, content.Y, factsW, content.H}
 	}
 
-	s.drawProse(a, dst, prose, stacked, factsW)
+	p.drawProse(a, dst, prose, sel, stacked, factsW)
 	if !stacked {
-		s.drawFacts(a, dst, facts)
+		y := facts.Y
+		p.factRows(a, dst, facts, sel, &y)
 	}
-
-	// The two ways on: back to the list, or into the editor. Enter and Escape do the
-	// same, and the hint says so.
-	foot := Rect{pad, b.H - footH - pad, b.W - 2*pad, footH}
-	panel(dst, foot, colPanel)
-	if u.Button(dst, Rect{foot.X + 12, foot.Y + 10, 150, foot.H - 20}, T("mission.back"), ButtonNormal) {
-		s.back(a)
-		return
-	}
-	if u.Button(dst, Rect{foot.Right() - 12 - 220, foot.Y + 10, 220, foot.H - 20},
-		T("mission.open"), ButtonPrimary) {
-		s.proceed(a)
-		return
-	}
-	drawText(dst, T("mission.hint"), fontUISm, foot.X+foot.W/2, foot.Y+(foot.H-fontUISm.Size)/2,
-		colTextDim, alignCenter)
+	return open
 }
 
-// drawProse is the title and the text: what the real mission was, and what this one does
-// here. In a narrow window the figures follow the text in the same scrolling column.
-func (s *MissionScreen) drawProse(a *App, dst *ebiten.Image, r Rect, stacked bool, factsW float64) {
+// drawProse is the text: what the real mission was, and what this one does here. In a narrow
+// panel the figures follow it in the same scrolling column.
+func (p *missionPanel) drawProse(a *App, dst *ebiten.Image, r Rect, sel int, stacked bool, factsW float64) {
 	u := a.ui
-	y := s.body.Begin(u, r)
-	key := missionKey(s.sel)
-
-	name, slug := missionTitle(s.sel)
-	drawText(dst, name, fontBig, r.X, y, colText, alignLeft)
-	if slug != "" {
-		drawText(dst, slug, fontMono, r.X+textWidth(name, fontBig)+14, y+fontBig.Size-fontMono.Size-2,
-			colTextFaint, alignLeft)
-	}
-	y += fontBig.Size + 16
+	y := p.body.Begin(u, r)
+	key := missionKey(sel)
 
 	para := func(head, text string) {
 		if text == "" {
@@ -216,21 +170,15 @@ func (s *MissionScreen) drawProse(a *App, dst *ebiten.Image, r Rect, stacked boo
 
 	if stacked {
 		y += 6
-		s.factRows(a, dst, Rect{r.X, y, math.Min(factsW, r.W), 0}, &y)
+		p.factRows(a, dst, Rect{r.X, y, math.Min(factsW, r.W), 0}, sel, &y)
 	}
-	s.body.End(u, dst, r, y)
+	p.body.End(u, dst, r, y)
 }
 
-// drawFacts is the right-hand column: everything worth knowing that can be read straight
-// off the configuration.
-func (s *MissionScreen) drawFacts(a *App, dst *ebiten.Image, r Rect) {
-	y := r.Y
-	s.factRows(a, dst, r, &y)
-}
-
-func (s *MissionScreen) factRows(a *App, dst *ebiten.Image, r Rect, y *float64) {
+// factRows is everything worth knowing that can be read straight off the configuration.
+func (p *missionPanel) factRows(a *App, dst *ebiten.Image, r Rect, sel int, y *float64) {
 	u := a.ui
-	cfg, ok := missionConfig(s.sel)
+	cfg, ok := missionConfig(sel)
 	if !ok {
 		drawText(dst, T("mission.noSaved"), fontUISm, r.X, *y, colTextFaint, alignLeft)
 		*y += fontUISm.Size + 6

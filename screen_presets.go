@@ -30,6 +30,10 @@ type PresetScreen struct {
 	// all of them — the kind of quiet renumbering this project has been bitten by
 	// more than once. Appended, it changes nothing above it.
 	hasSaved bool
+
+	// detail is the description beside the list, which keeps its own scroll: a long
+	// mission is longer than a short window.
+	detail missionPanel
 }
 
 func NewPresetScreen(sel int) *PresetScreen {
@@ -62,14 +66,21 @@ const (
 	presetRowMin = 18.0
 	presetListW  = 640.0
 	presetRowGap = 6.0
+	// detailMin is the body width at which the description gets a column of its own.
+	// Under it there is not enough room for two, and the list takes the lot.
+	detailMin = 820.0
 )
 
-// presetLayout fits n rows into the area it is given. In a window the program owns
-// they are 42 px tall and the block is centred; in a browser the window is whatever
-// the browser is, and a 760 px one had thirteen rows overlapping the header at the
-// top and running off the bottom. So the rows shrink to fit, down to a floor, and
-// the width comes in with the area.
-func presetLayout(body Rect, n int) (rowH float64, area Rect) {
+// presetLayout fits n rows into the left-hand column of the area it is given, and returns
+// what is left over for the description.
+//
+// In a window the program owns the rows are 42 px tall; in a browser the window is whatever
+// the browser is, and a 760 px one had thirteen rows overlapping the header at the top and
+// running off the bottom. So they shrink to fit, down to a floor.
+//
+// Below detailMin of body width there is no room for two columns and the list takes the lot,
+// which is what the screen was before the description existed.
+func presetLayout(body Rect, n int) (rowH float64, area, detail Rect) {
 	// The hint below the list counts towards the centring, or the block sits low.
 	const hint = 30.0
 	rowH = presetRowH
@@ -79,13 +90,23 @@ func presetLayout(body Rect, n int) (rowH float64, area Rect) {
 		}
 	}
 	listH := float64(n)*(rowH+presetRowGap) - presetRowGap
+
 	w := math.Min(presetListW, body.W-40)
-	return rowH, Rect{
-		X: body.X + (body.W-w)/2,
+	x := body.X + (body.W-w)/2
+	if body.W >= detailMin {
+		// Left, not centred: the description takes the rest, and a list that slid about
+		// as the window changed would be worse than one with an edge to aim at.
+		x = body.X
+		w = math.Min(presetListW, body.W*0.42)
+		detail = Rect{x + w + 24, body.Y, body.W - w - 24, body.H}
+	}
+	area = Rect{
+		X: x,
 		Y: body.Y + math.Max(0, (body.H-listH-hint)/2),
 		W: w,
 		H: listH,
 	}
+	return rowH, area, detail
 }
 
 // move walks the keyboard selection, stopping at the ends rather than wrapping:
@@ -100,31 +121,50 @@ func (s *PresetScreen) move(delta, n int) {
 	}
 }
 
-// pick moves on to the mission's own page rather than into the editor. Which mission is
-// picked is all this screen decides; what the mission *is* takes a page of its own, and
-// only after that does anything get loaded into the editor.
-//
-// The configuration is deliberately not touched here. It used to be, and the trap it has
-// to avoid is the same one loadPreset documents: every field in the editor is bound to an
-// address inside the configuration being replaced.
+// pick selects a row. The description beside the list is what a selection is *for*, so a
+// click chooses rather than commits — and a click on the row already under the cursor's own
+// selection is the commit, which is the idiom of every file dialogue ever written.
 func (s *PresetScreen) pick(a *App, i int) {
-	presets := sim.Presets()
-
-	// The saved setup is read afresh rather than kept from construction, so that the
-	// editor gets its own slices to mutate: the vehicle, the layers and the
-	// keyframes are all edited in place, and handing over a shared copy would mean
-	// editing the stored one too.
-	switch {
-	case s.hasSaved && i == len(presets):
-		// The saved row describes itself; whether it still reads is the mission
-		// page's problem, and it says so if it does not.
-	case i < 0 || i >= len(presets):
+	if !s.valid(i) {
+		return
+	}
+	if i == s.sel {
+		s.open(a)
 		return
 	}
 	a.ui.cancel()
 	s.sel = i
-	a.mission = NewMissionScreen(i)
-	a.screen = ScreenMission
+}
+
+// valid says whether a row exists: the presets, plus the saved setup when there is one.
+func (s *PresetScreen) valid(i int) bool {
+	presets := sim.Presets()
+	return i >= 0 && (i < len(presets) || (s.hasSaved && i == len(presets)))
+}
+
+// open loads the selected mission into the editor.
+//
+// The saved setup is read afresh rather than kept from construction, so that the editor gets
+// its own slices to mutate: the vehicle, the layers and the keyframes are all edited in place,
+// and handing over a shared copy would mean editing the stored one too.
+func (s *PresetScreen) open(a *App) {
+	cfg, ok := missionConfig(s.sel)
+	if !ok {
+		return
+	}
+	// Every field in the editor is bound to an address inside the configuration being
+	// replaced, so a pending edit goes first — the trap loadPreset documents.
+	a.ui.cancel()
+	a.cfg = cfg
+	a.cfg.EnsureSystem()
+	// Which preset the dropdown in there shows. A saved setup came from nowhere in
+	// particular and the dropdown cannot say so, so it says the first one.
+	preset := 0
+	if s.sel < len(sim.Presets()) {
+		preset = s.sel
+	}
+	a.setup = NewSetupScreen(preset)
+	a.screen = ScreenSetup
 }
 
 // presetRowRect is where row i is drawn.
@@ -150,10 +190,8 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 		pad+(headH-fontUISm.Size)/2, colTextFaint, alignLeft)
 	u.LangPicker(dst, Rect{b.W - pad - 10 - langPickerW, pad + 8, langPickerW, headH - 16})
 
-	// The list, centred in what is left, so that adding a preset moves the block
-	// rather than pushing the last one off the bottom.
 	body := Rect{pad, pad + headH + 8, b.W - 2*pad, b.H - headH - 3*pad - 8}
-	rowH, area := presetLayout(body, n)
+	rowH, area, detail := presetLayout(body, n)
 
 	if u.keyPressed(ebiten.KeyArrowDown) {
 		s.move(1, n)
@@ -162,7 +200,14 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 		s.move(-1, n)
 	}
 	if u.keyPressed(ebiten.KeyEnter) || u.keyPressed(ebiten.KeyNumpadEnter) {
-		s.pick(a, s.sel)
+		s.open(a)
+		return
+	}
+
+	// The description of whatever is selected, beside the list rather than after it: the
+	// point of arrow keys here is to read your way down the missions.
+	if detail.W > 0 && s.detail.draw(a, dst, detail, s.sel) {
+		s.open(a)
 		return
 	}
 
@@ -209,5 +254,6 @@ func (s *PresetScreen) Update(a *App, dst *ebiten.Image) {
 		}
 	}
 
-	drawText(dst, T("presets.hint"), fontUISm, b.W/2, area.Bottom()+22, colTextDim, alignCenter)
+	drawText(dst, T("presets.hint"), fontUISm, area.X+area.W/2, area.Bottom()+22,
+		colTextDim, alignCenter)
 }

@@ -220,10 +220,11 @@ Earth, Mars and Titan — so a planet arrived at from somewhere else has an atmo
 The setup screen's atmosphere column belongs to whichever body the first column is on, and a body with
 none is offered some.
 
-Picking a mission opens its own page first: what the real thing was, what this version of it
-does, and the figures — liftoff mass, thrust-to-weight, the flight plan's burns — before the
-editor's four columns say how any of it is done. `-preset` skips both the list and the page,
-since naming a mission is the choice the two of them exist to make.
+The mission list reads as well as chooses: the rows sit in a column on the left and the rest of
+the screen describes whichever is selected — what the real mission was, what this version of it
+does, and the figures, from liftoff mass to the flight plan's burns, before the editor's four
+columns say how any of it is done. A click selects, a second click or Enter opens the editor,
+and `-preset` skips the screen altogether, since naming a mission is the choice it exists for.
 
 A setup you have edited can be kept: `SAVE` and `LOAD` in the setup header write it to one slot — a file
 in your config directory, or `localStorage` in a browser — and a saved setup then gets a row of its own at

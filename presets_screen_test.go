@@ -51,15 +51,18 @@ func TestPickingAMissionLoadsItAndMovesOn(t *testing.T) {
 
 	a.presets.pick(a, i)
 
-	// Picking leads to the mission's own page now, and the editor is what that page
-	// leads to. The configuration is untouched until then.
-	if a.screen != ScreenMission {
-		t.Errorf("screen %d after picking, want the mission page", a.screen)
+	// A click selects rather than commits: the description beside the list is what a
+	// selection is for. Clicking the row that is already selected is the commit.
+	if a.screen != ScreenPresets {
+		t.Errorf("the first click left the list, at screen %d", a.screen)
 	}
-	a.mission.proceed(a)
+	if a.presets.sel != i {
+		t.Errorf("the first click selected row %d, want %d", a.presets.sel, i)
+	}
+	a.presets.pick(a, i)
 
 	if a.screen != ScreenSetup {
-		t.Errorf("screen %d after opening the editor, want setup", a.screen)
+		t.Errorf("screen %d after the second click, want setup", a.screen)
 	}
 	if a.cfg.LaunchBody != presets[i].Cfg.LaunchBody || len(a.cfg.Nodes) != len(presets[i].Cfg.Nodes) {
 		t.Error("the configuration is not the one picked")
@@ -120,7 +123,7 @@ func TestEveryMissionFitsInAnyWindow(t *testing.T) {
 		const pad = 12
 		headH := 44.0
 		body := Rect{pad, pad + headH + 8, win.W - 2*pad, win.H - headH - 3*pad - 8}
-		rowH, area := presetLayout(body, n)
+		rowH, area, detail := presetLayout(body, n)
 
 		if rowH < presetRowMin-0.001 || rowH > presetRowH+0.001 {
 			t.Errorf("%.0fx%.0f: row height %.1f, outside %.0f..%.0f",
@@ -134,6 +137,20 @@ func TestEveryMissionFitsInAnyWindow(t *testing.T) {
 		if last.Bottom() > body.Bottom()+0.001 {
 			t.Errorf("%.0fx%.0f: the last row ends at %.1f, below the area's %.1f",
 				win.W, win.H, last.Bottom(), body.Bottom())
+		}
+		// The description takes what the list does not, and the two must not overlap.
+		if detail.W > 0 {
+			if detail.X < area.Right() {
+				t.Errorf("%.0fx%.0f: the description starts at %.1f, inside the list's %.1f",
+					win.W, win.H, detail.X, area.Right())
+			}
+			if detail.Right() > body.Right()+0.001 {
+				t.Errorf("%.0fx%.0f: the description ends at %.1f, past the body's %.1f",
+					win.W, win.H, detail.Right(), body.Right())
+			}
+		} else if body.W >= detailMin {
+			t.Errorf("%.0fx%.0f: no description column in a body with room for one",
+				win.W, win.H)
 		}
 		if first.X < body.X-0.001 || first.Right() > body.Right()+0.001 {
 			t.Errorf("%.0fx%.0f: a row spans %.1f..%.1f, outside %.1f..%.1f",
@@ -213,9 +230,9 @@ func TestEveryMissionHasItsOwnWords(t *testing.T) {
 	}
 }
 
-// The page in the middle has to lead both ways: into the editor with the mission loaded,
-// and back to the list with the row still selected.
-func TestTheMissionPageLeadsBothWays(t *testing.T) {
+// Enter opens the selection, and the description follows the selection rather than the
+// pointer: arrowing down the list is meant to be a way of reading it.
+func TestTheListOpensWhatIsSelected(t *testing.T) {
 	noSavedSetup(t)
 	presets := sim.Presets()
 	i := len(presets) - 1
@@ -223,25 +240,15 @@ func TestTheMissionPageLeadsBothWays(t *testing.T) {
 	a := &App{ui: NewUI(), cfg: presets[0].Cfg}
 	a.presets = NewPresetScreen(0)
 	a.setup = NewSetupScreen(0)
-	a.presets.pick(a, i)
 
-	if a.screen != ScreenMission || a.mission.sel != i {
-		t.Fatalf("screen %d on mission %d after picking row %d", a.screen, a.mission.sel, i)
-	}
-	// Back: the list again, with the row it came from still under the keyboard.
-	a.mission.back(a)
-	if a.screen != ScreenPresets {
-		t.Errorf("back left the screen at %d", a.screen)
-	}
+	a.presets.move(i, len(presets))
 	if a.presets.sel != i {
-		t.Errorf("the list came back on row %d, want %d", a.presets.sel, i)
+		t.Fatalf("the keyboard is on row %d, want %d", a.presets.sel, i)
 	}
+	a.presets.open(a)
 
-	// Forward: the editor, on that mission.
-	a.presets.pick(a, i)
-	a.mission.proceed(a)
 	if a.screen != ScreenSetup {
-		t.Errorf("the editor did not open: screen %d", a.screen)
+		t.Errorf("Enter did not open the editor: screen %d", a.screen)
 	}
 	if a.setup.preset != i {
 		t.Errorf("the editor is on preset %d, want %d", a.setup.preset, i)
