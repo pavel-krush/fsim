@@ -51,8 +51,18 @@ func TestPickingAMissionLoadsItAndMovesOn(t *testing.T) {
 
 	a.presets.pick(a, i)
 
+	// A click selects rather than commits: the description beside the list is what a
+	// selection is for. Clicking the row that is already selected is the commit.
+	if a.screen != ScreenPresets {
+		t.Errorf("the first click left the list, at screen %d", a.screen)
+	}
+	if a.presets.sel != i {
+		t.Errorf("the first click selected row %d, want %d", a.presets.sel, i)
+	}
+	a.presets.pick(a, i)
+
 	if a.screen != ScreenSetup {
-		t.Errorf("screen %d after picking, want setup", a.screen)
+		t.Errorf("screen %d after the second click, want setup", a.screen)
 	}
 	if a.cfg.LaunchBody != presets[i].Cfg.LaunchBody || len(a.cfg.Nodes) != len(presets[i].Cfg.Nodes) {
 		t.Error("the configuration is not the one picked")
@@ -113,7 +123,7 @@ func TestEveryMissionFitsInAnyWindow(t *testing.T) {
 		const pad = 12
 		headH := 44.0
 		body := Rect{pad, pad + headH + 8, win.W - 2*pad, win.H - headH - 3*pad - 8}
-		rowH, area := presetLayout(body, n)
+		rowH, area, detail := presetLayout(body, n)
 
 		if rowH < presetRowMin-0.001 || rowH > presetRowH+0.001 {
 			t.Errorf("%.0fx%.0f: row height %.1f, outside %.0f..%.0f",
@@ -127,6 +137,20 @@ func TestEveryMissionFitsInAnyWindow(t *testing.T) {
 		if last.Bottom() > body.Bottom()+0.001 {
 			t.Errorf("%.0fx%.0f: the last row ends at %.1f, below the area's %.1f",
 				win.W, win.H, last.Bottom(), body.Bottom())
+		}
+		// The description takes what the list does not, and the two must not overlap.
+		if detail.W > 0 {
+			if detail.X < area.Right() {
+				t.Errorf("%.0fx%.0f: the description starts at %.1f, inside the list's %.1f",
+					win.W, win.H, detail.X, area.Right())
+			}
+			if detail.Right() > body.Right()+0.001 {
+				t.Errorf("%.0fx%.0f: the description ends at %.1f, past the body's %.1f",
+					win.W, win.H, detail.Right(), body.Right())
+			}
+		} else if body.W >= detailMin {
+			t.Errorf("%.0fx%.0f: no description column in a body with room for one",
+				win.W, win.H)
 		}
 		if first.X < body.X-0.001 || first.Right() > body.Right()+0.001 {
 			t.Errorf("%.0fx%.0f: a row spans %.1f..%.1f, outside %.1f..%.1f",
@@ -176,5 +200,60 @@ func TestFlyStartsOnThePad(t *testing.T) {
 	// And with nothing named at all, the list.
 	if c := newApp(0, false, false); c.screen != ScreenPresets {
 		t.Errorf("with no preset named: screen %d, want the list", c.screen)
+	}
+}
+
+// Every mission has to have its own words. A missing key renders as the key itself, which
+// is the toolkit's habit and a perfectly visible failure — on a screen nobody opens until
+// after the preset has shipped. This is that check, before it ships.
+func TestEveryMissionHasItsOwnWords(t *testing.T) {
+	noSavedSetup(t)
+	for i, p := range sim.Presets() {
+		for _, suffix := range []string{".history", ".here"} {
+			key := missionKey(i) + suffix
+			for _, l := range langOrder {
+				was := lang
+				lang = l
+				if got := T(key); got == key {
+					t.Errorf("%s has no %s in locale %d", p.Name, suffix, l)
+				}
+				lang = was
+			}
+		}
+	}
+	// And the saved row, which has no identifier and needs its own.
+	for _, suffix := range []string{".history", ".here"} {
+		key := missionKey(len(sim.Presets())) + suffix
+		if got := T(key); got == key {
+			t.Errorf("the saved row has no %s", suffix)
+		}
+	}
+}
+
+// Enter opens the selection, and the description follows the selection rather than the
+// pointer: arrowing down the list is meant to be a way of reading it.
+func TestTheListOpensWhatIsSelected(t *testing.T) {
+	noSavedSetup(t)
+	presets := sim.Presets()
+	i := len(presets) - 1
+
+	a := &App{ui: NewUI(), cfg: presets[0].Cfg}
+	a.presets = NewPresetScreen(0)
+	a.setup = NewSetupScreen(0)
+
+	a.presets.move(i, len(presets))
+	if a.presets.sel != i {
+		t.Fatalf("the keyboard is on row %d, want %d", a.presets.sel, i)
+	}
+	a.presets.open(a)
+
+	if a.screen != ScreenSetup {
+		t.Errorf("Enter did not open the editor: screen %d", a.screen)
+	}
+	if a.setup.preset != i {
+		t.Errorf("the editor is on preset %d, want %d", a.setup.preset, i)
+	}
+	if a.cfg.Rocket.Payload != presets[i].Cfg.Rocket.Payload {
+		t.Error("the editor got a different mission")
 	}
 }

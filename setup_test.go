@@ -116,3 +116,37 @@ func TestTheAtmosphereColumnFollowsTheSelectedBody(t *testing.T) {
 			"the body's gravity did not reach the profile", overMoon, overEarth)
 	}
 }
+
+// One real frame of the list for every selection, which is the cheapest way to know that no
+// mission reads a stale index or divides by a zero on the way to being described. The saved
+// row is included: its configuration comes from the store, and having none is a state the
+// description has to survive rather than crash on.
+func TestEveryMissionDescriptionDraws(t *testing.T) {
+	initFonts()
+	noSavedSetup(t)
+	img := ebiten.NewImage(1500, 940)
+
+	for i := 0; i <= len(sim.Presets()); i++ {
+		a := &App{ui: NewUI(), cfg: sim.Presets()[0].Cfg}
+		a.canvas, a.w, a.h = img, 1500, 940
+		a.presets, a.screen = NewPresetScreen(i), ScreenPresets
+		a.presets.hasSaved = true // describe the saved row too, empty store and all
+
+		a.ui.BeginFrame(img, 1.0/60)
+		a.presets.Update(a, img)
+		a.ui.EndFrame()
+
+		if a.screen != ScreenPresets {
+			t.Errorf("row %d left the list by itself, at screen %d", i, a.screen)
+		}
+	}
+
+	// And in a window too narrow for two columns, where the list takes the lot.
+	small := ebiten.NewImage(700, 500)
+	a := &App{ui: NewUI(), cfg: sim.Presets()[0].Cfg}
+	a.canvas, a.w, a.h = small, 700, 500
+	a.presets, a.screen = NewPresetScreen(0), ScreenPresets
+	a.ui.BeginFrame(small, 1.0/60)
+	a.presets.Update(a, small)
+	a.ui.EndFrame()
+}

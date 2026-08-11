@@ -116,6 +116,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `perf.go` | The service readout: what a frame costs, split into physics and everything else |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
 | `screen_presets.go` | The first screen: the mission list, and nothing else |
+| `screen_mission.go` | The description beside the list: prose from the locale, figures from the config |
 | `store.go` | Saving a setup: JSON in, JSON out, and what a loaded one has to be before it is flown |
 | `store_native.go`, `store_js.go` | Where it is kept — a file in the user's config directory, or `localStorage` |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
@@ -780,6 +781,38 @@ what you are trying to fly, so it comes second.
   configuration being replaced — the same trap `loadPreset` documents.
 - **There is no way back to the list**, deliberately: the editor has its own preset dropdown, which is
   the same choice without losing what you have typed.
+- **The description beside the list is what the selection is for** (`screen_mission.go`,
+  `missionPanel`). The list used to drop straight into the editor, which is a lot of parameters to be
+  handed with no idea what they add up to — "Proton-K / Blok DM to geostationary" says nothing about
+  three burns and five and a half hours of coasting. So the rows moved into a column on the left and
+  the rest of the screen says what the mission *is*: what the real one was, what this one does here,
+  and the figures worth knowing before flying it.
+- **A click selects; a click on the row already selected opens it**, which is the idiom of every file
+  dialogue ever written, and Enter does the same. The arrow keys are now a way of reading down the
+  missions rather than only of choosing between them.
+- **The prose lives in the locale files**, two keys per mission — `mission.<id>.history` and
+  `mission.<id>.here` — because the physics package holds no text and the identifiers are already the
+  locale keys. `TestEveryMissionHasItsOwnWords` fails on a preset that ships without a description in
+  either language, which is the only way to notice: a missing key renders as the key, on a panel
+  nobody looks at until after the preset is out.
+- **The figures are read out of the configuration, never flown.** Liftoff mass, stages, payload,
+  thrust-to-weight, ideal Δv, the plan's burns and the time limit are all `Cfg` reads and cost nothing.
+  The grand tour takes half a minute to fly and nobody is waiting for that to read a paragraph. The
+  time limit is written as a duration rather than a mission clock: "T+10957d 12:00:00" is a correct
+  answer to how long the tour may run and a useless one to read.
+- **The timings in the prose are the tested ones.** T+604 s, 1926 × 1776 km, 37 solar radii: every
+  number quoted in a description is one the mission tests already pin, so the two drift together or
+  not at all.
+- **The title spans both columns of the panel.** It lived in the prose column first and ran straight
+  over the figures: "Proton-K / Blok DM to geostationary" at that size is wider than half the panel.
+  The prose itself is capped at a readable measure (`proseMeasure`) rather than stretched to the
+  window, and under 620 px of panel the figures stack beneath it.
+- **Under `detailMin` of body width there is no description at all** and the list takes the whole
+  screen, centred, which is what this screen was before. A 700 px window has no room for two columns,
+  and squeezing both is worse than showing one.
+- **The configuration is loaded by `open`, not by `pick`.** `pick` decides *which* mission; `open` is
+  what replaces `App.cfg`, cancels the pending edit and builds the editor. That keeps the
+  bound-address trap in one place instead of two.
 
 ## Saving a setup
 
