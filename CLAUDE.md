@@ -104,6 +104,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/rocket.go` | Stages: mass, propellant, thrust, Isp(p), ṁ, cutoff, ignition mode. Tsiolkovsky, TWR |
 | `sim/program.go` | Pitch keyframes, interpolation, prograde-hold mode |
 | `sim/node.go` | Manoeuvre nodes: a time, a direction, a Δv — and `Predict`, which flies a copy of the plan |
+| `sim/solve.go` | Control points: an aim instead of a Δv, solved by bisection over flown copies |
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
@@ -675,6 +676,60 @@ orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at 
   at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1791 km
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
   conic and a trajectory.
+
+## Control points, which aim instead of burning
+
+A `sim.Node` with a `Target` is a correction rather than a manoeuvre: it says where the
+trajectory should end up and the delta-v is solved for when the moment arrives. `sim/solve.go`.
+
+The reason it exists is chained gravity assists. A plan of fixed numbers is a plan solved for
+one exact path through the arithmetic and no other — the grand tour's four windows had to be
+re-solved when a pitch keyframe was *rounded to one decimal place*, and its final verdict still
+depends on whether the flight is advanced in one jump or many. A control point re-solves
+against the path the flight is actually on, which is what a real trajectory correction is for.
+
+- **The method is a bracket and a bisection over flown copies**, the same integrator over the
+  same plan and bodies. Nothing cheaper is honest: a conic approximation gives an answer the
+  flight then misses, which is the failure a correction exists to prevent. One control point
+  costs about thirty flights and solves in a tenth of a second at lunar range.
+- **The iteration count is fixed, never a time budget.** A solver that stopped when it ran out
+  of milliseconds would make the trajectory depend on how busy the machine was, which is the
+  one thing nothing here is allowed to depend on. `TestSolvingIsDeterministic` pins it.
+- **A copy never solves.** It inherits whatever its control points are already solved to and
+  flies those, so the recursion is one level deep by construction.
+- **`Predict` had to start copying the plan**, and that was a live bug rather than a nicety:
+  `Nodes` is a slice, so a copied `Sim` shared it, and a drawn prediction solving a control
+  point would have written its answer into the flight's own plan.
+- **A flyby aim is signed, and the sign is which side you pass.** Unsigned, the miss distance
+  is V-shaped in delta-v and there is nothing for a bisection to cross; signed — by the cross
+  product of the body-relative velocity and position at closest approach — it is monotone
+  through zero. The side is worth naming anyway, since it decides whether the pass adds energy
+  or takes it away.
+- **The step in the solving flight is bounded by the time left before arrival**, not by the
+  horizon. A fixed step measured the closest approach to whatever it happened to sample — 1300
+  km of it at cruising speed, coarser than the aim being solved for — and the solver spent its
+  precision chasing that instead of the trajectory. With the guard, an aim at 700 km lands at
+  693; without it, 682.
+- **What is left over is the chaos of the approach itself.** Seven kilometres on seven hundred
+  is the amplification between the control point and the encounter two and a half days later,
+  and the cure is what real navigation does: another correction, closer in. Note that a
+  prograde correction has almost no leverage on a miss distance late in an approach — a radial
+  one does.
+- **An aim that cannot be reached says so** (`Missed`) and flies its best effort. Where the
+  flight then ends up is the honest consequence: a vehicle that failed to aim past something
+  may well hit it.
+- **`TargetPeriodAfterFlyby` is the one that makes a resonant return writable at all.** The
+  propellant to reshape an orbit by months is not aboard and does not have to be: the flyby
+  does the reshaping and the correction only decides where the flyby happens. Thirty-two metres
+  a second on the way to Venus moved the pass to 1.02 radii — which is also the limit of this
+  machinery, because a resonant chain wants *two* things at once, a safe pass distance and a
+  particular period, and one knob can hold one target. Two-dimensional targeting — a magnitude
+  and a direction, the B-plane pair a real design solves — is what the seven-flyby Parker needs
+  and this is not yet.
+- **The panel edits it in the units the aim means**: radii of the body for a flyby, days for a
+  period, both bound straight to the value with a `Scale` rather than through a converted local
+  — the toolkit identifies a field by the address of what it edits, and a shared scratch
+  variable would have two control points fighting over one field.
 
 ## Manoeuvre nodes and the prediction
 
