@@ -51,8 +51,15 @@ func TestPickingAMissionLoadsItAndMovesOn(t *testing.T) {
 
 	a.presets.pick(a, i)
 
+	// Picking leads to the mission's own page now, and the editor is what that page
+	// leads to. The configuration is untouched until then.
+	if a.screen != ScreenMission {
+		t.Errorf("screen %d after picking, want the mission page", a.screen)
+	}
+	a.mission.proceed(a)
+
 	if a.screen != ScreenSetup {
-		t.Errorf("screen %d after picking, want setup", a.screen)
+		t.Errorf("screen %d after opening the editor, want setup", a.screen)
 	}
 	if a.cfg.LaunchBody != presets[i].Cfg.LaunchBody || len(a.cfg.Nodes) != len(presets[i].Cfg.Nodes) {
 		t.Error("the configuration is not the one picked")
@@ -176,5 +183,70 @@ func TestFlyStartsOnThePad(t *testing.T) {
 	// And with nothing named at all, the list.
 	if c := newApp(0, false, false); c.screen != ScreenPresets {
 		t.Errorf("with no preset named: screen %d, want the list", c.screen)
+	}
+}
+
+// Every mission has to have its own words. A missing key renders as the key itself, which
+// is the toolkit's habit and a perfectly visible failure — on a screen nobody opens until
+// after the preset has shipped. This is that check, before it ships.
+func TestEveryMissionHasItsOwnWords(t *testing.T) {
+	noSavedSetup(t)
+	for i, p := range sim.Presets() {
+		for _, suffix := range []string{".history", ".here"} {
+			key := missionKey(i) + suffix
+			for _, l := range langOrder {
+				was := lang
+				lang = l
+				if got := T(key); got == key {
+					t.Errorf("%s has no %s in locale %d", p.Name, suffix, l)
+				}
+				lang = was
+			}
+		}
+	}
+	// And the saved row, which has no identifier and needs its own.
+	for _, suffix := range []string{".history", ".here"} {
+		key := missionKey(len(sim.Presets())) + suffix
+		if got := T(key); got == key {
+			t.Errorf("the saved row has no %s", suffix)
+		}
+	}
+}
+
+// The page in the middle has to lead both ways: into the editor with the mission loaded,
+// and back to the list with the row still selected.
+func TestTheMissionPageLeadsBothWays(t *testing.T) {
+	noSavedSetup(t)
+	presets := sim.Presets()
+	i := len(presets) - 1
+
+	a := &App{ui: NewUI(), cfg: presets[0].Cfg}
+	a.presets = NewPresetScreen(0)
+	a.setup = NewSetupScreen(0)
+	a.presets.pick(a, i)
+
+	if a.screen != ScreenMission || a.mission.sel != i {
+		t.Fatalf("screen %d on mission %d after picking row %d", a.screen, a.mission.sel, i)
+	}
+	// Back: the list again, with the row it came from still under the keyboard.
+	a.mission.back(a)
+	if a.screen != ScreenPresets {
+		t.Errorf("back left the screen at %d", a.screen)
+	}
+	if a.presets.sel != i {
+		t.Errorf("the list came back on row %d, want %d", a.presets.sel, i)
+	}
+
+	// Forward: the editor, on that mission.
+	a.presets.pick(a, i)
+	a.mission.proceed(a)
+	if a.screen != ScreenSetup {
+		t.Errorf("the editor did not open: screen %d", a.screen)
+	}
+	if a.setup.preset != i {
+		t.Errorf("the editor is on preset %d, want %d", a.setup.preset, i)
+	}
+	if a.cfg.Rocket.Payload != presets[i].Cfg.Rocket.Payload {
+		t.Error("the editor got a different mission")
 	}
 }

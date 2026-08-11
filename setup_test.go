@@ -116,3 +116,37 @@ func TestTheAtmosphereColumnFollowsTheSelectedBody(t *testing.T) {
 			"the body's gravity did not reach the profile", overMoon, overEarth)
 	}
 }
+
+// One real frame of the mission page for every mission, which is the cheapest way to know
+// that none of them reads a stale index or divides by a zero on the way to being described.
+// The saved row is included: its configuration comes from the store, and having none is a
+// state it has to survive rather than crash on.
+func TestEveryMissionPageDraws(t *testing.T) {
+	initFonts()
+	noSavedSetup(t)
+	img := ebiten.NewImage(1500, 940)
+
+	for i := 0; i <= len(sim.Presets()); i++ {
+		a := &App{ui: NewUI(), cfg: sim.Presets()[0].Cfg}
+		a.canvas, a.w, a.h = img, 1500, 940
+		a.mission, a.screen = NewMissionScreen(i), ScreenMission
+
+		a.ui.BeginFrame(img, 1.0/60)
+		a.mission.Update(a, img)
+		a.ui.EndFrame()
+
+		if a.screen != ScreenMission {
+			t.Errorf("row %d left the page by itself, at screen %d", i, a.screen)
+		}
+	}
+
+	// And in a window narrow enough that the figures stack under the prose instead of
+	// sharing the width with it.
+	small := ebiten.NewImage(700, 500)
+	a := &App{ui: NewUI(), cfg: sim.Presets()[0].Cfg}
+	a.canvas, a.w, a.h = small, 700, 500
+	a.mission, a.screen = NewMissionScreen(0), ScreenMission
+	a.ui.BeginFrame(small, 1.0/60)
+	a.mission.Update(a, small)
+	a.ui.EndFrame()
+}

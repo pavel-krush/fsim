@@ -26,6 +26,9 @@ const (
 	// number the model has is a lot to be handed before you have said what you are
 	// trying to fly.
 	ScreenPresets Screen = iota
+	// ScreenMission is what a picked row leads to: what the mission is, before the
+	// editor's four columns of numbers say how it is done.
+	ScreenMission
 	ScreenSetup
 	ScreenFlight
 	ScreenGraphs
@@ -52,6 +55,7 @@ type App struct {
 
 	cfg     sim.Config
 	presets *PresetScreen
+	mission *MissionScreen
 	setup   *SetupScreen
 	flight  *FlightScreen
 	graphs  *GraphScreen
@@ -91,6 +95,8 @@ func (a *App) Update() error {
 	switch a.screen {
 	case ScreenPresets:
 		a.presets.Update(a, a.canvas)
+	case ScreenMission:
+		a.mission.Update(a, a.canvas)
 	case ScreenSetup:
 		a.setup.Update(a, a.canvas)
 	case ScreenFlight:
@@ -160,6 +166,7 @@ func newApp(chosen int, presetNamed, fly bool) *App {
 		cfg: presets[chosen].Cfg,
 	}
 	a.presets = NewPresetScreen(chosen)
+	a.mission = NewMissionScreen(chosen)
 	a.setup = NewSetupScreen(chosen)
 	a.screen = startScreen(presetNamed, fly)
 	if a.screen == ScreenFlight {

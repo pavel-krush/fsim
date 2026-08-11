@@ -234,15 +234,18 @@ func TestTheSavedSetupGetsARowOfItsOwn(t *testing.T) {
 		t.Fatalf("%d rows with a setup saved, want %d", n, len(presets)+1)
 	}
 
-	// A preset row still picks its own preset: nothing shifted.
+	// A preset row still picks its own preset: nothing shifted. Picking leads to the
+	// mission page, and that page is what loads the configuration.
 	a := &App{ui: NewUI()}
 	s.pick(a, 1)
+	a.mission.proceed(a)
 	if a.cfg.Rocket.Payload != presets[1].Cfg.Rocket.Payload {
 		t.Error("row 1 no longer picks the second preset")
 	}
 
 	// And the last row picks what was saved.
 	s.pick(a, len(presets))
+	a.mission.proceed(a)
 	if a.screen != ScreenSetup {
 		t.Errorf("the saved row left the screen at %v", a.screen)
 	}

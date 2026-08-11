@@ -116,6 +116,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `perf.go` | The service readout: what a frame costs, split into physics and everything else |
 | `render.go` | `Rect`, primitives, `Camera` (world metres → pixels, with rotation) and its inverse |
 | `screen_presets.go` | The first screen: the mission list, and nothing else |
+| `screen_mission.go` | The second: what the mission is, in prose from the locale and figures from the config |
 | `store.go` | Saving a setup: JSON in, JSON out, and what a loaded one has to be before it is flown |
 | `store_native.go`, `store_js.go` | Where it is kept — a file in the user's config directory, or `localStorage` |
 | `screen_setup.go` | Four-column parameter form: the body editor, atmosphere, vehicle, keyframes, derived figures, presets |
@@ -780,6 +781,36 @@ what you are trying to fly, so it comes second.
   configuration being replaced — the same trap `loadPreset` documents.
 - **There is no way back to the list**, deliberately: the editor has its own preset dropdown, which is
   the same choice without losing what you have typed.
+
+## The mission page
+
+Picking a row leads here rather than into the editor: what the real mission was, what this
+one does, and the figures worth knowing before flying it. Four columns of every number the
+model has is the *how*; this is the *what*, and it was missing.
+
+- **The prose lives in the locale files**, two keys per mission — `mission.<id>.history` and
+  `mission.<id>.here` — because the physics package holds no text and the identifiers are
+  already the locale keys. `TestEveryMissionHasItsOwnWords` fails on a preset that ships
+  without a description in either language, which is the only way to notice: a missing key
+  renders as the key, on a screen nobody opens until after the preset is shipped.
+- **The figures are read out of the configuration, never flown.** Liftoff mass, stages,
+  payload, thrust-to-weight, ideal Δv, the plan's burns and the time limit are all `Cfg`
+  reads and cost nothing. The grand tour takes half a minute to fly, and nobody is waiting
+  for that to read a paragraph.
+- **The timings in the prose are the tested ones.** T+604 s, 1926 × 1776 km, 37 solar radii:
+  every number quoted in a description is one the mission tests already pin, so the two
+  drift together or not at all.
+- **The prose is capped at a readable measure** (`proseMeasure`, 720 px) instead of being
+  stretched to the window. A 1500 px window would otherwise hand it lines of a hundred and
+  forty characters, which nobody follows back to the start. Under 720 px of body the figures
+  stack under the text instead of squeezing beside it.
+- **The configuration is loaded here, not by the list.** `pick` only decides *which* mission;
+  `proceed` is what replaces `App.cfg` and builds the editor, with the `u.cancel()` every
+  such replacement needs. That keeps the trap in one place instead of two.
+- **`-preset` still skips it**, along with the list: naming a mission means the choice is
+  made, and the description is part of choosing. `-fly` skips the editor as well, as before.
+- **The saved setup has a page too**, with words of its own — it has no history to give — and
+  it survives the store being empty by saying so rather than by crashing.
 
 ## Saving a setup
 

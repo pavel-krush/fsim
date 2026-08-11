@@ -274,6 +274,10 @@ func newShotRunner(dir string, cfg sim.Config) *shotRunner {
 		steps: []shotStep{
 			// The mission list, which is where a run without -preset begins.
 			{name: "0-presets", screen: ScreenPresets},
+			// The mission's own page, which is what a picked row leads to. The
+			// screenshot run jumps straight to it rather than clicking, so the
+			// selection has to be set: -preset chose it and it is the one being flown.
+			{name: "0b-mission", screen: ScreenMission},
 			{name: "1-setup", screen: ScreenSetup},
 			{name: "1b-setup-lang", screen: ScreenSetup, openLang: true},
 			{name: "1b2-setup-presets", screen: ScreenSetup, openPreset: true},

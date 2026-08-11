@@ -100,9 +100,13 @@ func (s *PresetScreen) move(delta, n int) {
 	}
 }
 
-// pick loads a preset and moves on to the setup screen. Everything the editor
-// points into belongs to the configuration, so the screen is built fresh rather
-// than told to change its mind.
+// pick moves on to the mission's own page rather than into the editor. Which mission is
+// picked is all this screen decides; what the mission *is* takes a page of its own, and
+// only after that does anything get loaded into the editor.
+//
+// The configuration is deliberately not touched here. It used to be, and the trap it has
+// to avoid is the same one loadPreset documents: every field in the editor is bound to an
+// address inside the configuration being replaced.
 func (s *PresetScreen) pick(a *App, i int) {
 	presets := sim.Presets()
 
@@ -110,30 +114,17 @@ func (s *PresetScreen) pick(a *App, i int) {
 	// editor gets its own slices to mutate: the vehicle, the layers and the
 	// keyframes are all edited in place, and handing over a shared copy would mean
 	// editing the stored one too.
-	if s.hasSaved && i == len(presets) {
-		cfg, ok, err := loadConfig()
-		if !ok || err != nil {
-			return
-		}
-		a.ui.cancel()
-		s.sel = i
-		a.cfg = cfg
-		// Which preset it came from is not a question a saved setup answers, and
-		// the dropdown has no way to say "none", so it says the first one. The same
-		// small lie the LOAD button in that screen already tells.
-		a.setup = NewSetupScreen(0)
-		a.screen = ScreenSetup
-		return
-	}
-
-	if i < 0 || i >= len(presets) {
+	switch {
+	case s.hasSaved && i == len(presets):
+		// The saved row describes itself; whether it still reads is the mission
+		// page's problem, and it says so if it does not.
+	case i < 0 || i >= len(presets):
 		return
 	}
 	a.ui.cancel()
 	s.sel = i
-	a.cfg = presets[i].Cfg
-	a.setup = NewSetupScreen(i)
-	a.screen = ScreenSetup
+	a.mission = NewMissionScreen(i)
+	a.screen = ScreenMission
 }
 
 // presetRowRect is where row i is drawn.
