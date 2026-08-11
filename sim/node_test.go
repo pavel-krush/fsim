@@ -332,3 +332,71 @@ func TestAPredictionLeavesThePlanAlone(t *testing.T) {
 		t.Errorf("the prediction wrote %+v into the live plan", n)
 	}
 }
+
+// A resonant return, which is the thing control points were built for. A correction on the way
+// to Venus, aimed at the *period the pass will leave* rather than at a delta-v, puts the vehicle
+// on an orbit commensurate with Venus's year — and four of those orbits later it is back where
+// Venus is.
+//
+// The two aims a chain wants, a safe pass and a particular period, are held by two nodes rather
+// than by one: the early one sets the energy and a later one trims the aim. One knob holds one
+// target, and a Newton over both at once does not converge through a close flyby.
+func TestAResonantReturnComesBack(t *testing.T) {
+	base := parkerSolar().Cfg
+	ven := base.System.IndexOf("venus")
+	soi := base.System.Bodies[ven].SOI
+	const venusYear = 224.701 * 86400
+	const want = venusYear * 3 / 4 // four vehicle orbits to three of Venus's
+
+	cfg := base
+	cfg.Nodes = []Node{
+		base.Nodes[0],
+		// Trimmed so there is propellant left to steer with, which is all a correction
+		// needs: the flyby does the reshaping.
+		{T: base.Nodes[1].T, Frame: BurnPrograde, DeltaV: 3300},
+		{T: 20 * 86400, Frame: BurnPrograde, Target: TargetPeriodAfterFlyby,
+			TargetBody: ven, TargetValue: want, Limit: 120, Horizon: 120 * 86400},
+	}
+	cfg.MaxTime = 4 * 365.25 * 86400
+
+	s := New(cfg)
+	var passes []float64
+	best, in := math.Inf(1), false
+	for s.St.T < 800*86400 && !s.St.Done {
+		step := 7200.0
+		if s.St.Center == ven {
+			step = 60
+		}
+		s.FastForward(s.St.T + step)
+		bp, _ := s.Cfg.System.StateAt(ven, s.St.T)
+		d := s.RootPos().Sub(bp).Len()
+		switch near := d < 4*soi; {
+		case near && d < best:
+			best, in = d, true
+		case !near && in:
+			passes, best, in = append(passes, best), math.Inf(1), false
+		}
+	}
+	if in {
+		passes = append(passes, best)
+	}
+
+	n := s.Cfg.Nodes[2]
+	if !n.Solved || n.Missed {
+		t.Fatalf("the energy correction solved %v, missed %v (%g m/s)", n.Solved, n.Missed, n.DeltaV)
+	}
+	if n.DeltaV > 120 {
+		t.Errorf("spent %g m/s against a limit of 120", n.DeltaV)
+	}
+	if len(passes) < 2 {
+		t.Fatalf("%d Venus approaches in 800 days: the resonance did not bring it back",
+			len(passes))
+	}
+	// Both passes clear of the planet, and the second one is the return: four orbits of
+	// three quarters of a Venus year later.
+	for i, d := range passes[:2] {
+		if d < base.System.Bodies[ven].Radius {
+			t.Errorf("approach %d went through Venus", i+1)
+		}
+	}
+}

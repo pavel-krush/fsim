@@ -93,6 +93,11 @@ type Node struct {
 	Limit       float64
 	Horizon     float64
 
+	// Two aims at once — a safe pass distance *and* a particular period, which is what a
+	// resonant return wants — are not held by one node. They are held by two, an early one
+	// for the energy and a late one for the aim, which is how a real design separates them
+	// and needs no two-dimensional solver: see solve.go.
+
 	// Solved says the delta-v in DeltaV came from the solver rather than from an author,
 	// and Missed that the solver could not get there. Both are read by the interface and
 	// neither is an input.
