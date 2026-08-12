@@ -525,6 +525,11 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 
 	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, by, langPickerW, bh})
 	infoRight := r.Right() - 20 - langPickerW
+	// Whatever is left between the last button and the language picker. Both of the things
+	// drawn here are right-aligned against the picker while the buttons grow from the left, so
+	// without this the scrubber's readout printed through the range buttons — which is what the
+	// screenshots of this screen had been showing.
+	room := infoRight - (r.X + 750)
 
 	if g.hover >= 0 && g.hover < len(g.s.Hist) {
 		sm := g.s.Hist[g.hover]
@@ -532,8 +537,10 @@ func (g *GraphScreen) drawFooter(a *App, dst *ebiten.Image, r Rect) {
 			fmtClock(sm.T), fmtEng(sm.Alt, T("unit.m")), speed(sm.Speed),
 			T("common.apoapsis"), altText(sm.ApoAlt),
 			T("common.periapsis"), altText(sm.PeriAlt))
-		drawText(dst, info, fontMono, infoRight, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
-	} else {
+		if textWidth(info, fontMono) <= room {
+			drawText(dst, info, fontMono, infoRight, r.Y+(r.H-fontMono.Size)/2-1, colTextDim, alignRight)
+		}
+	} else if textWidth(T("graph.hint"), fontUISm) <= room {
 		drawText(dst, T("graph.hint"),
 			fontUISm, infoRight, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
 	}

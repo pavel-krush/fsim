@@ -1342,6 +1342,12 @@ the time it was measured**.
   first.** Removing a stage shifts the ones above it down inside the same backing array, so a focused
   field would quietly commit its edit to a different stage. Same reason the preset buttons and the
   mixture picker cancel before replacing their slices.
+- **A hint that shares a bar with buttons is drawn only if it fits.** Both bottom bars grow their
+  buttons from the left and right-align their text against the language picker, so at a plain window
+  width the two meet — and text drawn on top of a button is worse than no text at all. The flight
+  screen's key hint and the graph screen's scrubber readout now measure the gap first and are dropped
+  when there is none, which is also why the screenshots in the README stopped having "GRAPHS" written
+  through them.
 - **Overlays paint onto `UI.Overlay`, not onto the `dst` they were handed.** The setup columns draw into
   a clipped sub-image, so a tooltip drawn into `dst` would be sliced off at the column edge.
 - **An unlabelled `NumField` has no label column.** It used to reserve the strip either way, which left

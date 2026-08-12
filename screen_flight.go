@@ -1794,11 +1794,19 @@ func (f *FlightScreen) drawControls(a *App, dst *ebiten.Image, r Rect) {
 
 	u.LangPicker(dst, Rect{r.Right() - 10 - langPickerW, by, langPickerW, bh})
 
+	// The keyboard hint, in whatever room is left over — and dropped entirely when there is
+	// none. It is right-aligned against the language picker while the buttons grow from the
+	// left, so at a window width the two meet the hint used to print straight through the last
+	// button, which is how every screenshot of this bar came out. A hint nobody can read costs
+	// more than a hint nobody can see.
 	hint := T("flight.hint")
 	if len(f.s.Cfg.System.Bodies) > 1 {
 		hint = T("flight.hintBodies")
 	}
-	drawText(dst, hint, fontUISm, r.Right()-20-langPickerW, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
+	right := r.Right() - 20 - langPickerW
+	if textWidth(hint, fontUISm) <= right-(x+150+10) {
+		drawText(dst, hint, fontUISm, right, r.Y+(r.H-fontUISm.Size)/2, colTextFaint, alignRight)
+	}
 }
 
 // warpLabel writes a warp factor the short way: ×1000 has no business taking
