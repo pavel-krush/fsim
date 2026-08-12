@@ -247,6 +247,8 @@ func (s *Sim) nodeMiss(i int, dv float64) (float64, bool) {
 		return p - n2.TargetValue, ok
 	case TargetPeriod:
 		return c.periodMiss(n2)
+	case TargetStation:
+		return c.stationMiss(n2)
 	}
 	return 0, false
 }
@@ -422,6 +424,46 @@ func parabolicMin(x, y [3]float64) (float64, bool) {
 		return 0, false
 	}
 	return y[1] + a*dx*dx + b*dx, true
+}
+
+// stationMiss flies the horizon out and reports how far the vehicle has slipped from the Lagrange
+// point it was meant to keep station at, signed by which way: negative back down the well towards
+// the body, positive out along the line away from the parent.
+//
+// The sign is the whole point. Unsigned, the offset is V-shaped in delta-v with its bottom at the
+// answer, and there is nothing for a bisection to cross — which is the same trap the Apollo
+// insertions fall into when they are aimed at a distance. Signed along the line, the offset is
+// monotone through zero, and the point's own instability makes it steep: a hundred days turn a
+// metre a second into millions of kilometres.
+func (c *Sim) stationMiss(n Node) (float64, bool) {
+	if n.TargetBody < 0 || n.TargetBody >= len(c.Cfg.System.Bodies) {
+		return 0, false
+	}
+	horizon := n.Horizon
+	if horizon <= 0 {
+		horizon = 100 * 86400
+	}
+	end := c.St.T + horizon
+	for c.St.T < end && !c.St.Done {
+		before := c.St.T
+		step := (end - c.St.T) / 200
+		if step > 2*86400 {
+			step = 2 * 86400
+		}
+		c.FastForward(math.Min(end, c.St.T+step))
+		if c.St.T <= before {
+			break
+		}
+	}
+	l2, ok := c.Cfg.System.LagrangeL2(n.TargetBody, c.St.T)
+	if !ok {
+		return 0, false
+	}
+	b := &c.Cfg.System.Bodies[n.TargetBody]
+	bp, _ := c.Cfg.System.StateAt(n.TargetBody, c.St.T)
+	pp, _ := c.Cfg.System.StateAt(b.Parent, c.St.T)
+	out := bp.Sub(pp).Unit() // away from the parent, which is the line the point sits on
+	return c.RootPos().Sub(l2).Dot(out) - n.TargetValue, true
 }
 
 // periodMiss flies just past the burn and reports the orbital period it left behind, less the

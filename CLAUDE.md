@@ -98,7 +98,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | File | Contents |
 |------|----------|
 | `sim/body.go` | One body: radius plus one of {mass, density, g} derives the rest, plus its orbit about its parent. `Normalize()` is mandatory before using `Mu` |
-| `sim/system.go` | The tree: Keplerian rails, spheres of influence, gravity with the rail correction, add/remove |
+| `sim/system.go` | The tree: Keplerian rails, spheres of influence, gravity with the rail correction, add/remove, and `LagrangeL2` |
 | `sim/solar.go` | The Sun, eight planets and nine major moons, with the real numbers |
 | `sim/atmosphere.go` | Gas composition → molar mass and γ; layers with lapse rates → barometric T/P/ρ/a profile |
 | `sim/rocket.go` | Stages: mass, propellant, thrust, Isp(p), ṁ, cutoff, ignition mode. Tsiolkovsky, TWR |
@@ -108,7 +108,7 @@ the canvas to PNG. It is the only way to look at the interface without a human a
 | `sim/orbit.go` | `Vec2` plus osculating elements from (r, v) |
 | `sim/sim.go` | State, RK4 step, staging and node state machine, verdicts, Δv loss accounting, telemetry, history |
 | `sim/coast.go` | The adaptive step: what a vehicle that is only falling gets instead of 0.02 s, and the time warp's step cap |
-| `sim/presets.go` | Fifteen of them, and the invented Kerbin system. All reach orbit; nine carry a flight plan and seven leave the body they launched from |
+| `sim/presets.go` | Sixteen of them, and the invented Kerbin system. All reach orbit; nine carry a flight plan and seven leave the body they launched from |
 | `main.go` | `App` — the four-screen state machine, `startScreen`, `newApp`, `ebiten.Game` |
 | `theme.go` | Palette and fonts (goregular/gomono, compiled in, no asset files on disk), and what colour each body is |
 | `ui.go` | Immediate-mode toolkit: `NumField`, `Button`, `Radio`, `Checkbox`, `Dropdown`, `Scroll` |
@@ -337,7 +337,7 @@ semi-major axes and eccentricities. The Apollo preset flies in it, launched from
   arrives nose-first. What it does *not* claim is that anything aboard survived.
 - **`refocus` marks the crossings** as `EvSOIEnter`/`EvSOIExit`, with the body in `Event.Body`, and
   `eventLabel` takes the whole event so it can name it.
-- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and fifteen presets is where
+- **`bodyName` and `presetName` are lookups, not switches.** Seventeen bodies and sixteen presets is where
   a switch stops being worth writing; a missing entry renders as the identifier, which is the same safety
   net `T` has. The locale keys *are* the identifiers — `preset.earth-falcon`, `body.mun` — so there is no
   slug-to-key mapping to keep in step with anything.
@@ -658,6 +658,56 @@ searched over both. The landscape is not gentle:
 - **The flight is eight and a quarter days**, so `MaxTime` is nine. Every other preset gets its verdict in
   the first ten minutes and the limit never applies; this one ends on it if the tuning ever drifts.
 
+### JWST, and a place that is not a body
+
+`jwst-l2` goes to the second Lagrange point of the Sun and the Earth, which turns out to be a real
+place in this model rather than something that would have to be faked.
+
+- **Why it exists here at all.** The rails hold the Earth to its orbit and the rail correction takes
+  the Sun's pull *at the Earth's centre* back out of the gravity sum, so what a vehicle out there
+  feels is the restricted three-body problem — and a Lagrange point is a solution of that. Because
+  the rails use the parent's mu alone, the rate to balance against is exactly `sqrt(mu_sun/R³)`, with
+  no bargaining about two-body masses. Measured before anything was built: a vehicle placed on the
+  anti-Sun line with the Earth's own angular rate stays there for 200 days at 1.40–1.45 Mkm, falls
+  towards the Earth from 1.40 and drifts away from 1.50, which is a saddle behaving like one.
+- **`System.LagrangeL2` solves it rather than approximating.** The collinear condition beyond the
+  body is a quintic; Newton from the Hill radius converges in three or four steps and is worth a
+  couple of per cent — 1.4763 Mkm against the Hill radius's 1.4715. It is computed from the
+  *instantaneous* distance to the parent, so the point pulsates with the Earth's eccentric year,
+  which is what it really does.
+- **The point is outside the Earth's sphere of influence** (0.925 Mkm), so the frame out there is the
+  Sun's — which is the honest one for it: in the root's frame nothing is pruned and no rail correction
+  is needed, so the Sun and the Earth both pull and that is the whole problem.
+- **`TargetStation` exists because nothing else could express the insertion.** A few metres a second
+  under and the telescope falls back down the well; a few over and it drifts off along the anti-Sun
+  line. The distance to the Earth cannot say which — it is the same on both sides — and the period is
+  meaningless there, because the osculating heliocentric conic at 1.4 Mkm from the Earth is dominated
+  by the Earth's presence: "make the year a year" wanted 100 m/s of the 113 the telescope carries. So
+  the aim is the *signed offset from the point*, along the line out from the Sun, at the end of the
+  horizon. Falling back reads negative and drifting out positive, so the residual crosses zero once.
+- **The instability is what makes it measurable.** Over 140 days a metre a second grows into millions
+  of kilometres, so the residual is steep and monotone: −100 m/s reads −1.53 Mkm and +300 reads
+  +3.61, and the bisection walks straight to 264. That is the same thing a real halo-orbit targeter
+  does — propagate, see which way it runs, correct.
+- **What the mission is not is a halo orbit.** The real telescope flies a periodic solution around
+  the point and keeps station on two or three metres a second a year; finding one takes a
+  periodic-orbit solver this model does not have. This one is put on the ridge and held there: it
+  arrives at T+33 d and after 18 m/s at T+130 d it stays 0.17–0.59 Mkm from the point with its
+  distance from the Earth never leaving 1.31–1.69 Mkm, on 49 kg of the 300 aboard.
+- **The window is the launch longitude, not the burn time.** The far end of the transfer has to fall
+  on the anti-Sun line, and rotating the pad rotates the whole parking orbit — ten degrees is what
+  puts it 4° off the line, where the burn time alone could only manage 21°. Data about where the
+  mission starts, like Mars's mean anomaly.
+- **Ariane 5 needs Delta IV Heavy's lie.** The Vulcain lights first and the two P241 solids join it,
+  so for the first two minutes all three burn together: stage 1 is the boosters plus the 43 t of core
+  propellant burned while they are attached, stage 2 is the core's remainder, stage 3 is the ESC-A,
+  and the telescope is the last stage because it steers.
+- **The ascent was swept for propellant left rather than for a round orbit**, which is why the parking
+  orbit is 948 × 238 km and not something tidier: the mission needs 3500 m/s of the stage after
+  orbit — 3240 for the transfer and 264 for the insertion — against the 3817 a full ESC-A holds. The
+  transfer burn is eighteen minutes long at 67 kN, so the impulsive arithmetic is off by hundreds of
+  metres a second and the number was swept for.
+
 ### Proton-K, and why not Soyuz
 
 `proton-zvezda` is the July 2000 launch of Zvezda. Proton-K is in here rather than an R-7 because it is
@@ -876,6 +926,10 @@ against the path the flight is actually on, which is what a real trajectory corr
 - **An aim that cannot be reached says so** (`Missed`) and flies its best effort. Where the
   flight then ends up is the honest consequence: a vehicle that failed to aim past something
   may well hit it.
+- **`TargetStation` is the one that makes a Lagrange point reachable at all**, and it is the only
+  target here whose residual is *deliberately* amplified: see the JWST section. What it aims is the
+  signed offset from the point at the end of the horizon, which is monotone through zero because the
+  place is a saddle.
 - **`TargetPeriodAfterFlyby` is the one that makes a resonant return writable at all.** The
   propellant to reshape an orbit by months is not aboard and does not have to be: the flyby
   does the reshaping and the correction only decides where the flyby happens. **Measured:
@@ -980,7 +1034,7 @@ Kerbin needed its second stage set to ignite **at apoapsis**: a 600 km planet we
 
 ## The first screen
 
-`ScreenPresets` is where a run begins: fifteen missions, one per row, and nothing else. What used to be
+`ScreenPresets` is where a run begins: sixteen missions, one per row, and nothing else. What used to be
 first — four columns of every number the model has — is a great deal to be handed before you have said
 what you are trying to fly, so it comes second.
 
