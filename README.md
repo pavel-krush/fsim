@@ -91,12 +91,12 @@ Fifteen launchers, all of which actually reach orbit:
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
 | Earth / Falcon-9 | 304 × 239 km, e = 0.005 | 8995 m/s | 43.2 kPa at 11 km | 5.9 g |
-| Apollo / Saturn V | 192 × 186 km, then past the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
-| Apollo / lunar orbit | 1926 × 1776 km around the Moon | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / Saturn V | 192 × 186 km, then 200 km over the Moon | 8965 m/s to orbit | 43.1 kPa at 11 km | 5.1 g |
+| Apollo / lunar orbit | 1926 × 1776 km around the Moon, by period | 12852 m/s in all | 43.1 kPa at 11 km | 5.1 g |
 | Apollo / free return | round the Moon and home, entry at 10975 m/s | 12157 m/s in all | 305 kPa at 32 km, on the way in | 14.5 g on entry |
-| Apollo / Mars orbit | 95159 × 91139 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
+| Apollo / Mars orbit | 95159 × 91094 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
-| Proton-K / Blok DM | 36106 × 35465 km, geostationary | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
+| Proton-K / Blok DM | 36087 × 35454 km, geostationary by period | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Titan / thick air | 1212 × 1072 km | 4113 m/s | 19.5 kPa at 24 km | 0.68 g |
 | Io / off to Jupiter | 58 × 43 km, then a Jupiter orbit crossing Io's | 2807 m/s in all | — | 0.60 g |
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
@@ -118,14 +118,18 @@ the equator and is handed all 465 m/s of the planet's rotation.
 Apollo is the one preset that can be checked against a flight that happened. Staging at T+159 s against
 the real T+161, insertion at T+604 s into 192 × 186 km against the real T+699 into 186 × 183. Then the
 flight plan fires the translunar injection with what the S-IVB kept back, and two and a half days later
-the vehicle is inside the Moon's sphere of influence, 1791 km over the surface. It leaves again: capturing
+the vehicle is inside the Moon's sphere of influence, 200 km over the surface — where Apollo 11 passed,
+and held there by a control point that costs 7 m/s, because a translunar injection is sharp enough that a
+fixed number that close to the ground would be a crater waiting for the tenth digit to change. It leaves again: capturing
 into lunar orbit needs 670 m/s and there are 540 left, which is the historical reason Apollo carried a
 service module with an engine of its own. The lunar module's ride off the surface is the Moon preset.
 
 The lunar-orbit preset is the same rocket, counted differently. The command and service module stops being
 dead payload and becomes the fourth stage, so the flight plan can brake with the engine Apollo actually
-braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and 725 m/s
-retrograde at the far end for a 1926 × 1776 km lunar orbit with the service module still half full. The
+braked with: translunar injection out of the parking orbit, the spent S-IVB dropped with it, and a
+retrograde burn at the far end for a 1926 × 1776 km lunar orbit with the service module still half full.
+That burn is written as the orbit it is for rather than as a delta-v — a control point on the period, which
+solves to the 725 m/s a search once found. The
 mass on the pad is the same to the kilogram.
 
 The free return is the third Apollo, and the one that fires nothing after the injection. That burn is
@@ -142,7 +146,8 @@ end. It is what the EMPIRE studies asked in 1962 — whether a Saturn V could be
 answer turns on leaving the lander at home. Fifteen tonnes of lunar module off the payload takes the third
 stage from 3668 m/s of throw to 4891, and 3668 does not reach Mars's orbit at any longitude whatever the
 phasing. What flies is the command and service module alone, with the service module as the fourth stage,
-braking 2410 m/s at the far end into a 91139 × 95159 km orbit at e = 0.021. High, because a chemical stack
+braking at the far end into a 91094 × 95159 km orbit at e = 0.021 — a control point on the period again,
+which solves to 2410 m/s. High, because a chemical stack
 arrives with 3 km/s of hyperbolic excess and that is what there is to spend. Mars's mean anomaly in
 `sim/solar.go` is the launch window: unlike every other phase in the system, that one number is data.
 
@@ -242,6 +247,21 @@ real trajectory correction is, and it is the only way a chain of gravity assists
 written down: a plan of fixed numbers is a plan solved for one exact path through the arithmetic,
 and a close flyby amplifies the difference between that path and any other. An aim that cannot be
 reached says so rather than pretending.
+
+Six of the fifteen missions are written that way. The grand tour holds each of its four encounters, and
+Parker its two; Apollo's flyby is held 200 km over the Moon rather than standing off at 1800; the Mun pass
+is held in a band ten metres a second wide that used to be a crater on either side; and three insertion
+burns — Apollo's into lunar orbit, Apollo's into Mars orbit, and Blok DM's into the belt — are written as
+the orbit they are for rather than as the delta-v that produces it, which is what an orbit insertion
+actually is. They solve to 725, 2410 and 1472 m/s: the three figures a search once found, now derived
+instead of remembered.
+
+What an aim cannot do is hold a value the burn cannot straddle. Both Apollo insertions sit at an extremum
+of the miss — every correction, either way, raises the periapsis — so there is no sign change for a
+bisection to find, however close the aim is; that is why those two aim at their period instead. And a
+correction only fixes what happens after it: the difference between two integrations of the same cruise is
+upstream of the encounter, which is why a pass distance can move by radii while the mission's own figures
+do not.
 
 A setup you have edited can be kept: `SAVE` and `LOAD` in the setup header write it to one slot — a file
 in your config directory, or `localStorage` in a browser — and a saved setup then gets a row of its own at

@@ -210,7 +210,20 @@ func apolloSaturn() Preset {
 			// by search, the same way the pitch programmes were: the Moon has to
 			// be somewhere specific when the vehicle arrives, and the window is
 			// not a thing to guess at.
-			Nodes: []Node{{T: 15325, Frame: BurnPrograde, DeltaV: 3162}},
+			Nodes: []Node{
+				{T: 15325, Frame: BurnPrograde, DeltaV: 3162},
+				// The flyby as an aim, ten hours after the injection. A translunar
+				// injection is sharp — two metres a second move the closest approach by
+				// two thousand kilometres — so this preset used to pass 1791 km clear
+				// rather than the 200 km that scored best: a preset that turns into a
+				// crater when the integrator changes in the tenth digit is not a preset.
+				// A control point removes that objection, because the pass is *held*
+				// rather than hoped for, so it now passes where Apollo 11 passed.
+				{T: 40000, Frame: BurnRadialOut, Target: TargetFlybyPeriapsis,
+					TargetBody:  sys.IndexOf("moon"),
+					TargetValue: -(sys.Bodies[sys.IndexOf("moon")].Radius + 200e3),
+					Limit:       20, Horizon: 4 * 86400},
+			},
 
 			TargetOrbit: 185000,
 			// Six days, because the plan above runs for four. The old hour only
@@ -248,13 +261,26 @@ func apolloLunar() Preset {
 		Ignition: IgniteOnNode,
 	})
 
-	// Translunar injection, then the braking burn at the far end. Both times and
-	// both delta-v figures were found by search — an insertion burn of five and a
-	// half minutes is nothing like the impulse a textbook would hand you, so it has
-	// to start before the closest approach and be sized against the real thing.
+	// Translunar injection, then the braking burn at the far end. The injection's time and
+	// delta-v were found by search — an insertion burn of five and a half minutes is nothing like
+	// the impulse a textbook would hand you, so it has to start before the closest approach and
+	// be sized against the real thing.
+	//
+	// The braking burn is written as the orbit it is for rather than as the number that produces
+	// it: a control point on the *period*, solved when the vehicle gets there. It comes out at
+	// 725 m/s, which is what the search that found the old number found.
+	//
+	// An aim on the approach *distance* was tried first and does not work here, which is worth
+	// writing down. The natural approach is the deepest one the plan can make — every correction,
+	// either way, raises the first periapsis — so the miss is V-shaped with its bottom at zero
+	// delta-v and a bisection has no sign change to find. Aimed a little higher it solves for a
+	// metre and a half a second, and then a fixed insertion arriving four hundred kilometres
+	// shallower leaves a 2581 x 804 km ellipse where this mission's orbit is 1926 x 1776, at an
+	// eccentricity of 0.26 against 0.02.
 	cfg.Nodes = []Node{
 		{T: 15325, Frame: BurnPrograde, DeltaV: 3162, Separate: true},
-		{T: 286000, Frame: BurnRetrograde, DeltaV: 725},
+		{T: 286000, Frame: BurnRetrograde, Target: TargetPeriod,
+			TargetValue: lunarOrbitPeriod, Limit: 1200, Horizon: 4 * 3600},
 	}
 	return p
 }
@@ -344,7 +370,18 @@ func apolloMars() Preset {
 	// of hyperbolic excess and 2410 m/s is what the service module can spend on it.
 	cfg.Nodes = []Node{
 		{T: 4500, Frame: BurnPrograde, DeltaV: 3690, Separate: true},
-		{T: 16104985, Frame: BurnRetrograde, DeltaV: 2410},
+		// The braking burn, written as the orbit it is for rather than as the number that
+		// happens to produce it: a control point on the *period*, solved when the vehicle
+		// arrives. This is the preset where five metres a second either side of the injection
+		// was the difference between an orbit and a crater — 3700 m/s hits Mars, 3690 passes at
+		// 95209 km, and the gradient through the encounter is some 7000 km per m/s — so the
+		// injection above ships the value that fails gracefully rather than the one that scores
+		// best. An aim on the arrival *distance* cannot help: the nominal arrival sits on a peak
+		// of the miss, so the solver can only hold something to one side of it, and the braking
+		// burn is sized for the arrival it has. Aiming the period instead adapts the burn to
+		// whatever arrival turns up, which is what an orbit insertion is.
+		{T: 16104985, Frame: BurnRetrograde, Target: TargetPeriod,
+			TargetValue: marsOrbitPeriod, Limit: 3000, Horizon: 6 * 3600},
 	}
 
 	cfg.TargetOrbit = 190000
@@ -586,8 +623,13 @@ func protonGeo() Preset {
 				{T: 3630, Frame: BurnPrograde, DeltaV: 422, Separate: true},
 				// Blok DM takes the far side up to the belt...
 				{T: 3750, Frame: BurnPrograde, DeltaV: 2016},
-				// ...and five and a half hours later, rounds the orbit off up there.
-				{T: 22711, Frame: BurnPrograde, DeltaV: 1472},
+				// ...and five and a half hours later, rounds the orbit off up there — written as
+				// a control point on the period, because that is what geostationary *means*. The
+				// number it replaces was tuned by hand against |period − sidereal day| and got
+				// within 0.03% of it; this says the figure and solves for the burn, which comes
+				// out at the same 1472 m/s.
+				{T: 22711, Frame: BurnPrograde, Target: TargetPeriod,
+					TargetValue: siderealDay, Limit: 2000, Horizon: 4 * 3600},
 			},
 			TargetOrbit: 35786000,
 			// Two days, against a plan that finishes in six and a quarter hours: a
@@ -1161,6 +1203,14 @@ func kerbinMun() Preset {
 	// bought with another 7.
 	cfg.Nodes = []Node{
 		{T: 2000, Frame: BurnPrograde, DeltaV: 868},
+		// And a control point that holds the pass where the transfer put it, which is what
+		// takes the knife edge out: the injection above is a fixed number, and a fixed number
+		// is right for exactly one path through the arithmetic. The aim is the 110 km the
+		// transfer already makes, so it costs almost nothing to hold — and if anything
+		// upstream moves, the correction pays for the difference rather than the mission.
+		{T: 6000, Frame: BurnRadialOut, Target: TargetFlybyPeriapsis,
+			TargetBody: sys.IndexOf("mun"), TargetValue: 1.552 * sys.Bodies[sys.IndexOf("mun")].Radius,
+			Limit: 30, Horizon: 8 * 3600},
 		{T: 18312, Frame: BurnRetrograde, DeltaV: 350},
 	}
 	cfg.MaxTime = 12 * 3600
@@ -1218,3 +1268,16 @@ func kerbinAscent() Preset {
 		},
 	}
 }
+
+// lunarOrbitPeriod is the orbit apollo-lunar brakes into, and siderealDay is what a geostationary
+// orbit is. Both are what the control points doing those burns aim at, in place of the delta-v
+// figures a search once found — 725 m/s and 1472, which are what they come out as.
+const (
+	lunarOrbitPeriod = 19291.7
+	siderealDay      = 86164.0905
+)
+
+// marsOrbitPeriod is the orbit apollo-mars brakes into, written as its period because that is
+// what the control point doing the braking aims at. It is the orbit the hand-tuned 2410 m/s
+// bought — some 95000 x 91000 km — kept so that the mission is the one it always was.
+const marsOrbitPeriod = 911000.0

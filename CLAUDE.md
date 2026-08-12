@@ -403,7 +403,9 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
   way of the engine above it.
 - **The insertion burn is five and a half minutes long**, so it is nothing like the impulse a textbook
   hands you: it has to start 200 s *before* closest approach and be sized against the integrated result,
-  not against `v_peri − v_circ`. Found by search, like everything else here: T+286000 s and 725 m/s give
+  not against `v_peri − v_circ`. Its *time* was found by search and its size is now a control point on the
+  orbital period — "brake until the period is this" rather than a number that happens to produce it, which
+  is what an orbit insertion is; it solves to 725 m/s, the figure the search found. T+286000 s and 725 m/s give
   1926 × 1776 km at e = 0.021 where the run ends, with the service module still half full. A lunar orbit is
   perturbed enough that those two numbers are a snapshot rather than a constant: the apoapsis swings through
   some 150 km over the days that follow, so one instant is the best anything here can quote.
@@ -620,6 +622,11 @@ bookkeeping detail. Io's is 7840 km — four and a third radii — so:
   time. With 364 m/s of hyperbolic excess against a body of μ = 6.5e10 the grazing impact parameter is
   486 km, so the *whole* of 851–861 m/s hits: focusing swallows anything closer. Another 7 m/s buys the
   miss, and past that the periapsis climbs about 20 km per m/s.
+- **Which is exactly the knife edge a control point is for.** The transfer stays the fixed 868 m/s and an
+  aim an hour later holds the pass at the 110 km it makes, so the ten-metre-a-second band between a flyby
+  and a crater stops being something the preset has to land in by luck. It solves to **0.00 m/s** on the
+  nominal flight — the aim is what the plan already does — and the whole authority is there for the case
+  where something upstream has moved.
 - **The verdict on the way through was `OutcomeReturned`**, before the braking burn was added — swing past
   the Mun, come back to Kerbin, re-enter. The free-return verdict turned up in a preset that was not trying
   to be one, which is the sort of thing that suggests it was the right shape.
@@ -709,10 +716,13 @@ second and the third.
   empties itself at the first periapsis and the plan then needs the engine above it, so `checkNodes` drops
   any spent stage it is sitting on before looking for propellant. Carrying a dead stage into a burn is not
   something a flight does; blocking the whole mission over it is not something this should do.
-- **The measure of geostationary is the period, not the altitude.** The tuner scored candidates on
-  |period − sidereal day| rather than on eccentricity, which moved the last burn by 2 m/s and the answer
-  from 0.11% off to under a tenth of one. It reads 0.03% at the end of the run, and drifts the way every
-  other perturbed orbit here does. `TestProtonGeoPresetReachesTheBelt` asserts half a per cent.
+- **The measure of geostationary is the period, not the altitude — so the last burn says the period.** It
+  is a control point on it now rather than a hand-tuned figure: the tuner used to score candidates on
+  |period − sidereal day| and got within 0.03%, and the aim states the day itself and solves for the burn,
+  which comes out at the same 1472 m/s. What it reads at the *end* of the run is 0.08% off rather than
+  0.03%, and that is honest rather than worse: the belt is perturbed, the aim nails the period at the burn,
+  and the hand-tuned number was picked for where the figure happened to be read.
+  `TestProtonGeoPresetReachesTheBelt` asserts half a per cent either way.
 - **"Burn what is left" is written as the number, not as a huge one.** The first node asks for 422 m/s
   because that is exactly what 3.3 t buys at that mass, so the tank runs dry as the burn ends either way.
   The tuner used 9999 to find it; a preset should not ship with a magic number standing in for a
@@ -722,22 +732,24 @@ second and the third.
 
 ### The flyby preset
 
-The preset carries one node: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking
-orbit, on what the S-IVB kept back. It enters the Moon's sphere of influence at **T+2.63 days**, passes
-**1791 km** over the surface and leaves again at T+4.0 days.
+The preset carries two nodes: a prograde translunar injection at T+15325 s of 3162 m/s, out of the parking
+orbit on what the S-IVB kept back, and a control point ten hours later that holds the pass. It enters the
+Moon's sphere of influence at **T+2.61 days**, passes **200 km** over the surface and leaves again at
+T+3.95 days.
 
-- **The time and the delta-v were found by search**, the same way the pitch programmes were. The Moon has
-  to be somewhere specific when the vehicle arrives, and a window is not a thing to guess at.
+- **The injection's time and delta-v were found by search**, the same way the pitch programmes were. The
+  Moon has to be somewhere specific when the vehicle arrives, and a window is not a thing to guess at.
 - **A translunar injection is sharp: two metres a second moves the closest approach by two thousand
-  kilometres.** That is why the preset aims 1800 km clear of the surface rather than at the 200 km that
-  scored best — a preset that turns into a crater when the integrator changes in the tenth digit is not a
-  preset. `TestApolloPresetReachesTheMoon` asserts a wide band for the same reason.
+  kilometres.** That is why the preset used to stand off 1800 km rather than aim at the 200 km that scored
+  best — a preset that turns into a crater when the integrator changes in the tenth digit is not a preset.
+  A control point removes the objection rather than the risk: the pass is *held*, for 7 m/s, so it now
+  flies where Apollo 11 flew and `TestApolloPresetReachesTheMoon` asserts 200 km rather than a wide band.
 - **It is a flyby because the S-IVB cannot do better.** Capturing from that approach needs some 670 m/s and
   it has 540 left — which is the historical reason Apollo carried a service module with its own engine, and
   exactly what `apollo-lunar` models by making that module a stage. Same rocket, same approach, different
   bookkeeping.
 - **The osculating lunar orbit at the crossing can read as bound** while the integrated path is a flyby:
-  at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed 1791 km
+  at entry the two-body hyperbola said 59 km *below* the surface and the real trajectory passed clear
   above it. Over a 60,000 km approach with the Earth still pulling, that is the difference between a
   conic and a trajectory.
 
@@ -844,6 +856,23 @@ against the path the flight is actually on, which is what a real trajectory corr
   and the cure is what real navigation does: another correction, closer in. Note that a
   prograde correction has almost no leverage on a miss distance late in an approach — a radial
   one does.
+- **An aim can only hold a value the delta-v can straddle, and that decides which missions get one.** The
+  solver brackets `[−Limit, +Limit]` and needs a sign change; where the plan's natural outcome is an
+  *extremum* of the miss there is none, however close the aim is. Both Apollo insertions are like that:
+  every correction, either way, raises the first periapsis, so the miss is V-shaped with its bottom at zero
+  delta-v — `apollo-lunar` aimed at its own approach reported a miss at 20 m/s, and aimed a little higher it
+  solved for 1.7 m/s and then left a 2581 x 804 km ellipse where the mission's orbit is 1926 x 1776.
+  `apollo-mars` is the same shape upside down: its arrival sits on a peak, an aim just under it has two
+  roots too close together for the bracket to sample, and an aim further off lands on a distant root — at a
+  limit of 40 it solved to 28 m/s, moved the arrival four thousand kilometres and the braking burn stopped
+  capturing at all.
+- **What works for those two is to aim the quantity the mission is about**, which is the orbit rather than
+  the approach: a control point on the *period* adapts the burn to whatever arrival turns up, and that is
+  what an orbit insertion is. `apollo-lunar` solves to 725 m/s, `apollo-mars` to 2410 and `proton-geo` to
+  1472 — the three figures a search once found, now written as the orbits they were for.
+- **A wide limit is not free.** The bracket spans it, so on a jagged miss — a hundred and fifty days of
+  cruise, say — a generous budget finds a distant root and a narrow one keeps the answer next to the
+  nominal path. Sizing it is a statement about which correction is wanted, not just about propellant.
 - **An aim that cannot be reached says so** (`Missed`) and flies its best effort. Where the
   flight then ends up is the honest consequence: a vehicle that failed to aim past something
   may well hit it.
