@@ -732,27 +732,21 @@ func TestVoyagerTourFliesPastFourPlanets(t *testing.T) {
 	s := New(p.Cfg)
 	s.FastForward(p.Cfg.MaxTime)
 
-	// The verdict is deliberately not asserted. Flown in one jump the Neptune pass tips
-	// the trajectory out of the system; flown in the jumps a screenshot script makes, the
-	// same pass leaves it just bound. Both are the same tour: see below.
-
 	want := []struct {
 		name             string
 		earliest, latest float64 // years
 	}{
 		{"jupiter", 1.5, 2.5},
-		{"saturn", 4.0, 5.5},
-		{"uranus", 11.0, 14.0},
-		{"neptune", 22.0, 26.0},
+		{"saturn", 4.0, 5.0},
+		{"uranus", 11.5, 13.0},
+		{"neptune", 20.5, 22.5},
 	}
 
-	// Why the times are asserted and the verdict is not. The chain is chaotic: FastForward
-	// lands exactly on the instant it is asked for, so it takes a partial step where
-	// Advance would carry the remainder, and a pass at ten radii amplifies that last bit
-	// into thousands of kilometres by the next encounter. Thousands of kilometres is
-	// nothing against a sphere of influence — Neptune's is half an astronomical unit — so
-	// *which planets are met, and when* is solid to a fraction of a per cent. Whether the
-	// last pass adds quite enough to leave the system is not.
+	// The encounters are now *held* by a control point apiece rather than left to the chain,
+	// which is what makes them worth asserting tightly. Without them this tour is only true at
+	// the step size it was tuned on: integrated finely it passes Uranus at 167 radii on the
+	// wrong side and misses Neptune by 894 million kilometres. See TestTheTourHoldsHowever-
+	// ItIsAdvanced, which is the claim in its own right.
 
 	// Planets only. The departure threads the Moon's sphere of influence on the way out,
 	// which is a real encounter and not one the tour was aimed at.
@@ -784,7 +778,7 @@ func TestVoyagerTourFliesPastFourPlanets(t *testing.T) {
 
 	// Each pass has to be a pass and not a collision, and close enough to be one at
 	// all. The history is coarse inside a flyby, so this is a bound and not a
-	// measurement: the numbers it is bounding are 41, 165, 34 and 18 radii.
+	// measurement: the numbers it is bounding are 41, 161, 10 and 127 radii.
 	for _, e := range s.Events {
 		if e.Kind != EvSOIEnter || !planet(e.Body) {
 			continue
@@ -806,19 +800,18 @@ func TestVoyagerTourFliesPastFourPlanets(t *testing.T) {
 }
 
 // Parker is the fastest thing here, the only one that spends its energy going down, and the one
-// whose mission is a chain rather than a trajectory: three Venus flybys walk the perihelion from
-// 39 solar radii to 23.7.
+// whose mission is a chain rather than a trajectory: two Venus flybys walk the perihelion from
+// 39 solar radii to 29.
 //
-// The flybys are aims rather than numbers — control points that re-solve when the moment arrives —
-// which is what makes this chain reproducible where the grand tour's is not. The delta-v each one
-// takes is asserted because it is the whole claim: 12, 33 and 94 m/s out of the 178 the
-// spacecraft's hydrazine carries.
+// The flybys are aims rather than numbers — control points that re-solve when the moment arrives
+// — and what that buys is measured in TestTheParkerChainHoldsHoweverItIsAdvanced: the mission's
+// own figures come out the same whether the flight is flown in hourly steps or in one jump.
 func TestParkerReachesTheCorona(t *testing.T) {
 	p := parkerSolar()
 	s := New(p.Cfg)
 	// Flown in one jump and read out of the events afterwards, which is both cheaper and
 	// stricter than polling: the encounters are where refocus said they were.
-	s.FastForward(1250 * 86400)
+	s.FastForward(p.Cfg.MaxTime)
 
 	ven := s.Cfg.System.IndexOf("venus")
 	var venusPasses []float64
@@ -827,16 +820,16 @@ func TestParkerReachesTheCorona(t *testing.T) {
 			venusPasses = append(venusPasses, e.T/86400)
 		}
 	}
-	if len(venusPasses) != 3 {
-		t.Fatalf("%d Venus encounters at %v days, expected three", len(venusPasses), venusPasses)
+	if len(venusPasses) != 2 {
+		t.Fatalf("%d Venus encounters at %v days, expected two", len(venusPasses), venusPasses)
 	}
-	for i, want := range []float64{46, 495, 1169} {
+	for i, want := range []float64{45, 495} {
 		if d := venusPasses[i]; math.Abs(d-want) > 10 {
 			t.Errorf("flyby %d at T+%.0f d, expected T+%.0f", i+1, d, want)
 		}
 	}
 
-	// Every aim reached, and inside what the hydrazine holds.
+	// Both aims reached, and inside what the hydrazine holds.
 	total := 0.0
 	for i, n := range s.Cfg.Nodes {
 		if n.Target == TargetNone {
@@ -860,15 +853,88 @@ func TestParkerReachesTheCorona(t *testing.T) {
 		best = math.Min(best, h.Pos.Len())
 		fastest = math.Max(fastest, h.Speed)
 	}
-	if r := best / sun.Radius; r > 26 {
-		t.Errorf("closest approach %.1f solar radii: three flybys should reach 23.7", r)
+	if r := best / sun.Radius; r > 30 {
+		t.Errorf("closest approach %.1f solar radii: two flybys should reach 29.2", r)
 	}
-	if fastest < 110000 {
-		t.Errorf("fastest %.0f m/s, and 23.7 radii is worth 119 km/s", fastest)
+	if fastest < 105000 {
+		t.Errorf("fastest %.0f m/s, and 29 radii is worth 107 km/s", fastest)
 	}
 	// Inside Mercury's orbit, which is the point of the mission.
 	if merc := s.Cfg.System.Bodies[s.Cfg.System.IndexOf("mercury")]; best > merc.SemiMajor {
 		t.Errorf("closest approach %.3g m does not reach inside Mercury's orbit (%.3g m)",
 			best, merc.SemiMajor)
+	}
+}
+
+// What the corrections are *for*: a mission whose figures do not depend on how the flight was
+// advanced. A chain of flybys amplifies everything, and the arithmetic of a coast is something to
+// amplify — the same Parker flight advanced in hourly steps and in twelve-hourly ones arrives at
+// Venus 11 radii apart. With an aim on each pass the mission comes out the same anyway: both
+// encounters, the same perihelion, the same speed.
+//
+// Before the aims this was not true of either chained preset, and for the grand tour it was not
+// true at all: finely integrated it lost Uranus and Neptune entirely.
+func TestTheParkerChainHoldsHoweverItIsAdvanced(t *testing.T) {
+	type result struct {
+		encounters         int
+		periRadii, fastKps float64
+	}
+	run := func(poll float64) result {
+		s := New(parkerSolar().Cfg)
+		ven := s.Cfg.System.IndexOf("venus")
+		peri, fastest := math.Inf(1), 0.0
+		for s.St.T < s.Cfg.MaxTime && !s.St.Done {
+			if poll <= 0 {
+				s.FastForward(s.Cfg.MaxTime)
+			} else {
+				s.FastForward(s.St.T + poll)
+			}
+			if s.St.Center == 0 {
+				peri = math.Min(peri, s.RootPos().Len())
+				fastest = math.Max(fastest, s.St.Vel.Len())
+			}
+			if poll <= 0 {
+				break
+			}
+		}
+		if poll <= 0 {
+			for _, h := range s.Hist {
+				if h.Center == 0 {
+					peri = math.Min(peri, h.Pos.Len())
+					fastest = math.Max(fastest, h.Speed)
+				}
+			}
+		}
+		n := 0
+		for _, e := range s.Events {
+			if e.Kind == EvSOIEnter && e.Body == ven {
+				n++
+			}
+		}
+		return result{n, peri / s.Cfg.System.Bodies[0].Radius, fastest / 1000}
+	}
+
+	// One jump, hourly, and a couple of days at a time. The last is what a flight at high warp
+	// actually takes.
+	want := run(0)
+	if want.encounters != 2 {
+		t.Fatalf("one jump gave %d Venus encounters", want.encounters)
+	}
+	for _, poll := range []float64{3600, 12 * 3600, 2 * 86400} {
+		got := run(poll)
+		// A radius of perihelion and a couple of kilometres a second: what is being asserted
+		// is that the mission is the same mission, not that two integrations agree bit for
+		// bit — they cannot, and the corrections are what makes that stop mattering.
+		switch {
+		case got.encounters != want.encounters:
+			t.Errorf("advanced %.0f s at a time: %d Venus encounters, against %d in one jump",
+				poll, got.encounters, want.encounters)
+		case math.Abs(got.periRadii-want.periRadii) > 1:
+			t.Errorf("advanced %.0f s at a time: perihelion %.1f solar radii, against %.1f",
+				poll, got.periRadii, want.periRadii)
+		case math.Abs(got.fastKps-want.fastKps) > 2:
+			t.Errorf("advanced %.0f s at a time: %.0f km/s, against %.0f",
+				poll, got.fastKps, want.fastKps)
+		}
 	}
 }

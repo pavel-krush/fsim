@@ -102,7 +102,7 @@ Fifteen launchers, all of which actually reach orbit:
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
 | Moon / no atmosphere | 53 × 48 km | 1976 m/s | — | 0.55 g |
 | Kerbin / KSP-like | 122 × 92 km | 3772 m/s | 38.4 kPa at 9 km | 3.9 g |
-| Parker / into the corona | 23.7 solar radii at 119 km/s, past three Venus flybys | 9308 m/s to orbit, 19.7 km/s in all | 26.7 kPa at 11 km | 8.3 g |
+| Parker / into the corona | 29.2 solar radii at 107 km/s, past two Venus flybys | 9308 m/s to orbit, 19.7 km/s in all | 26.7 kPa at 11 km | 8.3 g |
 | Voyager / the grand tour | Jupiter, Saturn, Uranus, Neptune, then out of the system | 16092 m/s in all | 57.6 kPa at 11 km | 5.0 g |
 | Kerbin / round the Mun | 121 × 111 km around the Mun | 4950 m/s in all | 36.6 kPa at 9 km | 3.7 g |
 
@@ -170,20 +170,27 @@ vehicle is invented; the numbers are Titan's.
 
 Parker is the other direction. It is the only preset that spends its energy going *down*: the
 injection is aimed against the Earth's own motion, so what it buys is not distance but the loss
-of heliocentric angular momentum, and every Venus flyby takes more away. Three of them — at 46,
-495 and 1169 days, each brought round by the resonance the one before it left — walk the
-perihelion from 39 solar radii to 23.7, where the vehicle passes at 119 km/s, four times the
-Earth's orbital speed. The flybys are written as *aims* rather than as burns, so the corrections
-solve themselves in flight: 12, 33 and 94 m/s of the 178 the spacecraft's hydrazine carries. The
-real mission needed seven flybys over seven years to reach 9.9 radii, and bought the rest with
-geometry rather than propellant.
+of heliocentric angular momentum, and every Venus flyby takes more away. Two of them — at 46 and
+495 days, the second brought round by the resonance the first left — walk the perihelion from 39
+solar radii to 29.2, where the vehicle passes at 107 km/s, inside Mercury's orbit. The flybys are
+written as *aims* rather than as burns, so the corrections solve themselves in flight: 12 and 18
+m/s of the 178 the spacecraft's hydrazine carries. That is also what makes the mission's figures
+come out the same however the flight is advanced — hourly, two days at a time, or in one jump.
+A third flyby is not available at any price this vehicle can pay: the next approach passes half a
+million kilometres out. The real mission needed seven flybys over seven years to reach 9.9 radii,
+and bought them with geometry rather than propellant.
 
 The grand tour is the longest flight here and the only one that goes anywhere on borrowed
-energy. One injection out of a parking orbit and four gravity assists: Jupiter at T+1.7
-years, Saturn at 4.3, Uranus at 12.0, Neptune at 22.7, and out past 34 AU by the thirtieth.
-Each pass grows the orbit — 23 AU of aphelion after Jupiter, 30 after Saturn, 58 after
-Uranus — and none of it is thrust: the whole flight spends 16 km/s, of which 9.2 went into
-reaching the parking orbit.
+energy. One injection out of a parking orbit and four gravity assists: Jupiter at T+1.8
+years and 41 radii, Saturn at 4.5 and 161, Uranus at 12.2 and 10, Neptune at 21.3 and 127,
+and out of the system after that. None of it is thrust — the whole flight spends 16 km/s, of
+which 9.2 went into reaching the parking orbit — but each encounter is *held* by a correction:
+10.5 m/s in all, of the 300 the spacecraft's hydrazine carries. That is what makes the tour a tour rather than a
+coincidence: a chain of four assists amplifies everything, including the difference between
+one integration of a twenty-one-year coast and another, and without the corrections this one
+passed Uranus on the wrong side and missed Neptune by 894 million kilometres when it was
+integrated finely. With them the four encounters, the delta-v and the verdict are the same
+whether the flight is advanced in six-hour steps or in one jump of thirty years.
 
 The launcher is the Titan IIIE / Centaur, five stages in a line, which is why it is here
 rather than a Delta: the two solid boosters burn first and alone, so a serial list can

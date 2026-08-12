@@ -440,11 +440,23 @@ The rocket is identical to the kilogram — what differs is the bookkeeping and 
   95209 km. The gradient through the encounter is about 7000 km per m/s, so the preset ships the value that
   fails *gracefully* — a bad periapsis is a worse orbit, an impact is the end of the mission.
 
-### The grand tour, which is four windows solved one after another
+### The grand tour, which is four windows solved one after another and then held
 
 `voyager-tour` is Voyager 2's mission: one injection and four gravity assists, Jupiter to
-Saturn to Uranus to Neptune and out of the system. It is the longest flight here — twenty-four
+Saturn to Uranus to Neptune and out of the system. It is the longest flight here — twenty-one
 years to the last encounter — and the only one that gets where it is going on borrowed energy.
+
+**Every encounter is held by a control point, and that is not a refinement: without them the tour
+was only true at the step size it happened to be tuned on.** Integrated finely — six hours of
+cruise step, a minute inside a sphere of influence — the shipped chain passed Uranus at 167 radii
+on the *wrong side* and missed Neptune by 894 million kilometres. Three coarse advancement schemes
+all agreed with each other and all disagreed with that, which is exactly how a chain of assists
+hides an accuracy problem: everything is amplified equally, so the wrong answer is consistent.
+With an aim on each pass, the four encounters, the delta-v spent and the verdict come out the same
+whether the flight is advanced in six-hour steps, twelve-hour steps, two-day steps or one jump of
+thirty years. The corrections cost **10.5 m/s in total** on the finely integrated flight and 96 on
+the one-jump flight, out of the 300 the hydrazine carries — they are not paying for a manoeuvre, they are paying for the
+difference between one integration of a twenty-one-year coast and another.
 
 - **The windows are solved, not searched.** The mean anomalies in `solar.go` are not an
   ephemeris, so each planet can be *put* where the flight crosses its orbit: fly the
@@ -467,19 +479,22 @@ years to the last encounter — and the only one that gets where it is going on 
   impossible to express. Escape is now a settled verdict — a high-water mark, like the rest —
   with its own `EvEscape` marker, and it is the one settled verdict the clock still binds:
   an orbit has somewhere to be, and a vehicle leaving for good does not.
-- **The four encounters are reproducible and the final verdict is not, which is worth
-  understanding.** `FastForward` lands exactly on the instant asked for, so it takes a partial
-  step where `Advance` would carry the remainder — and a pass at ten radii amplifies that last
-  bit into thousands of kilometres by the next planet. Thousands of kilometres is nothing
-  against a sphere of influence half an astronomical unit across, so *which* planets are met
-  and *when* holds to a fraction of a per cent however the flight is advanced. Whether the
-  Neptune pass adds quite enough to leave the Sun for good does not: one jump says escape, the
-  screenshot script's jumps say a 61 AU ellipse. The test asserts the tour and leaves the
-  verdict alone.
-- **The passes are farther out than the real ones** — 41, 165, 34 and 10 radii against
-  Voyager's 5, 3, 4 and 1 — because these are the four that close *as a chain*. Each one
-  still does its job: the aphelion goes 23 → 30 → 58 AU and Neptune's pass takes it out of
-  the system.
+- **Uranus and Neptune had to be re-solved once the corrections were in, and both of their
+  distances are the middle of a trade rather than the best of anything.** An exact crossing puts
+  Uranus two radii away, and that violent an assist amplifies everything after it: Neptune's phase
+  would not settle against it at all, bouncing between two thousand radii either side over four
+  iterations. Moving Uranus out to thirty tamed the chain and cost the escape, because a weak
+  assist there leaves the vehicle bound before it ever reaches Neptune. **Ten radii is where both
+  hold.**
+- **Neptune's distance is the same trade read from the other end, and its side is not available at
+  any price.** The trajectory arrives on the leading side of Neptune's orbit — which side is a
+  property of the path, not of the phase, so no phase solves it, and the corrections that could
+  bend a path that far are not aboard. A leading pass *takes* energy: at 24 radii it costs 1.5e7
+  of specific energy and the tour ends on an ellipse. At **127 radii** it costs little enough that
+  the escape survives, which is what the mission is for.
+- **The passes are farther out than the real ones** — 41, 161, 10 and 127 radii against
+  Voyager's 5, 3, 4 and 1 — because these are the four that close *as a chain* in one plane. Each
+  one still does its job, and the tour reaches Neptune in 21.3 years against the real 12.
 - **The launcher is a Titan IIIE / Centaur** for the reason Proton-K is a Proton-K: the two
   UA1205 solids burn first and alone, and the core lights after they are gone, so the stack
   is genuinely serial. Five stages, of which the last two are the interesting ones — the
@@ -490,48 +505,78 @@ years to the last encounter — and the only one that gets where it is going on 
   escape asymptote along the Earth's own motion and buys a heliocentric aphelion of 10 AU.
   Half an orbit away the same delta-v buys 1.0 AU. It reaches Jupiter's orbit in 689 days,
   against Voyager 2's 688.
+- **Voyager 2 is the last stage rather than payload**, because a control point needs an engine:
+  721 kg dry, 104 kg of hydrazine, four of its sixteen 0.89 N thrusters. Three and a half newtons
+  against 800 kg is 0.0045 m/s², so a ten metre a second correction takes forty minutes — which is
+  what a trajectory correction manoeuvre actually looked like. The mass is the same either way, so
+  the ascent is bit-for-bit what it was.
+- **Each correction sits well before its encounter but not at the very start of its leg.** The
+  lever is delta-v times the time left, so a thousand days of it turn a metre a second into a
+  useful distance and thirty days of it turn the same metre a second into nothing — while the
+  horizon is what a solve *costs*, since every one of the twenty-seven candidates flies it.
+  Fifteen hundred days of lead is where both ends are comfortable; moving the outer two in from
+  the start of their legs took the whole-tour test from 370 seconds to 197.
+- **It is what the test suite now mostly costs**, and that is worth knowing before wondering why:
+  four solved corrections over a twenty-one-year flight are 197 s in the physics package, and the
+  interface package pays for them again in `TestShotStepsAreInOrderForEveryPreset`, which flies
+  every preset to resolve the capture script's moments. The suite went from about a minute to
+  about nine.
 - **The audits stop at the first verdict rather than flying the mission** (`flyToVerdict`).
-  What they check is the ascent, and a preset whose flight runs for twenty-four years should
-  not cost thirty seconds of wall clock in a test about whether its parking orbit clears the
+  What they check is the ascent, and a preset whose flight runs for twenty-one years should
+  not cost minutes of wall clock in a test about whether its parking orbit clears the
   air. `TestVoyagerTourFliesPastFourPlanets` is the one that flies the whole thing, in a
-  single `FastForward` with the encounters read out of the events afterwards: polling every
-  two days holds the adaptive step down to two days, where left alone it grows to months.
+  single `FastForward` with the encounters read out of the events afterwards.
 
 ### Parker, which spends its energy going down
 
 `parker-solar` is the fastest flight here, the only one where every sign is reversed, and the only
 one whose mission is a *chain* rather than a trajectory: the injection is aimed against the Earth's
-motion and every Venus flyby takes angular momentum away. Three of them walk the perihelion from
-39 solar radii to **23.7, at 119 km/s**.
+motion and every Venus flyby takes angular momentum away. Two of them walk the perihelion from
+39 solar radii to **29.2, at 107 km/s**, inside Mercury's orbit.
+
+**There were three, and the third went when the solver learned to measure a closest approach.**
+It had been fitting a parabola to the distance rather than to its square, and reading the minimum
+off a grid twelve thousand kilometres wide on an aim of eighteen — see the control points section.
+The chain that measurement supported was not there: with the aims honest, the third approach is
+half a million to seven million kilometres out, and nothing aboard closes that. Radial or prograde,
+early in the leg or late, sixty metres a second or a hundred and forty: it stays a miss. Two passes
+are what this vehicle buys, and the figures above are what it gets.
 
 - **The node time is the whole mission.** T+2350 s in the parking orbit puts the escape asymptote
   against the Earth's own motion and drops the heliocentric perihelion to 0.18 AU; half an orbit
   later the same 10.3 km/s buys a perihelion of 0.98 AU and an escape from the system. It is the
   same sweep Voyager's injection needed, read from the other end.
-- **The flybys are aims, not numbers**, and that is what makes this chain reproducible where the
-  grand tour's is not: each control point says which side of Venus to pass and how close, and the
-  delta-v is solved when the moment arrives. Flown in one jump, in 30-day jumps or in 12-hour
-  jumps, the three aims come out at 12.1, 32.9 and 94 m/s and the passes land in the same places.
+- **The flybys are aims, not numbers**, and what that buys is a mission whose figures do not
+  depend on how the flight was advanced: each control point says which side of Venus to pass and
+  how close, and the delta-v is solved when the moment arrives. Flown in one jump, hourly, twelve-
+  hourly or two days at a time, both encounters happen, the aims come out at 12.1 and 17.7 m/s,
+  and the perihelion and top speed agree to a solar radius and a kilometre a second.
+  `TestTheParkerChainHoldsHoweverItIsAdvanced` is that claim.
+- **What the aims cannot hold is the pass distance itself, and the reason is worth knowing.** The
+  same flight advanced hourly and twelve-hourly arrives at Venus 3.0 and 14.4 radii out — a real
+  difference in the flown trajectory, from twenty-six days of coarse cruise steps, not a
+  difference in the reading. A correction only fixes what happens after it, and a late trim solves
+  against its own accurate candidates and reports the pass already on target. The mission survives
+  that; the picture at the encounter does not.
 - **The side is the sign, and it decides everything.** A pass on the negative side takes angular
   momentum away — 0.1728 AU of perihelion becomes 0.1463 at 1.5 radii — and the positive side
   *raises* it, to 0.2330. Closer is more: about five solar radii of perihelion per pass at two
   radii of Venus.
 - **The resonance is what brings it back, and the pass is what sets the resonance.** A pass at
-  −3.0 radii leaves a period of 149.8 days, which is two thirds of Venus's year, so three orbits
-  later the vehicle is back where Venus is; the second pass, at −2.1 radii, leaves 134.9 days —
-  three fifths — and five orbits after that the third pass happens. The aim distances were chosen
-  offline *for their periods*: distance-to-period is monotone and the aim is solved robustly,
-  where aiming a period directly has a branch point at the impact and a bisection cannot be
-  trusted across it.
+  −3.0 radii leaves a period commensurate with Venus's year, so the vehicle is back where Venus is
+  after a few orbits, and the second pass at −2.1 radii is what that buys. The aim distances were
+  chosen offline *for their periods*: distance-to-period is monotone and the aim is solved
+  robustly, where aiming a period directly has a branch point at the impact and a bisection cannot
+  be trusted across it. It is also a knife edge — a tenth of a radius at the first pass moves the
+  next approach by a million kilometres — which is why a third link in the chain does not close.
 - **Corrections go close to the pass, not early.** Sixty days out a burn moves the miss distance
   and barely touches the period. Six hundred days out it is ten times cheaper — and it changes the
   period too, which breaks the resonance and leaves nothing to aim at. The price of doing it late
-  is delta-v: 94 m/s for the third pass against 12 for the first.
-- **Three flybys are what the propellant buys.** The corrections total 139 m/s of the 178 that 52
-  kg of hydrazine carries, and a fourth pass would cost another hundred. The real mission's other
-  four are bought with geometry over years of design, not with thrust. The Star 48BV is dropped
-  before any of this: a solid fires once, so the leftovers trick `proton-zvezda` uses is not
-  available here.
+  is delta-v: 17.7 m/s for the second pass against 12.1 for the first.
+- **Two flybys are what the propellant buys**, and 30 m/s of the 178 that 52 kg of hydrazine
+  carries — the limit is the geometry, not the tank. The real mission's other five are bought with
+  years of design, not with thrust. The Star 48BV is dropped before any of this: a solid fires
+  once, so the leftovers trick `proton-zvezda` uses is not available here.
 - **Delta IV Heavy needed a different lie from Proton-K's.** Three common cores burn together off
   the pad, and a serial list cannot hold that: giving stage 1 the two side boosters alone is a
   thrust-to-weight of 0.79 and the stack sits on the pad. So the split is by *thrust phase* —
@@ -543,9 +588,9 @@ motion and every Venus flyby takes angular momentum away. Three of them walk the
   falling; a vehicle spending three years dropping towards the Sun collects −76 km/s of it. The
   number means what it always meant, but "losses" is the wrong word for the second half of an
   orbit like this one.
-- **It costs the test suite a minute and a half**, which is the honest price of three solves and a
-  three-and-a-half-year flight. `MaxTime` is trimmed to just past the third flyby for the same
-  reason: every full-mission run pays it, the screenshot script included.
+- **`MaxTime` is trimmed to just past the perihelion the second flyby buys** — 700 days, where the
+  mission's figures are read. Every full-mission run pays it, the screenshot script included, and
+  cutting it from three and a half years took the test from ninety seconds to eight.
 
 ### Io, where there is no room
 
@@ -716,7 +761,7 @@ against the path the flight is actually on, which is what a real trajectory corr
   of milliseconds would make the trajectory depend on how busy the machine was, which is the
   one thing nothing here is allowed to depend on.
 - **So the solve is spread over frames instead, and the mission clock stops while it is.** At the
-  fixed step Parker's three corrections cost 10, 13 and 33 seconds inside one frame each — a
+  fixed step Parker's corrections cost 10, 13 and 33 seconds inside one frame each — a
   window that has stopped answering, with no way to draw a word of explanation, because nothing
   reaches the screen until the frame ends. `pumpSolve` flies one candidate per call, the flight
   screen drives it pause or no pause, and the corner says which correction is being worked out
@@ -773,6 +818,27 @@ against the path the flight is actually on, which is what a real trajectory corr
   km of it at cruising speed, coarser than the aim being solved for — and the solver spent its
   precision chasing that instead of the trajectory. With the guard, an aim at 700 km lands at
   693; without it, 682.
+- **And the bound is the full relative speed, not the closing rate,** which had a hole in it
+  exactly where it mattered: at the closest approach nothing is closing at all, so the bound went
+  slack and the minimum was read off whatever the horizon's own cap allowed — twelve thousand
+  kilometres of grid on an aim of eighteen thousand. `d/(|v_rel|·8)` has no such hole and is
+  scale-free: loose far away, tight on the way in, and nothing has to know how big the encounter
+  is. It is what made Parker's first aim mean what it says (3.00 radii against 14.5 before).
+- **The minimum itself is read off a parabola through the three samples around it, fitted to the
+  *square* of the distance.** Past a body at speed the distance is a hyperbola in time,
+  `d = √(b² + v²t²)`, so `d²` is an exact parabola and `d` is not — and fitting `d` does not
+  merely lose accuracy, it *underestimates*: a solve aimed at 17,400 km reported success and flew
+  past at 87,000. Fitting the square costs nothing, since the samples are already flown, and it
+  is what makes an aim at planetary range mean anything at all. Both of these were found by
+  disbelieving a solved aim and measuring where the flight actually went.
+- **A correction can only fix what happens after it, which is a real limit rather than a bug.**
+  The cruise is integrated to a tolerance relative to the distance from the *centre*, which
+  between the planets is an astronomical unit, so twenty-six days of coarse steps put an arrival
+  seventy thousand kilometres off — and a correction ahead of that stretch cannot see it coming.
+  A late trim does not help either: it solves against its own accurate candidate flights and
+  reports the pass already on target. What survives is what the corrections *can* hold, and that
+  turns out to be the mission rather than the picture: Parker's perihelion and speed come out the
+  same at every step size, while the pass distance it reads at the encounter does not.
 - **What is left over is the chaos of the approach itself.** Seven kilometres on seven hundred
   is the amplification between the control point and the encounter two and a half days later,
   and the cure is what real navigation does: another correction, closer in. Note that a
@@ -1389,7 +1455,7 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | one prediction from the parking orbit | 658 ms | **9.5 ms** |
 | predictions during a real-time coast | 2 per second | **none until the path is flown** |
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
-| Parker's three corrections | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
+| Parker's corrections, per solve | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
 | one prediction with a control point ahead | 2419 ms | **23 ms** |
 | and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
 
