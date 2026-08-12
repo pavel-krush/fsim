@@ -167,6 +167,7 @@
   "outcome.suborbital": "SUBORBITAL FLIGHT",
   "outcome.timeout": "TIME LIMIT REACHED",
   "perf.draw": "ui",
+  "perf.draws": "draws",
   "perf.hist": "samples",
   "perf.pred": "pred",
   "perf.sim": "sim",

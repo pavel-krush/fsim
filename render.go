@@ -46,9 +46,88 @@ func strokeRect(dst *ebiten.Image, r Rect, w float64, c color.Color) {
 	vector.StrokeRect(dst, float32(r.X), float32(r.Y), float32(r.W), float32(r.H), float32(w), c, false)
 }
 
+// drawCalls counts anti-aliased vector draws per frame, for measuring. Nothing reads it in a
+// release; it is here because "the interface costs twenty milliseconds" is a claim that needs a
+// number under it.
+var drawCalls int
+
 // line draws a straight segment.
 func line(dst *ebiten.Image, x0, y0, x1, y1, w float64, c color.Color) {
+	drawCalls++
 	vector.StrokeLine(dst, float32(x0), float32(y0), float32(x1), float32(y1), float32(w), c, true)
+}
+
+// Polyline is a curve drawn as *one* stroke rather than as a segment per pair of points, and it is
+// the difference between a trajectory view that runs and one that does not.
+//
+// An anti-aliased line in Ebiten is not a cheap call. `vector.StrokeLine` with antialias on builds a
+// path, strokes it and renders it through the stencil-buffer atlas — per call — where the same
+// function with antialias off is a single batched DrawImage of a white quad. The trajectory view
+// draws thousands of anti-aliased segments when the camera is pulled back: eight planet rails at a
+// hundred and sixty segments each, a trail across the screen, a predicted path of four hundred
+// points. In a browser, where every one of those crosses into WebGL, that was twenty milliseconds a
+// frame of interface time, reported as the whole thing lagging once the vehicle left the planet.
+//
+// One path per curve is one stencil render per curve, with the joins computed once instead of a
+// round cap at both ends of every segment. The points are kept in a reusable buffer because this
+// runs every frame for every rail.
+type Polyline struct {
+	pts  []float32
+	path vector.Path
+}
+
+// Reset empties it for the next curve.
+func (l *Polyline) Reset() { l.pts = l.pts[:0] }
+
+// Add appends a point. Points closer than a pixel to the previous one are dropped: the curves here
+// are sampled in world units, so at any distance most of them land on the same pixel, and a sub-pixel
+// segment costs the same as a long one.
+func (l *Polyline) Add(x, y float64) {
+	if n := len(l.pts); n >= 2 {
+		if math.Abs(x-float64(l.pts[n-2]))+math.Abs(y-float64(l.pts[n-1])) < 1 {
+			return
+		}
+	}
+	l.pts = append(l.pts, float32(x), float32(y))
+}
+
+// Break lifts the pen: what follows starts a new run rather than continuing this one. It is what
+// keeps a line from being drawn across a hole the vehicle did not fly through.
+func (l *Polyline) Break() {
+	if n := len(l.pts); n > 0 && !(math.IsNaN(float64(l.pts[n-2])) && math.IsNaN(float64(l.pts[n-1]))) {
+		nan := float32(math.NaN())
+		l.pts = append(l.pts, nan, nan)
+	}
+}
+
+// Stroke draws whatever has been added, as one path, and empties the buffer.
+func (l *Polyline) Stroke(dst *ebiten.Image, w float64, c color.Color) {
+	defer l.Reset()
+	l.path.Reset()
+	pen := false
+	runs := 0
+	for i := 0; i+1 < len(l.pts); i += 2 {
+		x, y := l.pts[i], l.pts[i+1]
+		if math.IsNaN(float64(x)) {
+			pen = false
+			continue
+		}
+		if !pen {
+			l.path.MoveTo(x, y)
+			pen = true
+			runs++
+			continue
+		}
+		l.path.LineTo(x, y)
+	}
+	if runs == 0 {
+		return
+	}
+	drawCalls++
+	so := &vector.StrokeOptions{Width: float32(w), LineJoin: vector.LineJoinRound}
+	do := &vector.DrawPathOptions{AntiAlias: true}
+	do.ColorScale.ScaleWithColor(c)
+	vector.StrokePath(dst, &l.path, so, do)
 }
 
 // circle draws a filled disc.
@@ -107,13 +186,20 @@ func dashedRing(dst *ebiten.Image, cx, cy, r float64, c color.Color) {
 	if seg > 0.15 {
 		seg = 0.15
 	}
-	for a := 0.0; a < 2*math.Pi; a += seg * 2 {
-		x0 := cx + r*math.Cos(a)
-		y0 := cy + r*math.Sin(a)
-		x1 := cx + r*math.Cos(a+seg)
-		y1 := cy + r*math.Sin(a+seg)
-		line(dst, x0, y0, x1, y1, 1, c)
+	// And never a dash shorter than a couple of pixels: Polyline drops points that land on the
+	// same pixel, so a sub-pixel dash would come out as nothing at all.
+	if r*seg < 2 {
+		seg = 2 / r
 	}
+	// One path with a run per dash rather than a draw per dash: see Polyline. A ring at orbital
+	// scale is two hundred dashes, and each was its own anti-aliased render.
+	var l Polyline
+	for a := 0.0; a < 2*math.Pi; a += seg * 2 {
+		l.Add(cx+r*math.Cos(a), cy+r*math.Sin(a))
+		l.Add(cx+r*math.Cos(a+seg), cy+r*math.Sin(a+seg))
+		l.Break()
+	}
+	l.Stroke(dst, 1, c)
 }
 
 // Camera maps the planet-centred world frame, in metres, onto screen pixels.
