@@ -1,5 +1,7 @@
 package sim
 
+import "math"
+
 // Preset is a ready-to-fly configuration. Name is a stable identifier, not
 // display text: the setup screen translates it.
 type Preset struct {
@@ -68,8 +70,8 @@ func earthISA() []Layer {
 // Presets are the configurations offered on the setup screen.
 func Presets() []Preset {
 	return []Preset{earthFalcon(), apolloSaturn(), apolloLunar(), apolloReturn(), apolloMars(),
-		protonZvezda(), protonGeo(), titanAscent(), ioJupiter(), marsAscent(), moonAscent(),
-		kerbinAscent(), kerbinMun(), voyagerTour(), parkerSolar()}
+		protonZvezda(), protonGeo(), jwstL2(), titanAscent(), ioJupiter(), marsAscent(),
+		moonAscent(), kerbinAscent(), kerbinMun(), voyagerTour(), parkerSolar()}
 }
 
 // DefaultConfig is what the setup screen starts with.
@@ -869,6 +871,126 @@ func titanIIIE() Rocket {
 			// manoeuvre actually looked like. Lit only by the flight plan.
 			{DryMass: 721, PropMass: 104, ThrustVac: 3.56, IspVac: 230, IspSL: 230,
 				Throttle: 1, Ignition: IgniteOnNode},
+		},
+	}
+}
+
+// arianeV is the Ariane 5 ECA that put JWST on its way, and it needs the same lie Delta IV Heavy
+// needs. The Vulcain lights first and the two P241 solids join it, so for the first two minutes all
+// three burn together and a serial list cannot hold that. The split is by *thrust phase*: stage 1 is
+// the boosters plus the core propellant burned while they are attached, stage 2 is the core's
+// remainder on its own engine, stage 3 is the ESC-A, and the telescope is the last stage because it
+// steers.
+func arianeV() Rocket {
+	return Rocket{
+		// No payload of its own: JWST is the last stage.
+		Payload: 0, Cd: 0.35, Diameter: 5.4,
+		Stages: []Stage{
+			// The two EAP solids, 240 t of propellant each, plus the 43 t the Vulcain burns in
+			// the 130 s they are alight. Dry mass is the two booster cases, which is what goes
+			// overboard at separation.
+			{DryMass: 76000, PropMass: 523000, ThrustVac: 15550000, IspVac: 275, IspSL: 262,
+				Throttle: 1, SepDelay: 1},
+			// The EPC core on its own: what is left of 175 t behind one Vulcain 2.
+			{DryMass: 14700, PropMass: 132000, ThrustVac: 1390000, IspVac: 431, IspSL: 310,
+				Throttle: 1, SepDelay: 2, Ignition: IgniteAfterDelay},
+			// ESC-A, one HM7B. Cut off in the parking orbit and relit by the plan for the
+			// transfer, the same leftovers trick proton-zvezda uses.
+			// A hundred seconds of it, which is what the parking orbit needs and no more: what
+			// is left is the transfer and the insertion, and the mission is 3500 m/s of them
+			// against the 3817 a full stage holds. The ascent was swept for propellant left
+			// rather than for a round orbit, which is why the parking orbit is 948 x 238 km.
+			{DryMass: 4540, PropMass: 14900, ThrustVac: 67000, IspVac: 446, IspSL: 446,
+				Throttle: 1, CutoffTime: 100, Ignition: IgniteAfterDelay, IgnitionDelay: 2},
+			// The telescope: 6161 kg of it, of which 300 is hydrazine, on two of its eight 22 N
+			// thrusters. It is 113 m/s in all, which is what the real one carries for the whole
+			// mission — the mid-course corrections and then station keeping for as long as it
+			// lasts. Never lit by the staging sequence: the flight plan is the only thing that
+			// fires it.
+			{DryMass: 5861, PropMass: 300, ThrustVac: 44, IspVac: 230, IspSL: 230,
+				Throttle: 1, Ignition: IgniteOnNode},
+		},
+	}
+}
+
+// jwstL2 is the James Webb Space Telescope's ride to the second Lagrange point of the Sun and the
+// Earth, which is a place this simulator turns out to have.
+//
+// It is a real place here rather than a decoration: the rails nail the Earth to its orbit and the
+// rail correction takes the Sun's pull at the Earth's centre back out of the gravity sum, so what a
+// vehicle out there feels is the restricted three-body problem — and a Lagrange point is a solution
+// of that. `System.LagrangeL2` solves for it rather than approximating: 1.4763 Mkm from the Earth
+// against the 1.4715 the Hill radius would guess, and it pulsates with the Earth's own eccentric
+// orbit because it is computed from the instantaneous distance to the Sun.
+//
+// The mission: Ariane 5 to a parking orbit, the ESC-A's leftovers for the transfer, and then the
+// insertion — which is the interesting part. The point is a *saddle*: a shade under the right
+// insertion and the vehicle falls back down the Earth's well, a shade over and it drifts off along
+// the anti-Sun line, and the difference is a few metres a second. No distance and no period says
+// which side of the ridge the trajectory is on, so `TargetStation` aims the one thing that does —
+// where the vehicle ends up, signed along the line out from the Sun, a hundred and forty days later.
+// The instability is what makes that measurable: over that long a metre a second grows into millions
+// of kilometres, so the residual is steep and monotone and a bisection walks straight to it.
+//
+// What it is not is a halo orbit. The real telescope flies a periodic solution around the point,
+// which costs it two or three metres a second a year to maintain and takes a periodic-orbit solver
+// to find. This one is inserted onto the ridge and held there by corrections: it arrives at T+33 d,
+// and after the correction at T+130 d it stays between 0.17 and 0.59 Mkm of the point with its
+// distance from the Earth never leaving 1.31 to 1.69 Mkm, on 49 kg of the 300 it carries.
+func jwstL2() Preset {
+	sys := SolarSystem()
+	earth := sys.IndexOf("earth")
+	sys.Normalize()
+
+	return Preset{
+		Name: "jwst-l2",
+		Cfg: Config{
+			System: sys, LaunchBody: earth, Body: sys.Bodies[earth],
+			// Ten degrees round from the usual pad, which is this mission's window: rotating the
+			// launch site rotates the whole parking orbit, and the far end of the transfer has to
+			// fall on the anti-Sun line or there is no Lagrange point where the vehicle arrives.
+			// Data about where the mission starts, like Mars's mean anomaly, rather than a fudge
+			// in the plan.
+			LaunchLon: 10 * math.Pi / 180,
+			Rocket:    arianeV(),
+			Program: Program{Keys: []Keyframe{
+				{Time: 0, Pitch: 90},
+				{Time: 12, Pitch: 90},
+				{Time: 50, Pitch: 67},
+				{Time: 88, Pitch: 48.2},
+				{Time: 126, Pitch: 33.2},
+				{Time: 164, Pitch: 21.5},
+				{Time: 202, Pitch: 12.9},
+				{Time: 240, Pitch: 6.9},
+				{Time: 278, Pitch: 3.1},
+				{Time: 316, Pitch: 1},
+				{Time: 354, Pitch: 0.1},
+				{Time: 392, Pitch: 0},
+			}},
+			Nodes: []Node{
+				// The transfer, on what the ESC-A kept back. Ariane's own flight was a direct
+				// injection; this one parks first, like every other preset here, and the burn is
+				// long — 67 kN against twenty-four tonnes is eighteen minutes of it — so the
+				// "impulse at perigee" arithmetic is off by hundreds of metres a second and the
+				// number was found by sweeping instead.
+				{T: 3000, Frame: BurnPrograde, DeltaV: 3240},
+				// The insertion, at the far end and aimed at the point itself. It solves to 264
+				// m/s, which is most of what the stage has left, and drops it — the telescope
+				// flies on alone, which is what the real one does with its upper stage.
+				{T: 51.4 * 86400, Frame: BurnPrograde, Target: TargetStation, TargetBody: earth,
+					Limit: 300, Horizon: 140 * 86400, Separate: true},
+				// And station keeping, on the telescope's own hydrazine: 18 m/s a hundred days
+				// later, aimed at the same point. This is what being at an L2 costs, and it is
+				// the whole reason the mission has propellant aboard at all.
+				{T: 130 * 86400, Frame: BurnPrograde, Target: TargetStation, TargetBody: earth,
+					Limit: 60, Horizon: 140 * 86400},
+			},
+			// The parking orbit the ascent is scored against; the mission's own target is a point
+			// rather than an altitude, which no field here can hold.
+			TargetOrbit: 200000,
+			// Nine months, which is a hundred days of station keeping past the arrival. The run
+			// ends while the telescope is still where it was put.
+			MaxTime: 260 * 86400,
 		},
 	}
 }

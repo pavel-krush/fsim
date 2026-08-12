@@ -73,6 +73,22 @@ const (
 	// the correction only decides where the flyby happens. A few metres a second a hundred
 	// million kilometres out is worth kilometres of aim at the planet.
 	TargetPeriodAfterFlyby
+	// TargetStation keeps station near TargetBody's second Lagrange point, and it exists
+	// because nothing else can express that. The point is a saddle: a shade under the right
+	// insertion and the vehicle falls back down the well, a shade over and it drifts off along
+	// the anti-Sun line, and neither the distance to anything nor any period says which side of
+	// the ridge the trajectory is on. What does is where the vehicle *ends up*, so this aims the
+	// signed offset from the point — measured along the line out from the parent, at the end of
+	// Horizon — at TargetValue metres, which is normally zero. Falling back reads negative and
+	// drifting out reads positive, so the residual crosses zero once and a bisection can find it.
+	//
+	// The instability is what makes it work: over a hundred days a metre a second of error grows
+	// into millions of kilometres, so the measurement is enormously sensitive in exactly the
+	// direction the solve needs. It is the same thing a real halo-orbit targeter does — propagate,
+	// see which way it runs, correct.
+	TargetStation
+	// TargetKinds is how many there are, which is what the interface's cycle button counts with.
+	TargetKinds
 )
 
 // Node is one scheduled burn, or one control point.

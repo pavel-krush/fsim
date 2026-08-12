@@ -983,3 +983,91 @@ func TestTheParkerChainHoldsHoweverItIsAdvanced(t *testing.T) {
 		}
 	}
 }
+
+// The Lagrange point exists in this model, and this is what says so. The rails hold a body to its
+// orbit and the rail correction takes its parent's pull at that centre back out of the gravity sum,
+// which leaves a vehicle nearby feeling the restricted three-body problem — and an L2 is a solution
+// of that. Solved rather than approximated: the collinear condition is a quintic and Newton from the
+// Hill radius converges in a few steps, which is worth a couple of per cent.
+func TestTheLagrangePointIsWhereItShouldBe(t *testing.T) {
+	sys := SolarSystem()
+	sys.Normalize()
+	earth := sys.IndexOf("earth")
+	l2, ok := sys.LagrangeL2(earth, 0)
+	if !ok {
+		t.Fatal("the Earth has no L2")
+	}
+	ep, _ := sys.StateAt(earth, 0)
+	d := l2.Sub(ep).Len()
+	hill := ep.Len() * math.Cbrt(sys.Bodies[earth].Mu/(3*sys.Bodies[0].Mu))
+	if math.Abs(d-hill)/hill > 0.02 {
+		t.Errorf("L2 at %.4g m against a Hill radius of %.4g: more than two per cent apart", d, hill)
+	}
+	// And it is on the far side from the Sun, which is the whole difference between L1 and L2.
+	if out := l2.Sub(ep).Unit().Dot(ep.Unit()); out < 0.999 {
+		t.Errorf("L2 is %.3f along the anti-Sun line, and it should be on it", out)
+	}
+	// The root has no parent and therefore no Lagrange points, which has to be said rather than
+	// crashed into.
+	if _, ok := sys.LagrangeL2(0, 0); ok {
+		t.Error("the Sun was given an L2")
+	}
+}
+
+// JWST gets to the point and stays there, which is two claims: the transfer arrives on the anti-Sun
+// line at the right distance, and the insertion — aimed at the point rather than sized by hand —
+// holds it against an instability that would otherwise throw it out within months.
+func TestJwstKeepsStationAtL2(t *testing.T) {
+	p := jwstL2()
+	s := New(p.Cfg)
+	earth := s.Cfg.System.IndexOf("earth")
+
+	var arrive float64
+	offLo, offHi := math.Inf(1), 0.0
+	gapLo, gapHi := math.Inf(1), 0.0
+	for s.St.T < p.Cfg.MaxTime && !s.St.Done {
+		s.FastForward(s.St.T + 6*3600)
+		l2, ok := s.Cfg.System.LagrangeL2(earth, s.St.T)
+		if !ok {
+			t.Fatal("no L2 to measure against")
+		}
+		ep, _ := s.Cfg.System.StateAt(earth, s.St.T)
+		gap := s.RootPos().Sub(ep).Len()
+		if arrive == 0 && gap > 1.4e9 {
+			arrive = s.St.T
+		}
+		// Measured from the first correction onwards: before it the vehicle is still climbing.
+		if s.St.T > 140*86400 {
+			offLo = math.Min(offLo, s.RootPos().Sub(l2).Len())
+			offHi = math.Max(offHi, s.RootPos().Sub(l2).Len())
+			gapLo, gapHi = math.Min(gapLo, gap), math.Max(gapHi, gap)
+		}
+	}
+	t.Logf("arrived at 1.4 Mkm at T+%.1f d; after the correction the offset from L2 ran %.2f to %.2f Mkm and the gap from the Earth %.2f to %.2f Mkm",
+		arrive/86400, offLo/1e9, offHi/1e9, gapLo/1e9, gapHi/1e9)
+
+	if arrive/86400 < 25 || arrive/86400 > 45 {
+		t.Errorf("reached 1.4 Mkm at T+%.1f d; the real telescope took 29", arrive/86400)
+	}
+	if offHi > 1.0e9 {
+		t.Errorf("wandered %.2f Mkm from the point: that is not keeping station", offHi/1e9)
+	}
+	// And it never comes back down the well, which is what falling off the wrong side of the
+	// saddle looks like.
+	if gapLo < 1.0e9 {
+		t.Errorf("came back to %.2f Mkm from the Earth", gapLo/1e9)
+	}
+	// Both aims solved, and inside what the telescope carries: 300 kg of hydrazine is 113 m/s,
+	// and the insertion is the upper stage's business rather than the telescope's.
+	for i, n := range s.Cfg.Nodes {
+		if n.Target == TargetNone {
+			continue
+		}
+		if !n.Solved || n.Missed {
+			t.Errorf("aim %d solved %v, missed %v", i, n.Solved, n.Missed)
+		}
+	}
+	if left := s.St.Prop[len(s.St.Prop)-1]; left < 200 {
+		t.Errorf("%.0f kg of hydrazine left of 300: station keeping should be cheaper than that", left)
+	}
+}

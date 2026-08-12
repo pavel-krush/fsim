@@ -18,7 +18,7 @@ a working simulator.
 
 ![The mission list](docs/presets.png)
 
-*Fifteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
+*Sixteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
 take. Clicking one reads it: what the real mission was, what this one does here, and the figures worth
 knowing before flying it, all read off the configuration rather than flown. Clicking it again, or Enter,
 opens the editor on it; naming one on the command line skips the list entirely.*
@@ -93,7 +93,7 @@ aimed rather than hoped for, and the correction that held it cost 7 m/s.*
 
 ## Presets
 
-Fifteen launchers, all of which actually reach orbit:
+Sixteen launchers, all of which actually reach orbit:
 
 | | orbit | Δv spent | max q | peak |
 |---|---|---|---|---|
@@ -104,6 +104,7 @@ Fifteen launchers, all of which actually reach orbit:
 | Apollo / Mars orbit | 95159 × 91094 km around Mars, T+186 d | 15030 m/s in all | 43.0 kPa at 11 km | 5.2 g |
 | Proton-K / Zvezda | 513 × 408 km, the station's altitude | 9485 m/s | 31.9 kPa at 11 km | 3.7 g |
 | Proton-K / Blok DM | 36087 × 35454 km, geostationary by period | 13282 m/s | 31.9 kPa at 11 km | 3.7 g |
+| Ariane 5 / JWST to L2 | station at the Sun–Earth L2, 1.5 Mkm out | 12954 m/s in all | 61.3 kPa at 10 km | 6.4 g |
 | Titan / thick air | 1212 × 1072 km | 4113 m/s | 19.5 kPa at 24 km | 0.68 g |
 | Io / off to Jupiter | 58 × 43 km, then a Jupiter orbit crossing Io's | 2807 m/s in all | — | 0.60 g |
 | Mars / light launcher | 249 × 195 km | 4511 m/s | 0.2 kPa at 13 km | 1.4 g |
@@ -157,6 +158,25 @@ braking at the far end into a 91094 × 95159 km orbit at e = 0.021 — a control
 which solves to 2410 m/s. High, because a chemical stack
 arrives with 3 km/s of hyperbolic excess and that is what there is to spend. Mars's mean anomaly in
 `sim/solar.go` is the launch window: unlike every other phase in the system, that one number is data.
+
+JWST is the one that goes somewhere that is not a body at all. The second Lagrange point of the Sun
+and the Earth turns out to exist in this model rather than needing to be faked: the rails hold the
+Earth to its orbit and the rail correction takes the Sun's pull at the Earth's centre back out of the
+gravity sum, so a vehicle out there feels the restricted three-body problem, and an L2 is a solution
+of that. It comes out 1.4763 million kilometres from the Earth — solved from the collinear condition
+rather than approximated, and pulsating with the Earth's own eccentric year.
+
+Ariane 5 to a parking orbit, the upper stage's leftovers for the transfer, and 1.5 million kilometres
+in 33 days against the real 29. The insertion is where it gets interesting, because the point is a
+*saddle*: a few metres a second under and the telescope falls back down the Earth's well, a few over
+and it drifts off along the anti-Sun line, and neither a distance nor a period says which side of the
+ridge the trajectory is on. So the burn is aimed at the point itself — the signed offset from it a
+hundred and forty days later — which is monotone in delta-v precisely because the place is unstable,
+and it solves to 264 m/s. One correction of 18 m/s at T+130 days then holds the telescope between
+0.17 and 0.59 million kilometres of the point, never letting it back inside 1.31 million from the
+Earth, on 49 kg of the 300 it carries. What that is not is a halo orbit: the real telescope flies a
+periodic solution around the point for two or three metres a second a year, and finding one takes a
+solver this model does not have.
 
 Proton-K is here because it is *serial* — three stages in a line — and a list of stages can describe that
 honestly. The R-7 family cannot be done that way: Vostok and Soyuz strap four boosters around a core and
@@ -255,7 +275,7 @@ written down: a plan of fixed numbers is a plan solved for one exact path throug
 and a close flyby amplifies the difference between that path and any other. An aim that cannot be
 reached says so rather than pretending.
 
-Six of the fifteen missions are written that way. The grand tour holds each of its four encounters, and
+Seven of the sixteen missions are written that way. The grand tour holds each of its four encounters, and
 Parker its two; Apollo's flyby is held 200 km over the Moon rather than standing off at 1800; the Mun pass
 is held in a band ten metres a second wide that used to be a crater on either side; and three insertion
 burns — Apollo's into lunar orbit, Apollo's into Mars orbit, and Blok DM's into the belt — are written as

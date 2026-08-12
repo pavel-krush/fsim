@@ -115,6 +115,58 @@ func (s *System) Period(i int) float64 {
 	return 2 * math.Pi * math.Sqrt(b.SemiMajor*b.SemiMajor*b.SemiMajor/mu)
 }
 
+// LagrangeL2 is where body i's second Lagrange point is at time t, relative to the root, and
+// whether there is one at all — the root has no parent to have Lagrange points about.
+//
+// It is a real place in this model rather than a decoration. The rails nail a body to its orbit
+// and the rail correction takes the parent's pull at that body's centre back out of the sum, so
+// what a vehicle near the body feels is the restricted three-body problem, which is what a
+// Lagrange point is a solution of. And because the rails use the parent's mu alone, the angular
+// rate to balance against is exactly sqrt(mu_parent/R^3) — no bargaining about two-body masses.
+//
+// Solved rather than approximated. The collinear condition beyond the body is
+//
+//	mu_p/(R+r)^2 + mu_i/r^2 = w^2 (R+r),   w^2 = mu_p/R^3
+//
+// which is a quintic in r; Newton from the Hill radius R(m/3M)^(1/3) converges in three or four
+// steps. R is the *instantaneous* distance to the parent, so on an eccentric orbit the point
+// pulsates with the body, which is what it really does.
+func (s *System) LagrangeL2(i int, t float64) (Vec2, bool) {
+	b := &s.Bodies[i]
+	if b.Parent < 0 || b.Mu <= 0 {
+		return Vec2{}, false
+	}
+	mup := s.Bodies[b.Parent].Mu
+	if mup <= 0 {
+		return Vec2{}, false
+	}
+	bp, _ := s.StateAt(i, t)
+	pp, _ := s.StateAt(b.Parent, t)
+	rel := bp.Sub(pp)
+	R := rel.Len()
+	if R <= 0 {
+		return Vec2{}, false
+	}
+	w2 := mup / (R * R * R)
+
+	r := R * math.Cbrt(b.Mu/(3*mup)) // the Hill radius, which is the answer to a few per cent
+	for range 6 {
+		d := R + r
+		f := mup/(d*d) + b.Mu/(r*r) - w2*d
+		df := -2*mup/(d*d*d) - 2*b.Mu/(r*r*r) - w2
+		if df == 0 {
+			break
+		}
+		step := f / df
+		if r-step <= 0 {
+			r /= 2
+			continue
+		}
+		r -= step
+	}
+	return bp.Add(rel.Unit().Scale(r)), true
+}
+
 // StateAt returns body i's position and velocity relative to the root, m and
 // m/s. The root itself is always at rest at the origin.
 func (s *System) StateAt(i int, t float64) (pos, vel Vec2) {

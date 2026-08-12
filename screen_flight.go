@@ -783,7 +783,7 @@ func (f *FlightScreen) drawAimRow(a *App, dst *ebiten.Image, r Rect, n *sim.Node
 	}
 
 	if u.Button(dst, Rect{r.X, r.Y, 104, 20}, nodeTargetName(n.Target), ButtonNormal) {
-		n.Target = sim.TargetFlybyPeriapsis + (n.Target-sim.TargetFlybyPeriapsis+1)%3
+		n.Target = sim.TargetFlybyPeriapsis + (n.Target-sim.TargetFlybyPeriapsis+1)%sim.TargetKinds
 	}
 	// The body the aim is about. Only one is offered when there is only one, which is what
 	// a single-planet configuration is.
@@ -806,6 +806,12 @@ func (f *FlightScreen) drawAimRow(a *App, dst *ebiten.Image, r Rect, n *sim.Node
 	case sim.TargetPeriod, sim.TargetPeriodAfterFlyby:
 		u.NumField(dst, Rect{r.X + 208, r.Y, 104, 20}, "", &n.TargetValue,
 			NumOpt{Unit: T("unit.d"), Scale: 86400, Dec: 2, Min: 0, Max: 1e12})
+	case sim.TargetStation:
+		// An offset from the point, along the line out from the parent, in millions of
+		// kilometres: radii of the Earth would be a number nobody can judge at a million
+		// kilometres out, and zero — the point itself — is what it normally says.
+		u.NumField(dst, Rect{r.X + 208, r.Y, 104, 20}, "", &n.TargetValue,
+			NumOpt{Unit: T("unit.Mkm"), Scale: 1e9, Dec: 2, Min: -1e12, Max: 1e12})
 	default:
 		u.NumField(dst, Rect{r.X + 208, r.Y, 104, 20}, "", &n.TargetValue,
 			NumOpt{Unit: T("unit.radii"), Scale: b.Radius, Dec: 2, Min: -1e12, Max: 1e12})
@@ -817,6 +823,8 @@ func aimValueText(n *sim.Node, b *sim.Body) string {
 	switch n.Target {
 	case sim.TargetPeriod, sim.TargetPeriodAfterFlyby:
 		return fmt.Sprintf("%s %s", formatNum(n.TargetValue/86400, 2), T("unit.d"))
+	case sim.TargetStation:
+		return fmt.Sprintf("%s %s", formatNum(n.TargetValue/1e9, 2), T("unit.Mkm"))
 	}
 	return fmt.Sprintf("%s %s", formatNum(n.TargetValue/b.Radius, 2), T("unit.radii"))
 }
@@ -835,6 +843,8 @@ func aimSummary(n *sim.Node, sys *sim.System) string {
 		return fmt.Sprintf(T("node.aimPeriodSum"), aimValueText(n, b))
 	case sim.TargetPeriodAfterFlyby:
 		return fmt.Sprintf(T("node.aimResonanceSum"), bodyName(b.Name), aimValueText(n, b))
+	case sim.TargetStation:
+		return fmt.Sprintf(T("node.aimStationSum"), bodyName(b.Name), aimValueText(n, b))
 	}
 	return fmt.Sprintf(T("node.aimFlybySum"), bodyName(b.Name), aimValueText(n, b))
 }
@@ -848,6 +858,8 @@ func nodeTargetName(t sim.NodeTarget) string {
 		return T("node.aimPeriod")
 	case sim.TargetPeriodAfterFlyby:
 		return T("node.aimResonance")
+	case sim.TargetStation:
+		return T("node.aimStation")
 	}
 	return T("node.aimFlyby")
 }
