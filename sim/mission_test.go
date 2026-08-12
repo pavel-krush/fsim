@@ -64,6 +64,13 @@ func TestApolloPresetReachesTheMoon(t *testing.T) {
 	periselene := math.Inf(1)
 	for !s.St.Done && s.St.T < 5*86400 {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 		if s.St.Center == moon {
@@ -93,11 +100,14 @@ func TestApolloPresetReachesTheMoon(t *testing.T) {
 	if arrived/86400 < 2 || arrived/86400 > 4 {
 		t.Errorf("arrived at T+%.2f days; a transfer this size takes two to four", arrived/86400)
 	}
-	// Wide, because a translunar injection is famously sharp: two metres a second
-	// of delta-v moves the closest approach by a couple of thousand kilometres.
-	// The preset aims for 1800 km, well clear of the surface on purpose.
-	if periselene < 300000 || periselene > 6000000 {
-		t.Errorf("periselene %.0f km, expected a pass of a few thousand", periselene/1000)
+	// Tight, because the pass is *held* rather than hoped for: a control point aims it and
+	// solves the delta-v when the moment arrives. That is what lets this preset fly where
+	// Apollo flew — 200 km — instead of standing off at 1800: a translunar injection is
+	// famously sharp, two metres a second move the closest approach by a couple of thousand
+	// kilometres, and a fixed number that close to the surface would be a crater waiting for
+	// the tenth digit to change.
+	if periselene < 150000 || periselene > 260000 {
+		t.Errorf("periselene %.0f km, and the aim says 200", periselene/1000)
 	}
 	// It is a flyby, and it has to be: capturing into lunar orbit from here needs
 	// some 670 m/s and the S-IVB has 540 left, which is the historical reason
@@ -257,6 +267,13 @@ func TestApolloLunarPresetEntersLunarOrbit(t *testing.T) {
 
 	for !s.St.Done && s.St.T < 5*86400 {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 	}
@@ -451,6 +468,13 @@ func TestApolloReturnPresetComesHome(t *testing.T) {
 	var entryV, entryAng float64
 	for !s.St.Done {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 		if s.St.Center == moon {
@@ -521,6 +545,13 @@ func TestApolloMarsPresetEntersMarsOrbit(t *testing.T) {
 	var enteredSOI, leftEarth float64
 	for !s.St.Done && s.St.T < 200*86400 {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 		if leftEarth == 0 && s.St.Center == 0 {
@@ -602,6 +633,13 @@ func TestKerbinMunPresetEntersMunOrbit(t *testing.T) {
 	peri := math.Inf(1)
 	for !s.St.Done && s.St.T < 12*3600 {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 		if s.St.Center == 1 {
@@ -683,6 +721,13 @@ func TestIoPresetLeavesForJupiter(t *testing.T) {
 	last := s.St.Center
 	for !s.St.Done && s.St.T < 30*86400 {
 		if s.advanceOne(s.plannedStepUncapped()) <= 0 {
+			// A step that took no time is either the end of the flight or a control point
+			// that has just come due — the solve holds the clock until it is finished, and
+			// breaking out here would leave the mission stopped at its own correction.
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 		if s.St.Center != last {

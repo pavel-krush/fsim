@@ -36,6 +36,10 @@ func runFor(s *Sim, dt float64) {
 	end := s.St.T + dt
 	for !s.St.Done && s.St.T < end {
 		if s.advanceOne(s.plannedStep()) <= 0 {
+			if s.job != nil {
+				s.finishSolve()
+				continue
+			}
 			break
 		}
 	}
@@ -196,6 +200,10 @@ func TestPredictionMatchesTheFlight(t *testing.T) {
 	for !live.St.Done && live.St.T < last.T {
 		h := math.Min(live.plannedStep(), last.T-live.St.T)
 		if live.advanceOne(h) <= 0 {
+			if live.job != nil {
+				live.finishSolve()
+				continue
+			}
 			break
 		}
 	}
