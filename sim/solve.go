@@ -304,6 +304,14 @@ func (c *Sim) flyPastBody(n Node, wantPeriod bool) (dist, period float64, ok boo
 	best, bestSign := math.Inf(1), 1.0
 	rising := 0
 	prev := math.Inf(1)
+	// The last three samples, for the parabola below. The step is bounded by the closing rate,
+	// which goes slack exactly where it is needed: at the closest approach the vehicle is not
+	// closing at all, so the bound falls back to the horizon's own and the minimum is read off
+	// a grid coarser than the aim — five radii of it on a Jupiter approach, and the error is
+	// second order in that, some 22,000 km. Sampling harder would cost flights; fitting the
+	// three samples already flown costs nothing.
+	var ts, ds [3]float64
+	seen := 0
 	for c.St.T < end && !c.St.Done {
 		bp, bv := c.Cfg.System.StateAt(n.TargetBody, c.St.T)
 		rel := c.RootPos().Sub(bp)
@@ -314,8 +322,15 @@ func (c *Sim) flyPastBody(n Node, wantPeriod bool) (dist, period float64, ok boo
 		if step > 5*86400 {
 			step = 5 * 86400
 		}
-		if closing := -rel.Dot(relV) / math.Max(d, 1); closing > 0 {
-			if reach := d / (closing * 8); reach < step {
+		// Sample the encounter at a fraction of the time it takes to cross the separation
+		// itself. The bound used to be the *closing* rate, which goes slack exactly where it
+		// is needed — at the closest approach nothing is closing at all, so the step fell back
+		// to the horizon's own and the minimum was read off a grid twelve thousand kilometres
+		// wide, on an aim of eighteen. The full relative speed has no such hole in it, and the
+		// rule is scale-free: far away the step is large, and it tightens as the body is
+		// approached without anything having to know how big the encounter is.
+		if v := relV.Len(); v > 0 {
+			if reach := d / (v * 8); reach < step {
 				step = reach
 			}
 		}
@@ -323,11 +338,29 @@ func (c *Sim) flyPastBody(n Node, wantPeriod bool) (dist, period float64, ok boo
 			step = 0.5
 		}
 
+		ts[0], ts[1], ts[2] = ts[1], ts[2], c.St.T
+		ds[0], ds[1], ds[2] = ds[1], ds[2], d
+		seen++
+
 		if d < best {
 			best = d
 			bestSign = 1
 			if relV.X*rel.Y-relV.Y*rel.X < 0 {
 				bestSign = -1
+			}
+		}
+		// A middle sample lower than both its neighbours has the closest approach between them,
+		// and the vertex of a parabola through the three reads it better than the sample does.
+		//
+		// Fitted to the *square* of the distance, which is what makes it trustworthy: past a
+		// body at speed the distance is a hyperbola in time, d = sqrt(b² + v²t²), so d² is an
+		// exact parabola and d is not. Fitting d itself underestimates the minimum whenever the
+		// samples are wide compared with the encounter — badly enough that a solve aimed at
+		// 17,400 km flew past at 87,000 and reported success.
+		if seen >= 3 && ds[1] <= ds[0] && ds[1] <= ds[2] {
+			sq := [3]float64{ds[0] * ds[0], ds[1] * ds[1], ds[2] * ds[2]}
+			if v, ok := parabolicMin(ts, sq); ok && v > 0 && math.Sqrt(v) < best {
+				best = math.Sqrt(v)
 			}
 		}
 		// Two steps of getting further away is a closest approach that has happened. For a
@@ -365,6 +398,30 @@ func (c *Sim) flyPastBody(n Node, wantPeriod bool) (dist, period float64, ok boo
 	// Unbound counts as infinitely long, which is the far side of every target a resonance
 	// asks for and gives the search somewhere to walk.
 	return dist, period, true
+}
+
+// parabolicMin fits a parabola through three samples and returns its lowest value. False when
+// they do not curve upwards, in which case there is no vertex to speak of and the samples
+// themselves are the best reading available. The caller passes squared distances; see above.
+func parabolicMin(x, y [3]float64) (float64, bool) {
+	// Written about the middle sample, which keeps the arithmetic away from the large absolute
+	// times a mission clock carries.
+	x1, x3 := x[0]-x[1], x[2]-x[1]
+	y1, y3 := y[0]-y[1], y[2]-y[1]
+	den := x1 * x3 * (x1 - x3)
+	if den == 0 {
+		return 0, false
+	}
+	a := (y1*x3 - y3*x1) / den
+	b := (y3*x1*x1 - y1*x3*x3) / den
+	if a <= 0 {
+		return 0, false
+	}
+	dx := -b / (2 * a)
+	if dx < x1 || dx > x3 {
+		return 0, false
+	}
+	return y[1] + a*dx*dx + b*dx, true
 }
 
 // periodMiss flies just past the burn and reports the orbital period it left behind, less the

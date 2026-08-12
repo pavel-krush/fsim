@@ -798,8 +798,8 @@ func moonAscent() Preset {
 // of overlap between the solids burning out and the core igniting.
 func titanIIIE() Rocket {
 	return Rocket{
-		// Voyager 2 itself: 825 kg with its hydrazine.
-		Payload: 825, Cd: 0.3, Diameter: 3.05,
+		// No payload of its own: Voyager 2 is the last stage, because it steers.
+		Payload: 0, Cd: 0.3, Diameter: 3.05,
 		Stages: []Stage{
 			// Two UA1205 solids, 193 t of propellant each.
 			{DryMass: 66912, PropMass: 385554, ThrustVac: 12454000, IspVac: 272, IspSL: 237,
@@ -819,6 +819,13 @@ func titanIIIE() Rocket {
 			// TE-364-4, the kick stage Voyager carried itself, fired by the plan once
 			// the Centaur has gone.
 			{DryMass: 118, PropMass: 1038, ThrustVac: 66700, IspVac: 286, IspSL: 286,
+				Throttle: 1, Ignition: IgniteOnNode},
+			// Voyager 2 itself: 825 kg, of which 104 is hydrazine, on four of its sixteen
+			// 0.89 N thrusters. A stage rather than payload so that the tour's corrections
+			// have something to burn — 3.6 N against 800 kg is 0.0045 m/s², so a ten metre a
+			// second correction takes forty minutes, which is what a trajectory correction
+			// manoeuvre actually looked like. Lit only by the flight plan.
+			{DryMass: 721, PropMass: 104, ThrustVac: 3.56, IspVac: 230, IspSL: 230,
 				Throttle: 1, Ignition: IgniteOnNode},
 		},
 	}
@@ -889,10 +896,10 @@ func voyagerTour() Preset {
 			// The Centaur is relit for the first 5900 m/s and dropped; the TE-364-4
 			// does the last thousand. That reaches Jupiter's orbit in 689 days, which
 			// is what Voyager 2 took.
-			Nodes: []Node{
+			Nodes: append([]Node{
 				{T: 5300, Frame: BurnPrograde, DeltaV: 5900, Separate: true},
-				{T: 5700, Frame: BurnPrograde, DeltaV: 1000},
-			},
+				{T: 5700, Frame: BurnPrograde, DeltaV: 1000, Separate: true},
+			}, voyagerAims(&sys)...),
 			TargetOrbit: 185000,
 			// Thirty years: Neptune is passed in the twenty-third and there is nothing
 			// after it. If the last pass leaves the trajectory unbound the verdict is an
@@ -903,13 +910,67 @@ func voyagerTour() Preset {
 	}
 }
 
+// voyagerAims is one trajectory correction per encounter: a control point that says which side
+// of the planet to pass and how close, with the delta-v solved when the moment arrives.
+//
+// It is what the real mission did — Voyager 2 flew a correction on every leg — and it is what
+// makes a chain of four assists mean anything. Without them the tour is only true at the step
+// the tuning happened to use: integrated finely it passes Uranus at 167 radii on the wrong side
+// and misses Neptune by 894 million kilometres, because a chain amplifies every difference and
+// the arithmetic of a coast is a difference. With them each encounter is *held* where it was
+// designed, whatever the flight is advanced in.
+//
+// The aims are the passes the trajectory already makes, which is why they are nearly free —
+// 0.03, 0.16, 0.6 and a few metres a second out of the 300 the hydrazine carries. A correction
+// here is not paying for a manoeuvre; it is paying for the difference between one integration
+// and another.
+//
+// Each sits well before its encounter, because the lever is delta-v times the time left: a
+// thousand days of it turn a metre a second into a useful distance at arrival, and thirty days of
+// it turn the same metre a second into nothing. Not at the very start of its leg, though — the
+// horizon is what a solve costs, since every candidate flies it, and the outer legs are years
+// long. Fifteen hundred days of lead is where both ends of that trade are comfortable.
+func voyagerAims(sys *System) []Node {
+	aim := func(nodeDay float64, body string, radii, limit, horizonDays float64) Node {
+		i := sys.IndexOf(body)
+		return Node{T: nodeDay * 86400, Frame: BurnRadialOut, Target: TargetFlybyPeriapsis,
+			TargetBody: i, TargetValue: radii * sys.Bodies[i].Radius,
+			Limit: limit, Horizon: horizonDays * 86400}
+	}
+	// The last one is allowed more because it has the most to absorb: twenty years of coast are
+	// upstream of it, so a flight advanced in one thirty-year jump arrives wanting some 86 m/s
+	// where a finely integrated one wants 3. At a limit of forty that case ran out and passed
+	// Neptune at 196 radii instead of 127 — still a flyby, but not the one the preset says.
+	return []Node{
+		aim(400, "jupiter", -41.39, 40, 400),
+		aim(800, "saturn", -161.06, 40, 1000),
+		aim(3000, "uranus", -10.13, 40, 1650),
+		aim(6300, "neptune", 127.00, 90, 1650),
+	}
+}
+
 // The four windows, as converged. They are written out rather than solved at startup
 // because a preset is data: the search that found them lived in a throwaway test.
 const (
 	voyagerJupiterPhase = 1.867744
 	voyagerSaturnPhase  = 2.714653
-	voyagerUranusPhase  = 3.438083
-	voyagerNeptunePhase = 3.884496
+	// Uranus and Neptune were re-solved once the corrections were in, and against a *finely*
+	// integrated flight rather than a coarse one — see voyagerAims for why that mattered.
+	//
+	// Both are the middle of a trade rather than the best of anything. An exact crossing puts
+	// Uranus two radii away, which is a violent assist that amplifies everything after it:
+	// Neptune's phase would not settle against it at all, bouncing between two thousand radii
+	// either side over four iterations. Moving Uranus out to thirty tamed the chain and cost
+	// the escape, because a weak assist there leaves the vehicle bound before it ever reaches
+	// Neptune. Ten radii is where both hold.
+	//
+	// Neptune's own distance is the same trade read from the other end. The trajectory arrives
+	// on the leading side of its orbit — which side is a property of the path, not of the
+	// phase, so no phase solves it — and a leading pass *takes* energy: at 24 radii it costs
+	// 1.5e7 of specific energy and the tour ends on an ellipse. At 127 radii it costs little
+	// enough that the escape survives, which is what the mission is for.
+	voyagerUranusPhase  = 3.440044
+	voyagerNeptunePhase = 4.065369
 )
 
 // deltaIVHeavy is the Delta IV Heavy with a Star 48BV on top, which is what threw the
@@ -984,6 +1045,15 @@ func parkerSolar() Preset {
 	// more of it: at these speeds a pass at two radii is worth some five solar radii of
 	// perihelion. Close to the pass rather than early: a correction far out changes the
 	// *period* as well, which breaks the resonance that brings the vehicle back at all.
+	//
+	// Two flybys, not three. There was a third, and it went when the solver learned to measure
+	// a closest approach properly: it had been fitting a parabola to the distance rather than to
+	// its square — the distance past a body at speed is a hyperbola in time and d² is the exact
+	// parabola — and reading the minimum off a grid twelve thousand kilometres wide on an aim of
+	// eighteen. The chain that measurement supported was not there. What the honest one leaves
+	// is a third approach 0.5 to 7 million kilometres out, and nothing aboard closes that:
+	// radial or prograde, early in the leg or late, 60 m/s or 140, it stays a miss. Two passes
+	// take the perihelion to 29 solar radii at 107 km/s, and that is what this preset claims.
 	aim := func(t, radii, limit float64) Node {
 		return Node{T: t, Frame: BurnRadialOut, Target: TargetFlybyPeriapsis,
 			TargetBody: ven, TargetValue: radii * vr, Limit: limit, Horizon: 120 * 86400}
@@ -1024,13 +1094,15 @@ func parkerSolar() Preset {
 				// Venus years, then five to three.
 				aim(20*86400, -3.0, 150),
 				aim(430*86400, -2.1, 60),
-				aim(1100*86400, -1.8, 150),
 			},
 			TargetOrbit: 190000,
 			// Three and a half years: the third flyby is in the fourth year and there is
 			// nothing after it but the same ellipse going round. Every full-mission run
 			// pays for this one, the screenshot script included.
-			MaxTime: 3.5 * 365.25 * 86400,
+			// Just past the perihelion the second flyby buys, which is where the mission's
+			// figures are read. Every full-mission run pays this, the screenshot script
+			// included, so it is trimmed rather than round.
+			MaxTime: 700 * 86400,
 		},
 	}
 }
