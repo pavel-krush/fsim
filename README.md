@@ -19,7 +19,9 @@ a working simulator.
 ![The mission list](docs/presets.png)
 
 *Fifteen missions, and the identifier each one answers to — the same string `-preset` and `?preset=`
-take. Picking one opens the editor on it; naming one on the command line skips the list entirely.*
+take. Clicking one reads it: what the real mission was, what this one does here, and the figures worth
+knowing before flying it, all read off the configuration rather than flown. Clicking it again, or Enter,
+opens the editor on it; naming one on the command line skips the list entirely.*
 
 ![Setup screen](docs/setup.png)
 
@@ -79,10 +81,15 @@ launch achieved stays on the record even after the vehicle has left.
 
 ![Flight screen](docs/flight.png)
 
+*Max q on the Saturn V, with the flight plan open in the corner. It holds two entries: the translunar
+injection as a delta-v, and a control point below it that says where to pass the Moon — the side and the
+distance — for the simulation to solve when the moment comes.*
+
 ![The Moon in the camera](docs/lunar.png)
 
-*The flight plan holds one burn — the translunar injection — and the predicted path is drawn with it flown
-into it. The Moon's rail is the circle; the vehicle is the speck at the Earth.*
+*Three days later, 200 km over the Moon, which is where Apollo 11 passed. The trail behind is what was
+flown and the line ahead is the prediction; the periapsis in the panel reads 200.03 km because the pass is
+aimed rather than hoped for, and the correction that held it cost 7 m/s.*
 
 ## Presets
 
@@ -276,6 +283,10 @@ the ascent in the first two pixels — so the axis drags and zooms, and there is
 its own.
 
 ![Graphs](docs/graphs.png)
+
+*Six days of the Apollo flyby: the ascent is the spike at the left edge, the ruler above marks every event
+including the Moon's sphere of influence being entered and left, and each column of a trace is drawn as the
+range its samples covered — so a max-q spike between two pixels is still a spike.*
 
 ## Notes
 
