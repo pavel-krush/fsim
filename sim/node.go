@@ -333,6 +333,10 @@ func (s *Sim) Predict(horizon float64, maxPoints int) []PredPoint {
 	// kilometre arc and five times less work. In low orbit that is the difference
 	// between seventeen hundred steps to reach a planned burn and three hundred.
 	c.coastScale = predCoastScale
+	// And the same ceiling a solving copy gets, for the same reason: a drawn path keeps no events
+	// and no history, so the ten-minute cap that exists to place them was buying 1440 steps of a
+	// ten-day horizon and a curve that moves by nothing. See solveCoastCap.
+	c.coastCap = solveCoastCap
 
 	// The prediction is the flight, not a sketch of it: the same integrator on the
 	// same plan. So a burn runs at the same fixed 0.02 s as the real one, and the
