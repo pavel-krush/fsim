@@ -39,11 +39,13 @@ type perf struct {
 	allNs  int64
 	steps  int64
 	simT   float64
+	draws  int64
 
 	// The last completed window.
 	ready         bool
 	windowSteps   int64
 	simMs, allMs  float64
+	drawsPerFrame float64
 	usPerStep     float64
 	stepsPerFrame float64
 	warpDone      float64
@@ -62,6 +64,12 @@ func (p *perf) frame(allNs, simNs, steps int64, simT float64) {
 	p.simNs += simNs
 	p.steps += steps
 	p.simT += simT
+	// Anti-aliased vector draws, which is what the interface half of the frame mostly *is* in a
+	// browser: each one is a stencil render and a trip into WebGL. Worth a number of its own,
+	// because "the trajectory view is slow when zoomed out" turned out to be eight planet rails
+	// at a hundred and sixty separate draws apiece.
+	p.draws += int64(drawCalls)
+	drawCalls = 0
 
 	elapsed := time.Since(p.since)
 	if elapsed < perfWindow || p.frames == 0 {
@@ -71,6 +79,7 @@ func (p *perf) frame(allNs, simNs, steps int64, simT float64) {
 	p.simMs = float64(p.simNs) / float64(p.frames) / 1e6
 	p.allMs = float64(p.allNs) / float64(p.frames) / 1e6
 	p.stepsPerFrame = float64(p.steps) / float64(p.frames)
+	p.drawsPerFrame = float64(p.draws) / float64(p.frames)
 	p.usPerStep = 0
 	if p.steps > 0 {
 		p.usPerStep = float64(p.simNs) / float64(p.steps) / 1e3
@@ -79,7 +88,7 @@ func (p *perf) frame(allNs, simNs, steps int64, simT float64) {
 	p.windowSteps = p.steps
 	p.ready = true
 
-	p.since, p.frames, p.allNs, p.simNs, p.steps, p.simT = time.Now(), 0, 0, 0, 0, 0
+	p.since, p.frames, p.allNs, p.simNs, p.steps, p.simT, p.draws = time.Now(), 0, 0, 0, 0, 0, 0
 }
 
 // pred records the cost of a prediction, which is recomputed at most twice a second
@@ -123,7 +132,8 @@ func (p *perf) lines(warpAsked float64, hist int) []string {
 	out := []string{
 		head,
 		sim,
-		fmt.Sprintf("%s %.2f ms", T("perf.draw"), p.allMs-p.simMs),
+		fmt.Sprintf("%s %.2f ms · %.0f %s", T("perf.draw"), p.allMs-p.simMs,
+			p.drawsPerFrame, T("perf.draws")),
 	}
 	// A tenth either way is the accumulator carrying a remainder between frames, not
 	// the simulation falling behind.

@@ -26,6 +26,16 @@ type FlightScreen struct {
 	paused bool
 	warp   int // index into warpSteps
 
+	// curve is the reusable point buffer every drawn curve goes through — the rails, the trail,
+	// the prediction, the osculating ellipse. See Polyline: one stroke per curve rather than one
+	// per segment is what makes the trajectory view affordable in a browser.
+	curve Polyline
+	// And a handful more for the trail, which fades along its length: one stroke can only carry
+	// one colour, so the fade is quantised into this many and each becomes a path of its own.
+	// Eight steps is indistinguishable from a continuous ramp at these widths and is eight draws
+	// instead of a thousand.
+	trailCurves [trailBuckets]Polyline
+
 	cam Camera
 
 	// The camera. frame is whose coordinates the world is drawn in — -1 follows
@@ -919,18 +929,14 @@ func (f *FlightScreen) drawPrediction(dst *ebiten.Image, cam *Camera, dt float64
 	//
 	// Same thinning as the trail: at orbital zoom hundreds of points land on the same
 	// pixel, and every one of them is still a separate draw.
-	px, py := cam.Project(f.vehiclePos())
-	for i, p := range f.pred {
+	f.curve.Add(cam.Project(f.vehiclePos()))
+	for _, p := range f.pred {
 		if p.T <= f.s.St.T {
 			continue
 		}
-		x, y := cam.Project(f.framePoint(p.Pos, p.Center, p.T))
-		if math.Abs(x-px)+math.Abs(y-py) < 1.2 && i < len(f.pred)-1 {
-			continue
-		}
-		line(dst, px, py, x, y, 1, colPred)
-		px, py = x, y
+		f.curve.Add(cam.Project(f.framePoint(p.Pos, p.Center, p.T)))
 	}
+	f.curve.Stroke(dst, 1, colPred)
 }
 
 // refreshPrediction keeps the cached path up to date and says whether there is one to
@@ -1081,17 +1087,29 @@ func (f *FlightScreen) drawRail(dst *ebiten.Image, cam *Camera, i int) {
 	a, e := b.SemiMajor, b.Ecc
 	minor := a * math.Sqrt(1-e*e)
 
-	const steps = 160
-	px, py := 0.0, 0.0
+	// As many segments as the size on screen earns, and no more: a rail thirty pixels across was
+	// getting a hundred and sixty of them, each an anti-aliased draw of its own.
+	steps := curveSteps(cam.Len(a))
 	for k := 0; k <= steps; k++ {
-		th := 2 * math.Pi * float64(k) / steps
+		th := 2 * math.Pi * float64(k) / float64(steps)
 		p := sim.Vec2{X: a * (math.Cos(th) - e), Y: minor * math.Sin(th)}.Rotate(b.ArgPeri)
-		x, y := cam.Project(parent.Add(p))
-		if k > 0 {
-			line(dst, px, py, x, y, 1, colRail)
-		}
-		px, py = x, y
+		f.curve.Add(cam.Project(parent.Add(p)))
 	}
+	f.curve.Stroke(dst, 1, colRail)
+}
+
+// curveSteps is how many segments a closed curve of that radius in pixels deserves: enough that the
+// chord error stays under half a pixel, bounded at both ends. Sixteen is the floor because anything
+// smaller reads as a polygon; the ceiling is where more segments stop being what costs.
+func curveSteps(rpx float64) int {
+	steps := int(2 * math.Pi * math.Sqrt(math.Max(rpx, 1)/0.5))
+	switch {
+	case steps < 16:
+		return 16
+	case steps > 360:
+		return 360
+	}
+	return steps
 }
 
 // drawBody paints one body at the detail its pixel radius allows.
@@ -1360,17 +1378,13 @@ func (f *FlightScreen) drawOsculating(dst *ebiten.Image, cam *Camera, o sim.Orbi
 	aa, bb := o.SemiMajor, o.SemiMajor*math.Sqrt(1-o.Eccentricity*o.Eccentricity)
 	focus := -o.SemiMajor * o.Eccentricity
 
-	const steps = 180
-	px, py := 0.0, 0.0
+	steps := curveSteps(cam.Len(aa))
 	for i := 0; i <= steps; i++ {
-		th := 2 * math.Pi * float64(i) / steps
+		th := 2 * math.Pi * float64(i) / float64(steps)
 		p := sim.Vec2{X: focus + aa*math.Cos(th), Y: bb * math.Sin(th)}.Rotate(rot)
-		x, y := cam.Project(off.Add(p))
-		if i > 0 {
-			line(dst, px, py, x, y, 1, colOrbit)
-		}
-		px, py = x, y
+		f.curve.Add(cam.Project(off.Add(p)))
 	}
+	f.curve.Stroke(dst, 1, colOrbit)
 }
 
 func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
@@ -1378,16 +1392,11 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	if len(h) < 2 {
 		return
 	}
-	// Only emit a segment once the path has moved a visible distance. The
-	// history is sampled in simulated time, so at orbital zoom thousands of
-	// points collapse into the same few pixels — and every one of them would
-	// still be a separate antialiased draw.
-	//
-	// That mattered more than it looks. Ebiten queues these cheaply and only
-	// resolves the batch when something else draws to the same target, so the
-	// bill landed on the next text draw: by orbit it was nineteen milliseconds
-	// a frame, and it grew for as long as the flight lasted.
-	const minSeg = 1.5
+	// Points closer than a pixel to the last one are dropped by Polyline itself: the history is
+	// sampled in simulated time, so at orbital zoom thousands of points collapse onto the same
+	// few pixels. That mattered more than it looks — before any of this it was nineteen
+	// milliseconds a frame by the time the vehicle reached orbit, and it grew for as long as the
+	// flight lasted.
 
 	// Once in orbit the flight has no end, so neither would the trail: it would
 	// wrap the planet again and again until the whole picture is one smear. One
@@ -1404,36 +1413,72 @@ func (f *FlightScreen) drawTrail(dst *ebiten.Image, cam *Camera) {
 	// The pen lifts over anything flown in another frame rather than drawing a line
 	// across the hole it leaves: the two ends of that hole are hundreds of thousands
 	// of kilometres apart and the vehicle did not fly between them in a straight line.
-	var px, py float64
-	pen := false
-	for i := first; i < n; i++ {
+	//
+	// Older samples fade out, so the recent path stays legible even after the trajectory has
+	// wrapped a long way around the planet — and a leg the picture is letting go of fades out as
+	// a whole on top of that. A stroke carries one colour, so the ramp is quantised into
+	// trailBuckets paths and each is drawn once; the alpha of a bucket is the newest sample in
+	// it, since the ghost fade is a transient of a second and a bit.
+	// Walked with a stride when the history is long, and this is the *other* half of what the
+	// trail costs. Dropping sub-pixel points saves the drawing but not the arithmetic: mapping a
+	// sample into the frame being drawn is a frame shift, and a frame shift is a Kepler solve per
+	// body up the chain. Eight thousand samples of that is fifteen milliseconds a frame, which is
+	// what the interface counter was reading out on an interplanetary flight — and none of it
+	// reaches the screen, because a view fifteen hundred pixels wide cannot show more than that
+	// many points anyway.
+	stride := 1
+	if lim := trailMaxPoints; n-first > lim {
+		stride = (n - first) / lim
+	}
+	var alpha [trailBuckets]float64
+	last := -1
+	for i := first; i < n; i += stride {
+		if i > n-1-stride {
+			i = n - 1 // never skip where the vehicle actually is
+		}
 		w, ok := f.showTrack(h[i])
 		if !ok {
-			pen = false
+			if last >= 0 {
+				f.trailCurves[last].Break()
+			}
+			last = -1
 			continue
 		}
 		x, y := cam.Project(f.trackPoint(h[i]))
-		if !pen {
-			px, py, pen = x, y, true
-			continue
+		bucket := (i - first) * trailBuckets / (n - first)
+		if bucket >= trailBuckets {
+			bucket = trailBuckets - 1
 		}
-		if i < n-1 && math.Abs(x-px)+math.Abs(y-py) < minSeg {
-			continue
+		if bucket != last {
+			// Hand the joint to both sides so the ramp has no gaps in it.
+			if last >= 0 {
+				f.trailCurves[last].Add(x, y)
+				f.trailCurves[last].Break()
+			}
+			last = bucket
 		}
-		// Older samples fade out, so the recent path stays legible even after
-		// the trajectory has wrapped a long way around the planet. And a leg the
-		// picture is letting go of fades out as a whole, on top of that.
-		t := float64(i-first) / float64(n-first)
-		c := color.NRGBA{
+		alpha[bucket] = w
+		f.trailCurves[bucket].Add(x, y)
+	}
+	for b := range f.trailCurves {
+		t := (float64(b) + 0.5) / trailBuckets
+		f.trailCurves[b].Stroke(dst, 1.6, color.NRGBA{
 			uint8(float64(colTrailOld.R) + (float64(colTrail.R)-float64(colTrailOld.R))*t),
 			uint8(float64(colTrailOld.G) + (float64(colTrail.G)-float64(colTrailOld.G))*t),
 			uint8(float64(colTrailOld.B) + (float64(colTrail.B)-float64(colTrailOld.B))*t),
-			uint8(255 * w),
-		}
-		line(dst, px, py, x, y, 1.6, c)
-		px, py = x, y
+			uint8(255 * alpha[b]),
+		})
 	}
 }
+
+// trailMaxPoints is how many history samples the trail looks at in one frame. The view is at most a
+// couple of thousand pixels across and Polyline drops anything sub-pixel, so past this the extra
+// samples cost frame shifts and buy nothing.
+const trailMaxPoints = 2000
+
+// trailBuckets is how many colours the trail's fade is quantised into, which is how many strokes it
+// costs. Eight is indistinguishable from a continuous ramp at a line width of 1.6 px.
+const trailBuckets = 8
 
 // drawEventMarkers pins staging events onto the flown path.
 func (f *FlightScreen) drawEventMarkers(dst *ebiten.Image, cam *Camera, seedX, seedY float64, seeded bool) {

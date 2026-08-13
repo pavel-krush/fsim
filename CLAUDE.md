@@ -1396,6 +1396,31 @@ the time it was measured**.
   first.** Removing a stage shifts the ones above it down inside the same backing array, so a focused
   field would quietly commit its edit to a different stage. Same reason the preset buttons and the
   mixture picker cancel before replacing their slices.
+- **A curve is one stroke, not a stroke per segment, and in a browser that is the whole ball game.**
+  `vector.StrokeLine` with antialiasing builds a path, strokes it and renders it through Ebiten's
+  stencil-buffer atlas — *per call*; the same function with antialiasing off is a single batched
+  `DrawImage` of a white quad. The trajectory view was drawing thousands of anti-aliased segments
+  once the camera pulled back: eight planet rails at a hundred and sixty each, a trail across the
+  screen, four hundred points of predicted path. `Polyline` collects the points and strokes them as
+  one path, which is one stencil render with the joins computed once. Measured per frame, apollo-
+  saturn at system scale: **from about 1300 draws to 35**, and the graph screen — seven traces, two
+  draws per pixel column — **from 18,941 to 125**. Natively it was 17 ms of interface against 15.7,
+  which is why it had to be counted rather than felt: the browser pays per call and the desktop does
+  not.
+- **The readout counts draws now**, next to the interface's milliseconds, because that is the number
+  that predicts how a frame will feel in a browser. It is one integer increment per anti-aliased
+  vector draw.
+- **Segments follow the size on screen** (`curveSteps`): a rail thirty pixels across was getting the
+  same hundred and sixty segments as one three thousand across — wasteful at one end and visibly
+  polygonal at the other. Chord error under half a pixel, floored at 16 and capped at 360.
+- **The trail is walked with a stride, and that is a separate cost from drawing it.** Dropping
+  sub-pixel points saves the draw but not the arithmetic: mapping a sample into the frame being
+  drawn is a frame shift, and a frame shift is a Kepler solve per body up the chain. Eight thousand
+  samples of that is milliseconds a frame and none of it reaches the screen, because a view fifteen
+  hundred pixels wide cannot show more points than it has pixels. `trailMaxPoints` is the cap.
+- **The fade costs a stroke per colour**, so it is quantised into `trailBuckets` = 8. A stroke
+  carries one colour; eight of them are indistinguishable from a continuous ramp at 1.6 px wide, and
+  they replaced about a thousand.
 - **A hint that shares a bar with buttons is drawn only if it fits.** Both bottom bars grow their
   buttons from the left and right-align their text against the language picker, so at a plain window
   width the two meet — and text drawn on top of a button is worse than no text at all. The flight
@@ -1546,6 +1571,8 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
 | Parker's corrections, per solve | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
 | one prediction with a control point ahead | 2419 ms | **23 ms** |
+| draws per frame, trajectory at system scale | ~1300 | **35** |
+| draws per frame, the graph screen | 18,941 | **125** |
 | and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
 
 - **The history is bounded, and it was not.** A settled flight orbits indefinitely, so the record grew

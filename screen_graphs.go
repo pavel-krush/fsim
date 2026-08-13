@@ -31,6 +31,10 @@ type GraphScreen struct {
 	ranged  bool
 	panning bool
 	panT    float64 // time under the cursor when the pan began
+
+	// The reusable point buffer every trace goes through: one stroke per series rather than two
+	// draws per pixel column. See Polyline.
+	curve Polyline
 }
 
 func NewGraphScreen(s *sim.Sim) *GraphScreen {
@@ -448,15 +452,25 @@ func (g *GraphScreen) drawTrace(dst *ebiten.Image, h []sim.Sample, s series,
 	prevX, prevY := col, lo
 	joined := false
 
+	// One path for the whole trace rather than two draws per pixel column. An anti-aliased line
+	// in Ebiten is a stencil render of its own, so seven plots across fourteen hundred pixels was
+	// nineteen thousand of them a frame — fine natively, and the reason the graph screen was
+	// hopeless in a browser. See Polyline.
 	flush := func() {
 		if !joined {
 			prevX, prevY, joined = col, lastY, true
-			line(dst, col, lo, col, hi, 1.5, c)
+			g.curve.Add(col, lo)
+			g.curve.Add(col, hi)
+			g.curve.Break()
 			return
 		}
 		// Join to where the previous column left off, then show the spread.
-		line(dst, prevX, prevY, col, lastY, 1.5, c)
-		line(dst, col, lo, col, hi, 1.5, c)
+		g.curve.Add(prevX, prevY)
+		g.curve.Add(col, lastY)
+		g.curve.Break()
+		g.curve.Add(col, lo)
+		g.curve.Add(col, hi)
+		g.curve.Break()
 		prevX, prevY = col, lastY
 	}
 
@@ -470,6 +484,7 @@ func (g *GraphScreen) drawTrace(dst *ebiten.Image, h []sim.Sample, s series,
 		lastY = y
 	}
 	flush()
+	g.curve.Stroke(dst, 1.5, c)
 }
 
 // axisTime labels the time axis at whatever scale the visible span deserves: an

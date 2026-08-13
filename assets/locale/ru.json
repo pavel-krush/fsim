@@ -167,6 +167,7 @@
   "outcome.suborbital": "СУБОРБИТАЛЬНЫЙ ПОЛЁТ",
   "outcome.timeout": "ЛИМИТ ВРЕМЕНИ ИСЧЕРПАН",
   "perf.draw": "интерфейс",
+  "perf.draws": "отрисовок",
   "perf.hist": "выборок",
   "perf.pred": "прогноз",
   "perf.sim": "физика",
