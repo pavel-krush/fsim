@@ -282,6 +282,7 @@ type Sim struct {
 	noSolve      bool      // a copy: control points are flown as they stand, never solved
 	coastScale   float64   // multiplier on the adaptive step; 0 means one
 	burnStep     float64   // step a vacuum burn is integrated at; 0 means the fixed one
+	coastCap     float64   // longest coast step; 0 means maxCoastStep
 	accum        float64   // leftover real time not yet turned into a fixed step
 	surfaceP     float64
 	launchAngle  float64

@@ -27,6 +27,15 @@ const coastTol = 1e-11
 // apoapsis, a verdict, a sphere of influence crossed — get too coarse to place.
 const maxCoastStep = 600.0
 
+// solveCoastCap is the same ceiling for a *throwaway* flight, and it is six hours rather than ten
+// minutes because none of what the ceiling protects applies to one. A candidate keeps no history and
+// no events, its verdict is never read, and the closest approach it exists to measure is sampled by
+// flyPastBody's own rule, which tightens near the body regardless of this. What the ten-minute cap
+// was buying there was 243,000 steps for a 1650-day candidate — four seconds of one, twenty-seven of
+// them to a solve, and the browser several times that. It is the whole of why the grand tour hung at
+// its first correction.
+const solveCoastCap = 6 * 3600.0
+
 // maxStepsPerAdvance bounds the work in one call. Time warp asks for a fixed
 // amount of simulated time and there are regimes that cannot be bought at any
 // price: a million times real time inside the atmosphere is fifty million fixed
@@ -89,11 +98,20 @@ func (s *Sim) coastTarget() float64 {
 	}
 	orbital := math.Sqrt(r * r * r / mu)
 	crossing := r / math.Max(s.St.Vel.Len(), 1)
-	return clampStep(coastFactor * scale * math.Min(orbital, crossing))
+	return s.clampStep(coastFactor * scale * math.Min(orbital, crossing))
 }
 
-func clampStep(h float64) float64 {
-	return math.Min(math.Max(h, FixedStep), maxCoastStep)
+func (s *Sim) clampStep(h float64) float64 {
+	return math.Min(math.Max(h, FixedStep), s.coastCeiling())
+}
+
+// coastCeiling is the longest step this flight allows: ten minutes for one that is being watched,
+// six hours for a throwaway copy. See solveCoastCap.
+func (s *Sim) coastCeiling() float64 {
+	if s.coastCap > 0 {
+		return s.coastCap
+	}
+	return maxCoastStep
 }
 
 // plannedStep is how far the next step intends to go. It is a function of the
@@ -153,7 +171,7 @@ func (s *Sim) stepCap() float64 {
 	if rate < 1 || math.IsNaN(rate) {
 		rate = 1
 	}
-	return math.Min(FixedStep*rate, maxCoastStep)
+	return math.Min(FixedStep*rate, s.coastCeiling())
 }
 
 // advanceOne takes the next step and reports how much simulated time it

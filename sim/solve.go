@@ -263,6 +263,7 @@ func (s *Sim) solveCopy() *Sim {
 	c.accum = 0
 	c.WarpRate = math.Inf(1)
 	c.burnStep = solveBurnStep
+	c.coastCap = solveCoastCap
 	// The coast is *not* coarsened, unlike a drawn prediction, and that is measured rather
 	// than cautious: a coarser adaptive target buys nothing here, because the step is already
 	// held down by how finely the approach has to be sampled to measure it. So there is no

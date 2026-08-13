@@ -1571,6 +1571,9 @@ numbers said the prediction was taking **658 ms** and running twice a second.
 | history at T+700 d, Mars | 100,000 samples, 43 MB | **12,500 samples, bounded** |
 | Parker's corrections, per solve | 10 s, 13 s, 33 s | **2.1 s, 3.7 s, 6.0 s** |
 | one prediction with a control point ahead | 2419 ms | **23 ms** |
+| one candidate flight of the grand tour's last aim | 3860 ms | **120 ms** |
+| one solve of it, twenty-seven of those | ~105 s | **3.2 s** |
+| the whole test suite | 583 s | **159 s** |
 | draws per frame, trajectory at system scale | ~1300 | **35** |
 | draws per frame, the graph screen | 18,941 | **125** |
 | and the worst frame while one is solved | the whole of it | **0.8 s, and the clock says why** |
@@ -1588,6 +1591,16 @@ numbers said the prediction was taking **658 ms** and running twice a second.
   bounds what the trail costs to draw, which is the other thing that had no ceiling — `trailSpan` is
   `+Inf` for a trajectory that is not coming back round, so an interplanetary cruise draws the whole
   flight by design.
+- **A throwaway flight does not need the step ceiling a watched one does**, and that ceiling was
+  most of what a control point cost. `maxCoastStep` holds the coast step to ten minutes so that the
+  things found by watching between steps — apoapsis, a verdict, a sphere of influence crossed — can
+  be placed; a candidate keeps no history and no events, its verdict is never read, and the closest
+  approach it exists to measure is sampled by `flyPastBody`'s own rule, which tightens near the body
+  regardless. So a copy gets `solveCoastCap` = six hours instead, and the error control decides the
+  rest. **The grand tour's last candidate went from 243,000 steps and 3.9 s to 13,000 and 120 ms**,
+  which took a solve from a hundred seconds to three — it is why that preset hung at T+400 d, its
+  first correction, and it took the whole test suite from 583 s to 159. A drawn prediction gets the
+  same ceiling for the same reason: 23 ms to 0.6.
 - **A correction is not paid for in one frame.** A control point is twenty-seven flights of the
   mission ahead, and at the fixed step Parker's third was thirty-three seconds of them inside one
   frame — a hang, as reported. Two things fixed it: a candidate burn integrated at a second a step
