@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -122,16 +123,62 @@ func (a *App) Draw(screen *ebiten.Image) {
 	screen.DrawImage(a.canvas, nil)
 }
 
+// Layout is the integer fallback. Ebiten calls LayoutF when a game has one, and this program does,
+// so this only matters to older callers.
 func (a *App) Layout(outW, outH int) (int, int) {
-	if outW != a.w || outH != a.h {
-		a.w, a.h = outW, outH
+	w, h := a.LayoutF(float64(outW), float64(outH))
+	return int(w), int(h)
+}
+
+// LayoutF asks for a frame at the *device's* resolution rather than the window's logical one, which
+// is what makes the text sharp.
+//
+// Ebiten renders into the size this returns and then stretches that to the window. Asking for the
+// logical size — which is what this used to do — means a display with a device scale factor of two
+// renders everything at half density and blows it up, and a blown-up glyph does not read as a big
+// glyph: it reads as a small one that has been through a photocopier. Asking for the device size
+// instead costs four times the pixels on such a display and gives glyphs rasterised at the size
+// they are shown at.
+//
+// Everything above the drawing primitives stays in logical pixels: uiScale carries the difference,
+// and Bounds, the widgets, the camera and the input all work in the same coordinates they always
+// did. In a browser the same call returns devicePixelRatio, so a phone or a Retina screen gets the
+// same treatment.
+func (a *App) LayoutF(outW, outH float64) (float64, float64) {
+	scale := ebiten.Monitor().DeviceScaleFactor()
+	if forcedScale > 0 {
+		scale = forcedScale
+	}
+	if scale <= 0 || math.IsNaN(scale) {
+		scale = 1
+	}
+	// Capped, because sharpness is bought with fill rate and this program is fill-rate bound in a
+	// browser: four times the pixels is four times the work per frame, and a phone reporting three
+	// would be nine. Two is where the glyphs stop looking photocopied; past it nobody can see the
+	// difference and everybody pays for it.
+	if scale > maxUIScale && forcedScale <= 0 {
+		scale = maxUIScale
+	}
+	w, h := int(outW*scale), int(outH*scale)
+	if int(outW) != a.w || int(outH) != a.h || scale != uiScale {
+		a.w, a.h = int(outW), int(outH)
+		uiScale = scale
 		if a.canvas != nil {
 			a.canvas.Deallocate()
 		}
-		a.canvas = ebiten.NewImage(outW, outH)
+		a.canvas = ebiten.NewImage(w, h)
 	}
-	return outW, outH
+	return float64(w), float64(h)
 }
+
+// maxUIScale is the most device pixels per interface pixel this will ask for on its own. -scale
+// overrides it, in either direction, for anyone who would rather spend the pixels or keep them.
+const maxUIScale = 2.0
+
+// forcedScale overrides the display's own factor, for -scale. A screenshot has to be reproducible
+// on a machine other than the one that took it, and "how sharp is the text" is a question that can
+// only be answered by looking at both.
+var forcedScale float64
 
 // Bounds is the full drawing area.
 func (a *App) Bounds() Rect { return Rect{0, 0, float64(a.w), float64(a.h)} }
@@ -174,6 +221,7 @@ func main() {
 	camTrace := flag.Int("camtrace", 0, "print the vehicle's screen coordinates for N frames of live flight")
 	fly := flag.Bool("fly", false, "skip the mission list and the editor and launch straight away")
 	langCode := flag.String("lang", "en", "interface language to start in: en or ru")
+	scale := flag.Float64("scale", 0, "override the display's device scale factor; 0 uses the display's own")
 	flag.Parse()
 
 	loadLocales()
@@ -202,6 +250,8 @@ func main() {
 			log.Fatalf("unknown preset %q; expected one of %s", *presetSlug, strings.Join(names, ", "))
 		}
 	}
+
+	forcedScale = *scale
 
 	app := newApp(chosen, *presetSlug != "", *fly)
 	if *shotDir != "" {

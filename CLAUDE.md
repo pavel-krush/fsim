@@ -1396,6 +1396,28 @@ the time it was measured**.
   first.** Removing a stage shifts the ones above it down inside the same backing array, so a focused
   field would quietly commit its edit to a different stage. Same reason the preset buttons and the
   mixture picker cancel before replacing their slices.
+- **The frame is rendered at the display's own density, not at the window's logical size.** Ebiten
+  renders into whatever `Layout` asks for and then stretches that to the window, so asking for the
+  logical size — which this did — means a display with a device scale factor of two draws everything
+  at half density and blows it up. A blown-up glyph does not read as a big glyph: it is rasterised
+  with antialiasing at 13 px and then bilinearly stretched, which is soft edges and colour fringing
+  rather than honest pixels. That is the whole of the "the text looks like it was made for
+  early-2000s monitors" complaint, and it is invisible on a 1× monitor, which is why it can be
+  reported by other people and not seen by the author.
+- **`uiScale` carries the factor and only the drawing primitives know about it.** `LayoutF` asks for
+  the device size; `fillRect`, `line`, `circle`, `ring`, `Polyline`, `Rect.Sub` and `drawText`
+  multiply on the way through; `textWidth` measures on the device face and divides back, so a layout
+  is laid out against the glyphs that will actually be drawn; the cursor is divided on the way in.
+  Every layout constant, widget rectangle and camera projection above that line stays in logical
+  pixels and does not know any of this happened.
+- **Text is drawn from a face built at the device size**, not from a small face scaled up — 26 px
+  rasterised is a glyph, 13 px stretched to 26 is a smear. The faces are cached per size, since
+  building one allocates and this runs for every string every frame.
+- **Sharpness is bought with fill rate, so the scale is capped at 2** (`maxUIScale`) and `-scale` /
+  `?scale=` override it in both directions. Four times the pixels is four times the work per frame,
+  a phone reporting three would be nine, and this program is fill-rate bound in a browser — the
+  measurement that says so is in this file: 1400 x 940 ran at a sixth of real time and 750 x 470 at
+  five sixths. `?scale=1` is exactly the old behaviour for anyone whose machine wants it back.
 - **A curve is one stroke, not a stroke per segment, and in a browser that is the whole ball game.**
   `vector.StrokeLine` with antialiasing builds a path, strokes it and renders it through Ebiten's
   stencil-buffer atlas — *per call*; the same function with antialiasing off is a single batched

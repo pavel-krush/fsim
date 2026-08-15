@@ -112,9 +112,12 @@ func (u *UI) normalizeWheel(raw float64) float64 {
 func (u *UI) BeginFrame(canvas *ebiten.Image, dt float64) {
 	b := canvas.Bounds()
 	u.Overlay = canvas
-	u.Bounds = Rect{float64(b.Min.X), float64(b.Min.Y), float64(b.Dx()), float64(b.Dy())}
+	u.Bounds = Rect{float64(b.Min.X) / uiScale, float64(b.Min.Y) / uiScale,
+		float64(b.Dx()) / uiScale, float64(b.Dy()) / uiScale}
+	// The cursor arrives in the frame's own coordinates, which are device pixels now; the widgets
+	// think in logical ones. See uiScale.
 	mx, my := ebiten.CursorPosition()
-	u.MX, u.MY = float64(mx), float64(my)
+	u.MX, u.MY = float64(mx)/uiScale, float64(my)/uiScale
 	if u.ForcePointer != nil {
 		u.MX, u.MY = u.ForcePointer.X, u.ForcePointer.Y
 	}
