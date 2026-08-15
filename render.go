@@ -12,6 +12,24 @@ import (
 	"github.com/pavel-krush/fsim/sim"
 )
 
+// uiScale is how many device pixels one interface pixel is worth, and it exists because the text
+// was being drawn at half the resolution of the screen it was shown on.
+//
+// Ebiten renders into whatever `Layout` asks for and then stretches that framebuffer to the window.
+// Asking for the window's *logical* size — which is what this did — means a display with a device
+// scale factor of 2 gets a picture rendered at half density and blown up, and a blown-up glyph does
+// not look like a big glyph: it looks like a small one that has been through a photocopier. That is
+// the whole of the "it looks like it was made for early-2000s monitors" complaint.
+//
+// So the frame is now rendered at the *device* resolution and every coordinate that reaches a
+// drawing primitive is multiplied by this on the way. Everything above these primitives — every
+// layout constant, every widget rectangle, the camera's projection — keeps working in logical
+// pixels and does not know this exists.
+var uiScale = 1.0
+
+// sc scales one logical coordinate to device pixels.
+func sc(v float64) float32 { return float32(v * uiScale) }
+
 // Rect is an axis-aligned rectangle in screen pixels.
 type Rect struct{ X, Y, W, H float64 }
 
@@ -28,7 +46,7 @@ func (r Rect) Inset(d float64) Rect {
 
 // Sub returns the sub-image for clipping drawing to this rectangle.
 func (r Rect) Sub(dst *ebiten.Image) *ebiten.Image {
-	ir := image.Rect(int(r.X), int(r.Y), int(r.Right()), int(r.Bottom()))
+	ir := image.Rect(int(r.X*uiScale), int(r.Y*uiScale), int(r.Right()*uiScale), int(r.Bottom()*uiScale))
 	ir = ir.Intersect(dst.Bounds())
 	if ir.Empty() {
 		return nil
@@ -38,12 +56,12 @@ func (r Rect) Sub(dst *ebiten.Image) *ebiten.Image {
 
 // fillRect paints a solid rectangle.
 func fillRect(dst *ebiten.Image, r Rect, c color.Color) {
-	vector.FillRect(dst, float32(r.X), float32(r.Y), float32(r.W), float32(r.H), c, false)
+	vector.FillRect(dst, sc(r.X), sc(r.Y), sc(r.W), sc(r.H), c, false)
 }
 
 // strokeRect outlines a rectangle.
 func strokeRect(dst *ebiten.Image, r Rect, w float64, c color.Color) {
-	vector.StrokeRect(dst, float32(r.X), float32(r.Y), float32(r.W), float32(r.H), float32(w), c, false)
+	vector.StrokeRect(dst, sc(r.X), sc(r.Y), sc(r.W), sc(r.H), sc(w), c, false)
 }
 
 // drawCalls counts anti-aliased vector draws per frame, for measuring. Nothing reads it in a
@@ -54,7 +72,7 @@ var drawCalls int
 // line draws a straight segment.
 func line(dst *ebiten.Image, x0, y0, x1, y1, w float64, c color.Color) {
 	drawCalls++
-	vector.StrokeLine(dst, float32(x0), float32(y0), float32(x1), float32(y1), float32(w), c, true)
+	vector.StrokeLine(dst, sc(x0), sc(y0), sc(x1), sc(y1), sc(w), c, true)
 }
 
 // Polyline is a curve drawn as *one* stroke rather than as a segment per pair of points, and it is
@@ -83,6 +101,8 @@ func (l *Polyline) Reset() { l.pts = l.pts[:0] }
 // are sampled in world units, so at any distance most of them land on the same pixel, and a sub-pixel
 // segment costs the same as a long one.
 func (l *Polyline) Add(x, y float64) {
+	// Logical coordinates in, device pixels out at Stroke: the sub-pixel test below is therefore
+	// about *logical* pixels, which is what the picture is composed in.
 	if n := len(l.pts); n >= 2 {
 		if math.Abs(x-float64(l.pts[n-2]))+math.Abs(y-float64(l.pts[n-1])) < 1 {
 			return
@@ -113,18 +133,18 @@ func (l *Polyline) Stroke(dst *ebiten.Image, w float64, c color.Color) {
 			continue
 		}
 		if !pen {
-			l.path.MoveTo(x, y)
+			l.path.MoveTo(sc(float64(x)), sc(float64(y)))
 			pen = true
 			runs++
 			continue
 		}
-		l.path.LineTo(x, y)
+		l.path.LineTo(sc(float64(x)), sc(float64(y)))
 	}
 	if runs == 0 {
 		return
 	}
 	drawCalls++
-	so := &vector.StrokeOptions{Width: float32(w), LineJoin: vector.LineJoinRound}
+	so := &vector.StrokeOptions{Width: sc(w), LineJoin: vector.LineJoinRound}
 	do := &vector.DrawPathOptions{AntiAlias: true}
 	do.ColorScale.ScaleWithColor(c)
 	vector.StrokePath(dst, &l.path, so, do)
@@ -132,12 +152,14 @@ func (l *Polyline) Stroke(dst *ebiten.Image, w float64, c color.Color) {
 
 // circle draws a filled disc.
 func circle(dst *ebiten.Image, x, y, r float64, c color.Color) {
-	vector.FillCircle(dst, float32(x), float32(y), float32(r), c, true)
+	drawCalls++
+	vector.FillCircle(dst, sc(x), sc(y), sc(r), c, true)
 }
 
 // ring draws a circle outline.
 func ring(dst *ebiten.Image, x, y, r, w float64, c color.Color) {
-	vector.StrokeCircle(dst, float32(x), float32(y), float32(r), float32(w), c, true)
+	drawCalls++
+	vector.StrokeCircle(dst, sc(x), sc(y), sc(r), sc(w), c, true)
 }
 
 // panel draws the standard bordered background used by every UI block.
@@ -160,20 +182,50 @@ func drawText(dst *ebiten.Image, s string, f *text.GoTextFace, x, y float64, c c
 	if s == "" {
 		return
 	}
+	// Drawn from a face built at the *device* size rather than by scaling a small one up. A glyph
+	// rasterised at 26 px is a glyph; a 13 px glyph stretched to 26 is a smear, and telling those
+	// two apart is the entire point of this.
+	df := deviceFace(f)
 	switch a {
 	case alignRight:
-		x -= text.Advance(s, f)
+		x -= textWidth(s, f)
 	case alignCenter:
-		x -= text.Advance(s, f) / 2
+		x -= textWidth(s, f) / 2
 	}
 	op := &text.DrawOptions{}
-	op.GeoM.Translate(x, y)
+	op.GeoM.Translate(x*uiScale, y*uiScale)
 	op.ColorScale.ScaleWithColor(c)
-	text.Draw(dst, s, f, op)
+	text.Draw(dst, s, df, op)
 }
 
-// textWidth measures a string in the given face.
-func textWidth(s string, f *text.GoTextFace) float64 { return text.Advance(s, f) }
+// textWidth measures a string in the given face, in logical pixels. Measured on the device face and
+// divided back down, so that a layout is laid out against the glyphs that will actually be drawn
+// rather than against a nominal size they are only near.
+func textWidth(s string, f *text.GoTextFace) float64 {
+	return text.Advance(s, deviceFace(f)) / uiScale
+}
+
+// deviceFace is f at the device size, cached: building a face allocates, and this runs for every
+// string on the screen every frame.
+var deviceFaces = map[faceKey]*text.GoTextFace{}
+
+type faceKey struct {
+	src  *text.GoTextFaceSource
+	size float64
+}
+
+func deviceFace(f *text.GoTextFace) *text.GoTextFace {
+	if uiScale == 1 {
+		return f
+	}
+	k := faceKey{f.Source, f.Size * uiScale}
+	if df, ok := deviceFaces[k]; ok {
+		return df
+	}
+	df := &text.GoTextFace{Source: f.Source, Size: k.size}
+	deviceFaces[k] = df
+	return df
+}
 
 // dashedRing draws a circle outline as dashes, for reference orbits that
 // should not compete with the live trajectory.

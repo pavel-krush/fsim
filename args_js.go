@@ -5,6 +5,7 @@ package main
 import (
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -19,8 +20,9 @@ import (
 // That is the whole point of it — a link can say "here is the way to Mars, a
 // hundred and eighty-six days, watch" rather than just "here is a simulator".
 //
-// Only the flags that mean anything in a browser are accepted: -preset, -lang and
-// -fly. -shot writes files and -camtrace prints to a console nobody has open.
+// Only the flags that mean anything in a browser are accepted: -preset, -lang,
+// -fly and -scale. -shot writes files and -camtrace prints to a console nobody has
+// open.
 //
 // A value that is not a preset or a language is dropped rather than passed on,
 // because main treats both as fatal: a mistyped link would leave whoever clicked
@@ -47,6 +49,15 @@ func init() {
 	if code := q.Get("lang"); code != "" {
 		if _, ok := localeCode[code]; ok {
 			os.Args = append(os.Args, "-lang", code)
+		}
+	}
+	// ?scale=1 renders one frame pixel per interface pixel, which is what to reach for on a
+	// machine where the page is slow: the sharp default asks for the display's own density and
+	// costs four times the pixels on a Retina screen. ?scale=3 goes the other way. Anything that
+	// is not a number between a half and four is dropped rather than argued with.
+	if v := q.Get("scale"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0.5 && f <= 4 {
+			os.Args = append(os.Args, "-scale", v)
 		}
 	}
 	// ?fly=1 goes straight to the pad, which is the whole of what a link wants to
